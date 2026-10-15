@@ -33,8 +33,9 @@
 
 ## 使用边界
 
-- 产品规则以[项目原则](../../.specify/memory/constitution.md)、[规格](../../specs/001-skill-management-prototype/spec.md)
+- 产品规则以[项目原则](../../.specify/memory/constitution.md)、[正式产品规格](../../specs/002-skill-management/spec.md)
   和[需求记录](../requirements.md)为准。
+- 旧源码中名为“SkillVault 来源”“只读管理层”的角色属于旧模型，不等于本项目直接维护的唯一 SkillVault；先按 [术语表](../../GLOSSARY.md) 与正式规格“业务关系与阅读示例”辨认角色，再评估旧代码片段。原型资料用于交互参考，不替代正式业务边界。
 - 第三方协议与目录属于**有版本的历史观察**：实施接入时核对当前安装或官方实现；不伪装成已验证的当前兼容承诺。
 - 不保留旧数据库表、旧 SkillVault 格式、旧路由／IPC、旧业务裁决、兼容迁移和完整旧测试门禁。
   各页说明有用的小实现点及不能带入的旧行为；旧源码定位仅用于按需核查。
