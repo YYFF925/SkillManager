@@ -12,6 +12,8 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 **测试**：依据 `quickstart.md` 明确要求，将 M1～M3 CLI 场景纳入集成测试；针对部署产物、同项合并和状态边界补核心断言。列出的自动化测试先于对应实现编写，确认失败后实现；GUI、双机、大仓库与 M4/M5 场景按既定人工验收执行，不把每项低影响改动都拆成测试任务。
 
+**实施参考与界面基线**：技术任务先查 `docs/technical-reference/README.md` 的对应主题，按本项目需求评估其中实现经验；仅有证据缺口才回查旧源码。所有 GUI 任务开工前须查 `specs/001-skill-management-prototype/ui-prototype/README.md` 的对应页面与效果图，并结合 `visual-reference.md`、`ui-interaction-audit.md` 和可操作的 `ui-prototype/index.html`；最终视觉与交互须与原型一致，不能只借用图标和配色。各期收尾按 `quickstart.md` 的 GUI 对照要求记录证据，正式业务与演示有差异时以 002 spec 为准并说明。
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - 每项使用 `- [ ] Tnnn`，故事阶段附 `[USn]`；`[P]` 表示在所述前置完成后可与其他标记任务并行，涉及不同文件。
@@ -26,7 +28,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 - [ ] T001 在 `skill-manager/Cargo.toml`、`skill-manager/crates/core/Cargo.toml`、`skill-manager/crates/cli/Cargo.toml`、`skill-manager/src-tauri/Cargo.toml` 建立 Rust 2024 workspace 三成员与最小入口，按当前官方资料核对稳定版依赖兼容性；使用 clap、rusqlite bundled、notify 及成熟 YAML/序列化库，仓库操作调用本机 Git，不引入 git2。
 - [ ] T002 在 `skill-manager/package.json`、`skill-manager/vite.config.ts`、`skill-manager/tsconfig.json`、`skill-manager/src/main.tsx`、`skill-manager/src-tauri/tauri.conf.json` 建立 React/TypeScript、Vite、Tailwind 与 Tauri 2 开发构建入口，使用 npm 并保存锁文件。
 - [ ] T003 在 `skill-manager/tests/common/mod.rs`、`skill-manager/crates/cli/Cargo.toml`、`skill-manager/vitest.config.ts`、`skill-manager/src/test/setup.ts` 建立临时 SkillVault、Git 上游、Agent 目录与独立状态目录测试设施；CLI crate 显式注册根 `tests/` 下的集成测试，确保 `cargo test --workspace` 真正执行它们。
-- [ ] T004 在 `skill-manager/src/App.tsx`、`skill-manager/src/styles.css`、`skill-manager/src/components/AppShell.tsx` 建立简体中文导航与共享布局，复用 `docs/technical-reference/assets/` 的合法视觉素材及许可，覆盖两技能库、预设、Agent、Hermes、工具中心与设置入口，不嵌入演示数据。
+- [ ] T004 在 `skill-manager/src/App.tsx`、`skill-manager/src/styles.css`、`skill-manager/src/components/AppShell.tsx` 按原型的导航、布局、视觉密度与样式建立简体中文外壳，先阅读上述界面基线并查看对应效果图，复用 `docs/technical-reference/assets/` 的合法视觉素材及许可，覆盖两技能库、预设、Agent、Hermes、工具中心与设置入口，不嵌入演示数据。
 
 **Checkpoint（检查点）**：Rust 两入口与前端可构建，测试入口可发现，业务规则尚未实现。
 
@@ -266,7 +268,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 - [ ] T088 在 `skill-manager/assets/skills/skill-manager-maintenance/SKILL.md` 及必要的同目录 `references/cli.md` 编写单一配套维护 Skill：说明 `.manager` 实际格式、目录/同名/支持规则、原文/译文/注释/overlay 边界、来源更新、修改后同步部署与询问上传、冲突/暂停处理、CLI 使用、工具安装/登记/检查命令编写/真实验证回写；以已实现契约为依据，不写第二套业务规则或虚构命令。
 - [ ] T089 在 `specs/002-skill-management/quickstart.md` 固定本项目已配置 Gitea `origin` 的配套 Skill 来源子路径 `skill-manager/assets/skills/skill-manager-maintenance` 与实际命令；将可审阅的代码与技能按用户授权推送 Gitea 后，通过普通 `skill import` 显式选择入库并登记来源，再推进源版本验证普通检查/确认更新；若发布授权或远端访问缺失，保留待完成并说明，不改成专用分发或本地路径假验收，证据写入 `specs/002-skill-management/checklists/m5-report.md` 5.10。
-- [ ] T090 对照 FR-050/051 在 `specs/002-skill-management/contracts/cli.md` 逐项核对全部核心 GUI/CLI 操作与真实参数、JSON/退出码、无 GUI 裁决依赖、维护任务 Skill 路径；同步更新 `skill-manager/assets/skills/skill-manager-maintenance/references/cli.md`，运行已要求的 `cargo test --workspace` 与前端构建，GUI 交互按 quickstart 人工验收并记录证据，修复实际失败，不新增兼容路径或仅复述实现的测试。
+- [ ] T090 对照 FR-050/051 在 `specs/002-skill-management/contracts/cli.md` 逐项核对全部核心 GUI/CLI 操作与真实参数、JSON/退出码、无 GUI 裁决依赖、维护任务 Skill 路径；同步更新 `skill-manager/assets/skills/skill-manager-maintenance/references/cli.md`，运行已要求的 `cargo test --workspace` 与前端构建，GUI 按 quickstart 对原型索引中的页面与交互逐项人工验收、记录实现截图与差异，修复实际失败，不新增兼容路径或仅复述实现的测试。
 - [ ] T091 执行 `specs/002-skill-management/quickstart.md` 5.11 的真实完整旅程，对照 `spec.md` US1～US10 和 SC-001～008，补齐 `specs/002-skill-management/checklists/m1-report.md`、`specs/002-skill-management/checklists/m2-report.md`、`specs/002-skill-management/checklists/m3-report.md`、`specs/002-skill-management/checklists/m4-report.md`、`specs/002-skill-management/checklists/m5-report.md` 早期待验项；记录几十至几百技能下扫描/筛选实际耗时与环境，不把未确认的 <1s/微秒级目标作为验收承诺，不凭空声明平台兼容。
 - [ ] T092 在 `README.md`、`skill-manager/README.md`、`specs/002-skill-management/plan.md`、`specs/002-skill-management/research.md` 更新实际开发/构建/CLI 入口、SkillVault 与本机状态位置、实现范围及各期结果；保留本轮质检已纠正的 Git 现状、库同步/上游更新边界与单保存指令交互，不恢复失效指引，未过保留原因，不以勾任务代替验收。
 

@@ -8,6 +8,8 @@
 
 构建 Skill Manager v1 桌面应用：以用户已有 SkillVault（Git 仓库）为唯一技能内容真值源，Rust 核心承载库管理、部署合成、上游更新、跨机同步与工具中心业务，GUI（Tauri 2 + React/TypeScript）与 CLI（clap）双入口共用同一核心，本机状态（部署记录、档案启用、Agent 配置、设置、工具安装记录）存 SQLite，共享资产零入库、不做文件镜像。
 
+实施资料分两类使用：技术实现先按 [技术参考索引](../../docs/technical-reference/README.md)定位对应主题，复用已提取的数据、素材与适用实现经验，不继承旧业务或旧架构；GUI 按 [原型页面与效果图索引](../001-skill-management-prototype/ui-prototype/README.md)、[视觉说明](../001-skill-management-prototype/visual-reference.md)和[交互细节](../001-skill-management-prototype/ui-interaction-audit.md)实现，必要时操作同目录 `index.html` 核对动态效果。原型是正式界面的视觉与交互验收基线，各期按 quickstart 对照，不以原型使用 HTML 或模拟状态为由另做一套界面；业务差异按 spec.md 处理并记录。
+
 核心设计决策（详见 [research.md](research.md)）：
 
 - 技能身份 = 管理域 + 技能名，不引入数字 ID 或 UUID；

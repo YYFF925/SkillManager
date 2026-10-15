@@ -11,5 +11,7 @@
 
 当前提供[技能管理交互原型](specs/001-skill-management-prototype/ui-prototype/index.html)，沿用旧界面风格，可直接打开并点击体验完整模拟流程。模拟状态由浏览器本地保存，不访问真实技能库或 Agent 目录；使用说明见[原型说明](specs/001-skill-management-prototype/ui-prototype/README.md)。
 
+正式实施须按[原型页面与效果图索引](specs/001-skill-management-prototype/ui-prototype/README.md)、[视觉说明](specs/001-skill-management-prototype/visual-reference.md)与[交互细节](specs/001-skill-management-prototype/ui-interaction-audit.md)还原最终界面；各期执行[视觉与交互对照](specs/002-skill-management/quickstart.md#gui-视觉与交互对照各期适用)，记录实际截图和差异。原型的视觉与交互是验收基线，正式业务规则以 002 规格为准。
+
 
 接入数据、视觉素材与平台经验已整理到本项目的[技术参考](docs/technical-reference/README.md)，按实现任务查阅；这些资料不继承旧产品规则。
