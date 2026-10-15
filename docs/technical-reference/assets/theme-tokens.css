@@ -1,0 +1,51 @@
+/* Skill Manager visual reference values. Source: FeiSkillDock v1.44.0 src/index.css.
+   See SOURCE-LICENSE.txt; reference data, not an application stylesheet entry point. */
+:root {
+  --color-bg: #FAFAFA;
+  --color-bg-secondary: #F4F4F5;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F4F4F5;
+  --color-surface-active: #E4E4E7;
+  --color-border: #D4D4D8;
+  --color-border-subtle: #E4E4E7;
+  --color-border-faint: #EEEEF0;
+  --shadow-card: 0 1px 2px rgba(24, 24, 27, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(24, 24, 27, 0.07);
+  --color-text-primary: #18181B;
+  --color-text-secondary: #27272A;
+  --color-text-tertiary: #52525B;
+  --color-text-muted: #71717A;
+  --color-text-faint: #8B8B94;
+  --color-accent: #059669;
+  --color-accent-light: #10B981;
+  --color-accent-dark: #047857;
+  --color-accent-bg: rgba(5,150,105,0.08);
+  --color-accent-border: rgba(5,150,105,0.25);
+  --color-danger: #DC2626;
+  --color-danger-bg: rgba(220,38,38,0.08);
+}
+
+.dark {
+  --color-bg: #0C0C0F;
+  --color-bg-secondary: #0F0F13;
+  --color-surface: #131317;
+  --color-surface-hover: #17171E;
+  --color-surface-active: #1E1E28;
+  --color-border: #222229;
+  --color-border-subtle: #1C1C22;
+  --color-border-faint: #18181E;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --color-text-primary: #F4F4F5;
+  --color-text-secondary: #D4D4D8;
+  --color-text-tertiary: #A1A1AA;
+  --color-text-muted: #8E8E96;
+  --color-text-faint: #71717A;
+  --color-accent: #10B981;
+  --color-accent-light: #34D399;
+  --color-accent-dark: #059669;
+  --color-accent-bg: rgba(16,185,129,0.08);
+  --color-accent-border: rgba(16,185,129,0.25);
+  --color-danger: #EF4444;
+  --color-danger-bg: rgba(239,68,68,0.08);
+}

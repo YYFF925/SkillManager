@@ -1,0 +1,157 @@
+[
+  {
+    "key": "briefcase",
+    "label": "工作",
+    "color": "#d97706"
+  },
+  {
+    "key": "book-open",
+    "label": "学习",
+    "color": "#059669"
+  },
+  {
+    "key": "folder-git-2",
+    "label": "开源",
+    "color": "#e11d48"
+  },
+  {
+    "key": "plane",
+    "label": "旅行",
+    "color": "#ca8a04"
+  },
+  {
+    "key": "code-2",
+    "label": "开发",
+    "color": "#0891b2"
+  },
+  {
+    "key": "rocket",
+    "label": "启动",
+    "color": "#ea580c"
+  },
+  {
+    "key": "bot",
+    "label": "Agent",
+    "color": "#6366f1"
+  },
+  {
+    "key": "brain",
+    "label": "思考",
+    "color": "#8b5cf6"
+  },
+  {
+    "key": "terminal",
+    "label": "终端",
+    "color": "#65a30d"
+  },
+  {
+    "key": "database",
+    "label": "数据",
+    "color": "#2563eb"
+  },
+  {
+    "key": "chart-bar",
+    "label": "分析",
+    "color": "#0284c7"
+  },
+  {
+    "key": "search",
+    "label": "检索",
+    "color": "#78716c"
+  },
+  {
+    "key": "sparkles",
+    "label": "创意",
+    "color": "#c026d3"
+  },
+  {
+    "key": "lightbulb",
+    "label": "想法",
+    "color": "#ca8a04"
+  },
+  {
+    "key": "target",
+    "label": "目标",
+    "color": "#dc2626"
+  },
+  {
+    "key": "calendar",
+    "label": "计划",
+    "color": "#64748b"
+  },
+  {
+    "key": "home",
+    "label": "个人",
+    "color": "#16a34a"
+  },
+  {
+    "key": "heart",
+    "label": "健康",
+    "color": "#dc2626"
+  },
+  {
+    "key": "star",
+    "label": "收藏",
+    "color": "#d97706"
+  },
+  {
+    "key": "zap",
+    "label": "自动化",
+    "color": "#ca8a04"
+  },
+  {
+    "key": "bug",
+    "label": "调试",
+    "color": "#dc2626"
+  },
+  {
+    "key": "shield",
+    "label": "安全",
+    "color": "#059669"
+  },
+  {
+    "key": "lock",
+    "label": "私有",
+    "color": "#737373"
+  },
+  {
+    "key": "cloud",
+    "label": "云端",
+    "color": "#0891b2"
+  },
+  {
+    "key": "server",
+    "label": "基础设施",
+    "color": "#64748b"
+  },
+  {
+    "key": "cpu",
+    "label": "工程",
+    "color": "#6366f1"
+  },
+  {
+    "key": "flask-conical",
+    "label": "实验",
+    "color": "#9333ea"
+  },
+  {
+    "key": "notebook-pen",
+    "label": "笔记",
+    "color": "#ea580c"
+  },
+  {
+    "key": "blocks",
+    "label": "系统",
+    "color": "#0d9488"
+  },
+  {
+    "key": "palette",
+    "label": "设计",
+    "color": "#db2777"
+  },
+  {
+    "key": "wrench",
+    "label": "运维",
+    "color": "#71717a"
+  }
+]
