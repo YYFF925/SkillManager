@@ -153,8 +153,7 @@ CLI 用 `--vault` / `--state-dir` 覆盖，可在一台机器上模拟两台电�
    （证据见 `checklists/m5-report.md` 5.14～5.19 与 `contracts/cli.md` 的 T090 表 `settings` 行）。
 2. **新增候选入库无 `tags`/`comment` 参数**——GUI/CLI 一致地只能补充分类；属契约限制（缺口 ②）。
 3. **Hermes 档案独有技能的只读查看**已于 2026-10-17 由 T125 补齐（core、`hermes read`、Tauri、GUI），查看不收编、不改变启用名单；阅读沿用 Markdown（结构化文本）视图和吸顶控件。
-4. **配套维护 Skill 的 Gitea 入库/更新待授权**：远端写入未被授权；机制本身已用临时本地 Git 上游
-   完整验证（preview → import → 推进上游 → check → update）。
+4. **配套维护 Skill 的 Gitea 交付已闭合**（2026-10-17 T124）：用户授权发布后，在隔离库从真实上游入库 `c00e1a4`，再显式采用 `e2106f9`；检查不改内容，实际采用后新增 Hermes 阅读命令参考，技能/工具任务引用的库内路径均可解析。证据见 `checklists/m5-report.md` 第十二节。
 5. **平台兼容不声明**：仅 macOS（arm64）实际运行验证；Hermes 启用的符号链接在 Windows 行为未验证。
 6. **性能数据**：Apple M6 / 24 GB / macOS 27.0.1 / debug 构建下，50/200/500 个技能的
    `skill list` 与筛选、`skill get`、`skill check --all` 实测均 ≤ 0.08s；这是本机实测值，

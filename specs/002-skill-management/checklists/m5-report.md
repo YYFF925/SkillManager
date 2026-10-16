@@ -17,7 +17,7 @@
 | 5.7 配套 Skill 候选入库 | 列出具体候选与资料，勾选入库，不自动部署 | 候选页显示原名/注释/用途/来源/勾选与已选数量；入库经 `previewRepo`→`importSkills`，**不部署**（截图 `07-tool-skills-tab.png`；jsdom 测试断言只调用预览与入库） | 通过 |
 | 5.8 定时器（缩短周期验证） | 到期自动执行上游检查 + 库同步 + 工具检查，结果分别提示 | 诊断日志实测一次调度记录：`startup 调度：上游 ok，库拉取 error，工具检查 ok`（拉取 error 是临时库无远端，如实记录）。**定时到期路径未实测**——产品最短周期为 30 分钟，会话内无法到期，且明确不新增第四套周期；门控逻辑由 `scheduler::is_due` 单测覆盖 | **部分通过**：三类结果分别表达已验；定时到期未实测 |
 | 5.9 主题/字号/关窗收托盘/托盘检查/诊断导出/容量报告 | US10 各场景 | 主题（浅/深/跟随系统，默认跟随系统，系统切换实时反映）、字号（小/默认/大/特大）持久化到本机 SQLite（截图 `win_settings_dark.png`、`win_theme_follow_system_dark.png`/`_light.png`）；关窗隐藏（窗口数 0、进程存活）、**隐藏期间**调度日志仍产生（`20:17:19 timer 调度`，隐藏时刻 20:15:38）、托盘"检查上游更新"产生 `manual 调度` + `tray.check`、托盘重开窗口、托盘退出终止进程（`hidden_state_fullscreen.png`、`win_reopened_from_tray.png`、`final_tray_menu.png`）；诊断面板显示真实日志路径并可导出（`win_diagnostics_export_notice.png`）；容量报告"库总占用 396 B（5 个文件）· 技能 4 个合计 234 B"及带路径排行（`win_settings_capacity.png`） | 通过（**崩溃记录未在真实 panic 下观察**，写入逻辑有 core 单测） |
-| 5.10 配套维护 Skill 从本项目远端普通入库 → 推进版本 → `check`/`update` | 走普通上游流程，来源记录正确；任务书引用路径可解析 | **Gitea 路径待授权**（未提交未推送）。**机制已用临时本地上游验证**：preview → import（登记 repo/subpath/version）→ 上游 v2 → check（只展示不应用）→ update（显式采用，OID `89c938f2…`→`4816088e…`）→ `skill task` 引用真实库内路径 + "按其规范执行"（`/tmp/m5-t089.lHDtbO/t089-evidence.txt`） | **待授权**：Gitea 发布与入库未执行；机制通过 |
+| 5.10 配套维护 Skill 从本项目远端普通入库 → 推进版本 → `check`/`update` | 走普通上游流程，来源记录正确；任务书引用路径可解析 | 2026-10-17 T124：获授权后发布真实 Gitea，从 `c00e1a4` 入库并经普通检查/更新采用 `e2106f9`；`references/cli.md` 实际更新，来源登记及两类任务路径核查通过，见第十二节 | **通过** |
 | 5.11 **SC-001 完整旅程** | 入库→维护→部署→吸收一次上游更新→上传→机 B 拉取继续使用 | 六步全绿（`/tmp/m5-t091.5F35so/journey.txt`）：入库（原名保留、来源登记）→ 维护（注释/标签/`skill move` 实际移动目录/译文写入 `translation_source_hash`）→ 部署（产物 `description: 演示技能（已维护）｜演示技能 v1`，无 `.manager`、无译文）→ 上游更新（check 报有更新且原文未变；update 采用 v2，上游同项覆盖、分类保留、译文保留、新增 `notes.md`；`deploy sync` 刷新已有部署）→ 上传（`sync push` 提交并推送整个工作区）→ 机 B `sync pull`（刷新已有部署 1 项，**未新增自动部署**） | 通过 |
 | 5.12 预设间顺序与成员顺序（GUI + `reorder-members`），另一机拉取 | 两种显示顺序均共享；成员排序只改数组顺序，不增减成员、不动目录、不改已有部署 | 机 B 拉取后可见 audit→release 与 release 成员 `[gamma, beta]`；成员排序未增删成员、未动目录、未产生部署 | 通过（CLI）；**GUI 拖动排序未取得真实拖动证据**（见第四节） |
 | 5.13 单技能与多技能 `skill task` | 上下文完整可定位；保留用户要求、库/技能路径、管理资料概况与已有部署；规范只引用维护 Skill；生成不改库/部署/上传 | 单项与多选任务文本均含上述上下文（`skill-task-cli.txt`）；生成过程不改库、不部署、不上传 | 通过 |
@@ -96,8 +96,8 @@
 
 1. **共享目录路径（`shared_dir`）缺 CLI 命令**：只有 GUI/Tauri（`shared_dir_get/set`）入口，纯 CLI 下 `deploy to shared` 报"尚未设置共享目录路径"。修复需新增产品入口（契约外命令），**未自行发明**，待裁决。（→ 已按上注补齐规划，待实现）
 2. **`skill import` / `update-repo` 无 `tags`/`comment` 参数**：GUI 与 CLI 一致只能补充分类，标签/注释继承上游。**未自行发明**，待裁决。
-3. **Hermes 档案独有技能无只读查看入口**（GUI 与 CLI 都没有）：属交互缺口，非入口不对称。
-4. **配套维护 Skill 的 Gitea 发布/入库待授权**：提交与推送未获授权，未执行；机制已用本地上游验证。
+3. **Hermes 档案独有技能只读查看已补齐**：2026-10-17 T125 闭合，见第十二节。
+4. **配套维护 Skill 的 Gitea 发布/入库/更新已验证**：2026-10-17 获用户授权后完成 T124，见第十二节。
 5. **`skill task --requirement`**：契约原写"必填"，实现为可选；已按"修订契约文字"收口（与 `tool task` 一致，FR-051 只要求保留用户要求，省略时如实写"未填写"）。
 6. **平台兼容未声明**：仅 macOS arm64 实测；Hermes 启用所用符号链接在 Windows 的行为未知。
 7. **未安装 rustfmt**，`cargo fmt --check` 未执行；代码按现有风格手写。
@@ -312,9 +312,25 @@ US9 工具中心（清单/未安装/各检查状态/详情/指南/候选/任务�
 成功生成并签名 `skill-manager/target/debug/bundle/macos/Skill Manager.app`（43.33 MiB）。
 组件测试用于验证接线与行为，不代表全部 GUI 点按或其他平台已完成人工验收。
 
-**T124 仍未完成**：只读核查真实 Gitea（代码托管服务）`origin` 可达，其 HEAD 为
-`c915649384ca30a408efe5c3265654d74bd4eebc`，尚无
-`skill-manager/assets/skills/skill-manager-maintenance/SKILL.md`。本地当前项目源已含该技能，
-本轮维护其 `references/cli.md` 以记录 Hermes 阅读新命令，可作为一次真实后续版本。
-待用户授权发布本项目到 Gitea 后，先从已发布版本显式入库，再发布本轮版本，执行普通
-`skill check` / `skill update` 并核查来源版本。尚未向真实远端写入；临时本地上游证据不替代该项。
+### T124 真实 Gitea 交付验收（已通过）
+
+用户于本会话明确回复“提交并推送”，授权此前列明的 Gitea 发布与后续隔离验收。
+真实来源：`http://192.168.200.7:3000/yfpoyuas/SkillManager.git`；
+选择的子路径：`skill-manager/assets/skills/skill-manager-maintenance`。
+复用本机 Git 的已有鉴权；验收库和 SQLite 状态均在隔离临时目录，未部署到真实 Agent 目录。
+
+| 步骤 | 实际结果 |
+|---|---|
+| 发布初始项目版本 | `origin/main` 从 `c915649` 快进到 `c00e1a49ed03f567010e8c4aa5d6182d1a697895` |
+| 普通预览与显式选择入库 | `skill preview` 列出 11 个来源候选且不写库；`skill import <真实来源> --domain code --skills <上述子路径> --uncategorized` 只入库 `code/skill-manager-maintenance`；source.yaml 登记真实来源、子路径与 `c00e1a4` 版本 |
+| 推进真实上游版本 | 本轮实现提交 `e2106f981fc9694fe233f333aa35f60b25c3c845` 推送到 `origin/main`，包含维护技能 `references/cli.md` 的 Hermes 阅读新命令 |
+| 只检查不采用 | `skill check code/skill-manager-maintenance` 返回 `update_available`、`modified: [references/cli.md]`；随后实际读取仍为旧内容，采用版本仍是 `c00e1a4` |
+| 显式采用 | `skill update code/skill-manager-maintenance` 成功，`from_version=c00e1a4…`、`to_version=e2106f9…`；来源登记同步推进，实际参考文件包含 `hermes read <profile> <name> [--file <path>]` |
+| 维护任务路径 | `skill task code/skill-manager-maintenance`、`tool task --action register` 均包含实际库内绝对路径与“按其规范执行”，该目录内 SKILL.md 实际存在 |
+| 入库与任务边界 | `deploy status` 返回空部署列表；未自动部署、未安装工具，验收技能未写入用户初始统一库 |
+
+临时证据目录：`/private/tmp/sm-t124-gitea-wrr0zu4z/`，保留 `01-preview.json` 至
+`10-deployment-status.json`、相应 stderr（标准错误）与 `meta.json`。技能实际路径：
+`/private/tmp/sm-t124-gitea-wrr0zu4z/vault/code/skill-manager-maintenance`。
+本次为真实 Gitea 上游获取与版本推进，已替代 5.10 此前仅用临时本地来源的验证限制。
+Phase 18 的 T115～T129 共 15 项至此全部完成；其他平台及历史未取证交互不因此自动视为已验收。
