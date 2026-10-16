@@ -5,11 +5,12 @@
 [specs/002-skill-management/spec.md](specs/002-skill-management/spec.md)；各期结果见
 `specs/002-skill-management/checklists/m1-report.md`～`m5-report.md`。
 
-**当前状态（2026-10-16）**：M1～M5 的全部任务已实施（T001～T092），`cargo test --workspace` 241 项通过、
+**当前状态（2026-10-16）**：M1～M5 与增量补齐的全部任务已实施（T001～T100），`cargo test --workspace` 252 项通过、
 `npm test` 22 项通过、`cargo build --workspace` / `npx tsc --noEmit` / `npm run build` 通过。
+本机运行侧的 CLI 双入口已补齐（`settings` 命令组：读取运行配置、共享目录与自动检查频率两个写入口、诊断与容量只读报告）。
 **这不等于全部验收通过**：GUI 部分交互、平台兼容与部分双机/大仓库场景仍缺人工证据，
-未取得证据的项在报告里保持"未验证"并写明原因。已确认仍未闭合的缺口（共享目录路径缺 CLI 命令、
-新增候选入库无 tags/comment 参数、Hermes 档案独有技能只读查看）记录在
+未取得证据的项在报告里保持"未验证"并写明原因。已确认仍未闭合的缺口（新增候选入库无 tags/comment 参数、
+Hermes 档案独有技能只读查看）记录在
 [contracts/cli.md 的 T090 双入口核对](specs/002-skill-management/contracts/cli.md#t090-双入口核对fr-0500512026-10-15)。
 配套维护 Skill 的 Gitea 入库/更新因**推送未获授权**保持待授权。
 

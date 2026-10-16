@@ -234,10 +234,13 @@ impl<'a> TargetResolver<'a> {
                 let entry = self.catalog.get("hermes").ok_or_else(|| {
                     CoreError::InvalidTarget("内置名单缺少 hermes".to_string())
                 })?;
+                // 与 `HermesService` 同源：根按 `HERMES_HOME` 环境变量与平台默认解析，
+                // 目标目录为 `<根>/skills`（default 档案就是根自身）。
+                let skills = crate::hermes::hermes_home(&self.home).join("skills");
                 Ok(TargetResolution {
                     target: target.as_str(),
                     label: "Hermes default 档案".to_string(),
-                    path: entry.default_skills_dir(&self.home).display().to_string(),
+                    path: skills.display().to_string(),
                     domain: Some(Domain::Lobster),
                     agent_key: Some(entry.key.clone()),
                 })

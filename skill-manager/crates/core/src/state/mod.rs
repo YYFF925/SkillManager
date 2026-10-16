@@ -33,9 +33,6 @@ pub mod setting_key {
     pub const LAST_CHECK_AT: &str = "last_check_at";
     pub const VAULT_PATH: &str = "vault_path";
     pub const GIT_AUTO_PUSH: &str = "git_auto_push";
-    pub const LOG_DIR: &str = "log_dir";
-    /// 本机 Hermes 根目录覆盖（本机单根；缺省由 `hermes:default` 目标路径推导）。
-    pub const HERMES_ROOT: &str = "hermes_root";
 }
 
 /// 主题默认值与合法取值（默认跟随系统）。

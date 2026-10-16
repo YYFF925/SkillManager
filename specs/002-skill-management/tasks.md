@@ -272,14 +272,28 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 - [X] T091 执行 `specs/002-skill-management/quickstart.md` 5.11 的真实完整旅程，对照 `spec.md` US1～US10 和 SC-001～008，补齐 `specs/002-skill-management/checklists/m1-report.md`、`specs/002-skill-management/checklists/m2-report.md`、`specs/002-skill-management/checklists/m3-report.md`、`specs/002-skill-management/checklists/m4-report.md`、`specs/002-skill-management/checklists/m5-report.md` 早期待验项；记录几十至几百技能下扫描/筛选实际耗时与环境，不把未确认的 <1s/微秒级目标作为验收承诺，不凭空声明平台兼容。
 - [X] T092 在 `README.md`、`skill-manager/README.md`、`specs/002-skill-management/plan.md`、`specs/002-skill-management/research.md` 更新实际开发/构建/CLI 入口、SkillVault 与本机状态位置、实现范围及各期结果；保留本轮质检已纠正的 Git 现状、库同步/上游更新边界与单保存指令交互，不恢复失效指引，未过保留原因，不以勾任务代替验收。
 
-## Phase 14: 本机运行侧双入口补齐（2026-10-16 规划补齐，T093～T096）
+## Phase 14: User Story 10 增量 — 本机运行侧双入口（T093～T099）
 
-**目的**：把 FR-050「本机运行侧」整类补齐（不只是已发现的共享目录一项）。判定准则、契约取法与逐项清点结论见 `plan.md` 的"规划补齐"一节、`research.md` D22/D23 与 `contracts/cli.md` 的 `settings` 命令组。**不新增产品能力，只把已有 core 能力接出 CLI**。
+**目的**：把 FR-050「本机运行侧」整类补齐（不只是已发现的共享目录一项），并落实 FR-053 的"诊断与容量两入口都可获取"。判定准则、契约取法与逐项清点结论见 `plan.md` 的"规划补齐"一节、`research.md` D22/D23 与 `contracts/cli.md` 的 `settings` 命令组。
 
-- [ ] T093 在 `skill-manager/crates/cli/src/commands/settings.rs`、`skill-manager/crates/cli/src/main.rs` 接入 `settings get [<key>...]`、`settings set-shared-dir (--path <绝对路径> | --clear)`、`settings set-auto-check <0|30|60|360|1440>`；`get` 返回全部键的**当前生效值**（含默认值推导），未设置的键返回 `null`、不省略键也不用空字符串冒充；只提供这两个写入口，`theme`/`font_scale`/`git_auto_push` 只读不写（`git_auto_push` 是上传长期授权，Agent 不得自行开启）；取值校验复用 core 既有校验，不新增一套判断。
-- [ ] T094 在 `skill-manager/crates/cli/src/commands/settings.rs`、`skill-manager/crates/core/src/diagnostics.rs`、`skill-manager/crates/core/src/vault/capacity.rs` 接入 `settings diagnostics [--export]` 与 `settings capacity`；GUI 与 CLI 共用同一 core，导出返回**真实文件路径**，容量按当前库文件计算总占用与较大技能排行；不提供上传诊断、不建第二套资产存储。
-- [ ] T095 在 `skill-manager/tests/cli_settings.rs`（并在 `skill-manager/crates/cli/Cargo.toml` 注册 `[[test]]`）按 quickstart 5.14～5.19 编写断言：纯 CLI 设置共享目录后 `deploy to shared` 成功、`--clear` 后如实报错；检查频率合法值写入与被拒；`settings get` 的 null 语义与默认值推导；`theme`/`font_scale`/`git_auto_push` 无 CLI 写入口；诊断与容量输出可解析。完成后把 `specs/002-skill-management/contracts/cli.md` 的 T090 表中 `settings` 行结论更新为"通过"并附验证方式。
-- [ ] T096 清理两处无写入点的配置项：删除自定义日志目录键；Hermes 根改为按 `HERMES_HOME` 环境变量与平台默认解析、不再作为可写设置键；同步 `specs/002-skill-management/data-model.md`、`contracts/cli.md`、`quickstart.md`、`skill-manager/README.md` 与 `skill-manager/assets/skills/skill-manager-maintenance/references/cli.md` 中相关表述；`settings get` 不再返回已删除的键。
+**独立验收**：在无 GUI 参与的环境下用 CLI 完成"设置共享目录 → 部署到 shared"与"调整自动检查频率"；取到诊断报告与容量报告；`settings get` 能读到全部运行配置与调度事实，且主题、字号、上传授权没有 CLI 写入口。**不新增产品能力，只把已有 core 能力接出 CLI。**
+
+### Tests（测试，先写后实现）
+
+- [X] T093 [P] [US10] 在 `skill-manager/tests/cli_settings.rs`（并在 `skill-manager/crates/cli/Cargo.toml` 注册 `[[test]] name = "cli_settings" path = "../../tests/cli_settings.rs"`）按 quickstart 5.14～5.19 编写 CLI 断言：`settings get` 返回全部键的**当前生效值**（主题缺省 `system`、检查频率缺省 60、未设置的共享目录为 `null` 且不省略键、不用空字符串冒充）；纯 CLI 下 `settings set-shared-dir --path <临时目录>` 后 `deploy to shared <ref>` 成功，`--clear` 后如实报"尚未设置共享目录路径"；`settings set-auto-check` 接受 0/30/60/360/1440 并拒绝 45；`theme`/`font_scale`/`git_auto_push` **没有** CLI 写入口；`settings diagnostics --export` 返回真实文件路径；`settings capacity` 空库返回 0 与空排行。
+- [X] T094 [P] [US10] 在 `skill-manager/crates/core/tests/` 补核心断言：Hermes 根按 `HERMES_HOME` 环境变量与平台默认解析（不读可写设置键）；自定义日志目录键移除后诊断报告仍给出正确的 `<state-dir>/logs` 路径；`settings get` 不再返回已删除的键。
+
+### Implementation（实现）
+
+- [X] T095 [US10] 在 `skill-manager/crates/cli/src/commands/settings.rs` 实现 `settings get [<key>...]`（汇总运行配置与调度事实；未设置的键返回 `null`、不省略键、不用空字符串冒充）、`settings set-shared-dir (--path <绝对路径> | --clear)`、`settings set-auto-check <0|30|60|360|1440>`；取值校验**复用 core 既有校验**，不新增一套判断；只提供这两个写入口——`theme`/`font_scale` 不提供写（界面偏好，FR-052），`git_auto_push` 不提供写（GUI 保存自动上传的长期授权，Agent 不得自行开启，FR-038）。
+- [X] T096 [US10] 在 `skill-manager/crates/cli/src/commands/settings.rs` 实现 `settings diagnostics [--export]` 与 `settings capacity`，复用 `skill-manager/crates/core/src/diagnostics.rs` 与 `skill-manager/crates/core/src/vault/capacity.rs` 的既有能力；GUI 与 CLI 共用同一 core；导出返回**真实文件路径**；不提供上传诊断、不建第二套资产存储。
+- [X] T097 [US10] 在 `skill-manager/crates/core/src/state/settings.rs`、`skill-manager/crates/core/src/hermes/` 清理两处无写入点的配置项：删除自定义日志目录键（固定 `<state-dir>/logs`）；Hermes 根改为按 `HERMES_HOME` 环境变量与平台默认解析，移除可写设置键，避免与 Hermes 自身的定位规则分叉。
+- [X] T098 [US10] 在 `skill-manager/crates/cli/src/main.rs`、`skill-manager/crates/cli/src/commands/mod.rs` 注册 `Settings` 顶层子命令与 `commands::settings` 模块（**公共入口注册串行合入**，不与 T095/T096 并行），并核对 `--help` 输出的子命令与 `contracts/cli.md` 的 `settings` 命令组一致。
+- [X] T099 [US10] 执行 quickstart 5.14～5.19，把 `specs/002-skill-management/contracts/cli.md` 的 T090 表中 `settings` 行结论更新为"通过"（附验证方式），把证据与差异写入 `specs/002-skill-management/checklists/m5-report.md` 的 5.14～5.19；**未取得证据的项保持未过并写明原因**。
+
+## Phase 15: 增量收尾（T100）
+
+- [X] T100 同步 `skill-manager/README.md` 与 `skill-manager/assets/skills/skill-manager-maintenance/references/cli.md` 的 CLI 参考（新增 `settings` 命令组、两个写入口与三条只读边界的说明）；运行 `cargo test --workspace` 与前端构建，不新增兼容路径或仅复述实现的测试。
 
 ## Dependencies & Execution Order（依赖与执行顺序）
 
@@ -316,7 +330,6 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 | M4 同步/指令 | US5 + US8 指令部分/跨机验收 | `checklists/m4-report.md`，SC-005/006 |
 | M5 预设/工具/环境 | US7 + US9 + US10 + 配套 Skill 与跨故事收尾 | `checklists/m5-report.md`，全部场景与 SC-001～008 |
 | M5 补充（2026-10-16 规划补齐） | 本机运行侧双入口：`settings` 命令组、诊断/容量的 CLI 入口、两处无写入点配置的清理 | 更新 `checklists/m5-report.md` 的 5.14～5.19 与 `contracts/cli.md` T090 表中 `settings` 行 |
-
 实际任务顺序（同批仍按各任务前置串行/并行）：
 
 1. M1：T001～T020。
@@ -324,7 +337,7 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 3. M3：T030～T049；T049 回验 M1 获取入口约束。
 4. M4：T050～T055 → T069、T070、T072、T073（指令与双机验收）。
 5. M5：T062～T066（预设）、T074～T081（工具核心）、T083～T087（环境）；T082 工具真实任务路径验收等待 T088～T089 配套 Skill 普通入库后完成，最终执行 T090～T092 整体核对。
-6. M5 补充：T093、T094 → T095（测试与 T090 表更新）；T096（清理无写入点配置）可与 T093/T094 并行，但两者都改 `contracts/cli.md` 与配套 Skill 的 CLI 参考，**串行合入**。
+6. M5 补充：T093、T094（测试先写并确认失败，两项可并行）→ T095、T096（`settings` 命令实现，两项都改同一文件，串行）→ T097（清理无写入点配置，与 T095/T096 不同文件可并行）→ T098（公共入口注册，串行）→ T099（场景验证与 T090 表更新）；T100 收尾同步文档。T095/T096 与 T100 都会改配套 Skill 的 CLI 参考，**串行合入**。
 
 阶段号和故事编号用于归属，以上里程碑用于真实开工顺序；US8 已将 M2 Agent 页面与 M4 指令页面拆为独立任务。每期报告使用 `场景号 | 预期 | 实际 | 结论（通过/未过+偏差说明）`，证据缺失保持未过，不把未实现功能当作成功。
 

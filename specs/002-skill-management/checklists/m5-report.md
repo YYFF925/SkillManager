@@ -22,6 +22,21 @@
 | 5.12 预设间顺序与成员顺序（GUI + `reorder-members`），另一机拉取 | 两种显示顺序均共享；成员排序只改数组顺序，不增减成员、不动目录、不改已有部署 | 机 B 拉取后可见 audit→release 与 release 成员 `[gamma, beta]`；成员排序未增删成员、未动目录、未产生部署 | 通过（CLI）；**GUI 拖动排序未取得真实拖动证据**（见第四节） |
 | 5.13 单技能与多技能 `skill task` | 上下文完整可定位；保留用户要求、库/技能路径、管理资料概况与已有部署；规范只引用维护 Skill；生成不改库/部署/上传 | 单项与多选任务文本均含上述上下文（`skill-task-cli.txt`）；生成过程不改库、不部署、不上传 | 通过 |
 
+## 一之二、场景核对表（5.14～5.19，2026-10-16 增量 T093～T099）
+
+**证据**：临时库 + 临时 HOME + 独立 `--state-dir` 的 CLI 实跑（`settings` 命令组）；自动化断言见 `skill-manager/tests/cli_settings.rs`（8 项）与 `skill-manager/crates/core/tests/runtime_settings.rs`（3 项）。真实 `~/.codex`、`~/.zcode`、`~/.hermes`、`~/.agents` 与真实 Application Support 均未写入。
+
+| 场景号 | 预期 | 实际 | 结论 |
+|---|---|---|---|
+| 5.14 `settings get`（不带/带参数） | 全部键的当前生效值（主题缺省 `system`、频率缺省 60、共享目录未设置为 `null`）；带参数只返回指定键；不省略键、不用空字符串冒充 | `settings get`（无参）返回 8 键：`theme=system`、`font_scale=default`、`auto_check_minutes=60`、`shared_dir=null`、`git_auto_push=false`、`vault_path=<临时库绝对路径>`、`last_sync_at=null`、`last_check_at=null`；`settings get theme shared_dir` 只返回两键。自动化断言同上文件 | 通过 |
+| 5.15 `settings set-shared-dir --path` → `deploy to shared`；`--clear` 后 | 设置后共享部署成功；清除后如实报"尚未设置共享目录路径" | `set-shared-dir --path <临时目录>` → `deploy to shared code/alpha` 成功（`items[0].action=deployed`，副本 `SKILL.md` 实际存在）；`--clear` → `deploy to shared` 退出 1，`errors[0].message` = "目标无法解析：尚未设置共享目录路径（shared 是部署目标，不是第二个管理库）" | 通过 |
+| 5.16 `set-auto-check` 取值 | 0/30/60/360/1440 接受并读回；45 被拒绝并给出合法取值 | 0 与 30 写入后 `settings get auto_check_minutes` 分别读回 0 与 30；`set-auto-check 45` 退出 1，报"自动检查频率只支持 0（关闭）/30/60/360/1440 分钟，收到 45" | 通过 |
+| 5.17 `settings diagnostics`、`--export`、`settings capacity` | 诊断含版本/平台/真实日志路径；`--export` 写出真实文件并返回路径；容量输出总占用与排行，空库 0 与空排行 | 诊断输出"版本：0.1.0；平台：macos / aarch64"与真实 `运行日志：<state-dir>/logs/skill-manager.log`、`崩溃记录：.../crash.log`；`--export` 返回 `data.path` 指向实际存在文件（`<state-dir>/logs/diagnostics-*.txt`）；容量非空库报 1 项技能占用 8 字节 + 排行，空库（无技能）报 `total_size=0`、`file_count=0`、`skill_total_size=0`、`skills=[]` | 通过 |
+| 5.18 不允许的写入边界 | `theme`/`font_scale`/`git_auto_push` 无 CLI 写入口（命令不存在或明确不支持），只能经 `settings get` 读取 | `settings set-theme`/`set-font-scale`/`set-git-auto-push` 均不存在，调用退出 2（clap `unrecognized subcommand`）；三者经 `settings get` 可读。工具安装事实回写仍只有 CLI（GUI 无入口，未改动） | 通过 |
+| 5.19 清理项核对 | 不再存在自定义日志目录键；Hermes 根按 `HERMES_HOME` 与平台默认解析，`settings get` 不再返回可写 Hermes 根键 | `settings get` 不含 `log_dir`、`hermes_root`；`HERMES_HOME=<临时目录>` 时 `hermes profiles` 报 `root=<临时目录>`、`skills_dir=<临时目录>/skills`；core 断言（`runtime_settings.rs`）覆盖 `HERMES_HOME` 优先/平台默认回落、忽略残留 `hermes_root` 键、日志固定落 `<state-dir>/logs` | 通过 |
+
+**验证方式说明**：本批不含 GUI 改动；`settings` 命令组与 GUI 设置页共用同一 core（诊断/容量/共享目录校验均走 core）。界面偏好（主题/字号）与上传长期授权仍仅 GUI 写。
+
 ## 二、SC-001～SC-008 结论
 
 | 项 | 结论 | 证据 |
@@ -77,7 +92,7 @@
 > **2026-10-16 更新**：第 1 条经用户要求按类重扫后**已升级为规划补齐项**（不只是共享目录一项，
 > 而是"本机运行配置与只读报告"整类）。规格与命令契约已补齐，见 `plan.md` 的"规划补齐"一节、
 > `research.md` D22/D23、`contracts/cli.md` 的 `settings` 命令组与本报告新增的 5.14～5.19 场景；
-> 实现任务为 tasks.md 的 T093～T096。本节其余条目仍然有效。
+> 实现任务为 tasks.md 的 T093～T100。本节其余条目仍然有效。
 
 1. **共享目录路径（`shared_dir`）缺 CLI 命令**：只有 GUI/Tauri（`shared_dir_get/set`）入口，纯 CLI 下 `deploy to shared` 报"尚未设置共享目录路径"。修复需新增产品入口（契约外命令），**未自行发明**，待裁决。（→ 已按上注补齐规划，待实现）
 2. **`skill import` / `update-repo` 无 `tags`/`comment` 参数**：GUI 与 CLI 一致只能补充分类，标签/注释继承上游。**未自行发明**，待裁决。
@@ -92,14 +107,15 @@
 
 | 命令 | 结果 |
 |---|---|
-| `cargo test --workspace` | 通过：**241 项**，19 个测试套件全绿，0 失败 |
+| `cargo test --workspace` | 通过：**252 项**，0 失败（含本批新增 `tests/cli_settings.rs` 8 项与 `crates/core/tests/runtime_settings.rs` 3 项） |
 | `cargo build --workspace` | 通过，0 警告 |
 | `npx tsc --noEmit` | 通过 |
 | `npm test`（vitest） | 通过：6 文件 / 22 用例 |
-| `npm run build` | 通过（dist JS 455.68 kB / gzip 132.04 kB，CSS 28.58 kB） |
+| `npm run build` | 通过（dist JS 455.68 kB / gzip 132.04 kB，CSS 28.55 kB） |
 
 ## 八、配套 Skill 与文档
 
 - 新增 `skill-manager/assets/skills/skill-manager-maintenance/SKILL.md`（十节：`.manager` 实际格式、目录与同名规则、原文/译文/注释/overlay 边界、来源更新与同项合并、修改后 `deploy sync` 与"询问后才上传"、冲突与暂停、CLI 使用、工具登记/检查命令/真实验证回写）与 `references/cli.md`（8 个命令组真实参数、JSON/退出码）。**文档中 53 条调用 / 91 个 flag 与真实 `--help` 逐条核对一致，并实跑 106 条子命令。**
+- 2026-10-16 增量：`references/cli.md` 新增 `settings` 命令组（用法、两个写入口、三条只读边界与 Hermes 根解析说明），并把原"共享目录路径只有 GUI"缺口改为指向 `settings set-shared-dir`；`skill-manager/README.md` 同步 CLI 示例与边界，移除已解决的共享目录缺口。新增命令与 `settings --help`/子命令 `--help` 逐条核对一致。
 - 更新：`README.md`（实现状态/验证基线/未闭合缺口/待授权）、新建 `skill-manager/README.md`（结构、开发构建测试运行、CLI 入口与退出码、SkillVault 与 SQLite 位置、配套 Skill 入库方式、已知缺口）、`plan.md`（Implementation Status M1～M5 + 7 项未闭合项）、`research.md`（D9 实施结果与 Gitea 待授权）、`contracts/cli.md`（T090 双入口核对一节）。
 - 未执行 `git commit` / `git push`：项目仓库 HEAD 仍为 `c915649`。

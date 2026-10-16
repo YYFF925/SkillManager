@@ -53,8 +53,8 @@
    - 收益：满足"档案共用库内一份技能内容"且"新增不自动启用其他档案"；不动用户配置，避免破坏其注释与其他设置。
    - **与 tasks.md T026"不新增软链接部署模式"的关系**：T026 约束的是**部署**（Agent/共享目录），未约束档案启用；此处的链接位于档案技能目录，是启用的表达方式。**Windows 下的 symlink/junction 行为未验证**（失败会如实报错，不静默复制）。
    - 待用户确认：若更希望"每档案一份独立副本"，代价是放弃"共用一份内容"；当前实现取链接方案。
-2. **`deploy to hermes:default` 的路径**仍按内置 Agent 目录资产解析 `<root>/skills`（与 `HermesService` 的根解析在默认情况下一致）。若将来把 Hermes 根设为非默认位置，两者会分叉——本轮未处理，未新增设置入口。
-3. **共享目录路径设置缺 CLI 命令**：已记录在 `research.md`（§五 D18），由 T090 按 FR-050 双入口核对统一处理；GUI 经 Tauri `shared_dir_get/set` 可达。**不自行发明契约外命令。**
+2. **`deploy to hermes:default` 的路径已与 `HermesService` 统一**（2026-10-16 T097 消除分叉）：两者都按 `HERMES_HOME` 环境变量与平台默认解析 Hermes 根，部署目录恒为 `<根>/skills`；原可写设置键 `hermes_root` 移除。core 断言见 `crates/core/tests/runtime_settings.rs`（`HERMES_HOME` 优先、平台默认回落、忽略残留键）。
+3. **共享目录路径设置已有 CLI 命令**（2026-10-16 增量 T093～T100）：`settings set-shared-dir (--path <绝对路径> | --clear)`，GUI 与 CLI 共用 core 校验；原仅 GUI 可达的缺口已闭合（见 `contracts/cli.md` 的 T090 表 `settings` 行与 m5 报告 5.14～5.19）。
 4. **Agent 目录修改后的已有部署协调**：语义写在 `research.md`（D15）——`deploy to` 使用新目录并更新 `target_path`，旧路径副本交用户处置；不采用旧版"先删旧副本再重建"。
 
 ## 五、遗留与待后续里程碑复核

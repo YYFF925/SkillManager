@@ -65,11 +65,20 @@ skill-manager deploy to codex code/dep-guard --also-target zcode --dry-run
 skill-manager deploy sync
 skill-manager sync push --message "上传本周维护"
 skill-manager tool check --all
+skill-manager settings get
+skill-manager settings set-shared-dir --path /Users/you/.agents/skills
+skill-manager settings set-auto-check 30
+skill-manager settings diagnostics --export
+skill-manager settings capacity
 ```
 
 - `<ref>` = `<domain>/<name>`（**不含分类路径**；技能名在域内唯一，分类只影响目录位置）。
 - 退出码：`0` 成功；`1` 失败；`2` 部分完成（参数用法错误也返回 `2`）。
 - `--json` 输出统一对象 `{result, data, errors}`。
+- `settings` 命令组只读写本机状态：`get` 读全部运行配置与调度事实（未设置的键为 `null`）；
+  **只有两个写入口**——`set-shared-dir`（`shared` 部署目标前置）与 `set-auto-check`（FR-029 三项共用周期）；
+  `theme`/`font_scale` 仅 GUI 写（界面偏好，FR-052）、`git_auto_push` 仅 GUI 写（长期上传授权，FR-038），
+  三者经 CLI 只读；`diagnostics`/`capacity` 与设置页共用同一 core，`--export` 返回真实文件路径。
 - 完整命令表、参数与语义以 [contracts/cli.md](../specs/002-skill-management/contracts/cli.md) 为准。
 
 ## SkillVault 与本机状态位置
@@ -94,14 +103,12 @@ skill-manager tool check --all
 
 ## 已知缺口与未验证项
 
-1. **共享目录路径（`shared_dir`）只有 GUI/Tauri 入口**，CLI 无对应命令；未设置时
-   `deploy to shared <ref>` 报"尚未设置共享目录路径"。
-2. **新增候选入库**（`skill import` / `skill update-repo`）无 `tags`/`comment` 参数，
+1. **新增候选入库**（`skill import` / `skill update-repo`）无 `tags`/`comment` 参数，
    GUI 与 CLI 一致地只能补充分类，标签/注释继承上游 `.manager`；入库后可用 `skill set` 补充。
-3. **Hermes 档案独有技能**没有只读查看正文的入口（无对应命令）。
-4. **平台兼容**：本机仅在 macOS（arm64）实际运行验证；其他平台未验证，不声明兼容。
+2. **Hermes 档案独有技能**没有只读查看正文的入口（无对应命令）。
+3. **平台兼容**：本机仅在 macOS（arm64）实际运行验证；其他平台未验证，不声明兼容。
    Hermes 启用用符号链接实现，Windows 下的链接行为未验证。
-5. **未取得人工界面证据的交互**：卡片三点菜单/多选批量栏/入库与部署弹窗的部分点按流程、
+4. **未取得人工界面证据的交互**：卡片三点菜单/多选批量栏/入库与部署弹窗的部分点按流程、
    "未连接"的完整界面复核等，按各期报告如实保留。
 
 以上与更多细节见 [contracts/cli.md 的 T090 双入口核对](../specs/002-skill-management/contracts/cli.md#t090-双入口核对fr-0500512026-10-15)

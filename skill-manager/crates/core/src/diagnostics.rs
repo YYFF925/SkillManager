@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::context::AppContext;
 use crate::error::{CoreError, Result};
-use crate::state::{setting_key, StateStore};
+use crate::state::StateStore;
 
 /// 日志目录名（本机状态目录下）。
 pub const LOG_DIR_NAME: &str = "logs";
@@ -20,18 +20,10 @@ pub const LOG_FILE: &str = "skill-manager.log";
 /// 崩溃记录文件名。
 pub const CRASH_FILE: &str = "crash.log";
 
-/// 日志目录：设置键 `log_dir` 优先，否则 `<状态目录>/logs`。
+/// 日志目录固定为 `<状态目录>/logs`（不再保留可写设置键）。
 ///
 /// 内存状态库（仅测试）没有目录，返回空路径；`record` 对空路径不落文件。
 pub fn log_dir(store: &StateStore) -> PathBuf {
-    if let Some(dir) = store
-        .setting(setting_key::LOG_DIR)
-        .ok()
-        .flatten()
-        .filter(|value| !value.trim().is_empty())
-    {
-        return PathBuf::from(dir);
-    }
     if store.dir().as_os_str().is_empty() {
         return PathBuf::new();
     }

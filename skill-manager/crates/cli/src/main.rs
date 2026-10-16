@@ -54,6 +54,8 @@ enum Command {
     Instruction(commands::instruction::InstructionCommand),
     /// 工具中心：工具资料、版本检查、安装事实回写与维护任务。
     Tool(commands::tool::ToolCommand),
+    /// 本机运行配置与只读报告（设置读取、共享目录/检查频率、诊断与容量）。
+    Settings(commands::settings::SettingsCommand),
 }
 
 fn main() -> ExitCode {
@@ -81,6 +83,7 @@ fn main() -> ExitCode {
         Command::Sync(command) => commands::sync::run(command, &mut ctx, &options),
         Command::Instruction(command) => commands::instruction::run(command, &mut ctx, &options),
         Command::Tool(command) => commands::tool::run(command, &mut ctx, &options),
+        Command::Settings(command) => commands::settings::run(command, &mut ctx, &options),
     };
 
     ExitCode::from(result.emit(options.json, &human) as u8)

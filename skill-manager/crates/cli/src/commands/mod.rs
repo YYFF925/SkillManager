@@ -6,6 +6,7 @@ pub mod deploy;
 pub mod hermes;
 pub mod instruction;
 pub mod preset;
+pub mod settings;
 pub mod skill;
 pub mod sync;
 pub mod tool;

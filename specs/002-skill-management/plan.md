@@ -145,10 +145,12 @@ CLI 用 `--vault` / `--state-dir` 覆盖，可在一台机器上模拟两台电�
 
 **未闭合项（保持未过/待授权，不用勾任务代替验收）**：
 
-1. **本机运行侧整类缺 CLI 入口**——原记为"共享目录路径缺 CLI 命令"，2026-10-16 逐项清点后确认
-   是"本机运行配置与只读报告"整类（同时缺 CLI 的还有自动检查频率、运行配置读取、诊断资料获取与导出、
-   容量报告）。**规格与命令契约已按类补齐**（spec.md FR-050/FR-052/FR-053、contracts/cli.md 的
-   `settings` 命令组、data-model.md §2.6、research.md D22/D23），实现见 T093～T096。
+1. ~~**本机运行侧整类缺 CLI 入口**~~——**2026-10-16 已闭合**（T093～T099）：原记为"共享目录路径缺 CLI 命令"，
+   逐项清点后确认是"本机运行配置与只读报告"整类（同时缺 CLI 的还有自动检查频率、运行配置读取、
+   诊断资料获取与导出、容量报告）。**规格、命令契约与实现均已按类补齐**
+   （spec.md FR-050/FR-052/FR-053、contracts/cli.md 的 `settings` 命令组、data-model.md §2.6、
+   research.md D22/D23、`crates/cli/src/commands/settings.rs`），quickstart 5.14～5.19 全部通过
+   （证据见 `checklists/m5-report.md` 5.14～5.19 与 `contracts/cli.md` 的 T090 表 `settings` 行）。
 2. **新增候选入库无 `tags`/`comment` 参数**——GUI/CLI 一致地只能补充分类；属契约限制（缺口 ②）。
 3. **Hermes 档案独有技能的只读查看**未实现（交互缺口，GUI 与 CLI 都没有）。
 4. **配套维护 Skill 的 Gitea 入库/更新待授权**：远端写入未被授权；机制本身已用临时本地 Git 上游
@@ -182,7 +184,7 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 **本次规划变更的文件**：`spec.md`（FR-029/050/052/053 与 Clarifications）、
 `contracts/cli.md`（`settings` 命令组、FR-050 覆盖表、T090 缺口重述）、
 `data-model.md` §2.6（逐键可达性表、清理两键）、`research.md` D22/D23、
-`quickstart.md`（新增场景）、`tasks.md`（T093～T096）。
+`quickstart.md`（新增场景）、`tasks.md`（T093～T100）。
 
 ## 需求质检后的实施边界
 

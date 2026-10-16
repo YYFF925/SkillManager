@@ -266,7 +266,7 @@ spec.md FR-041/FR-042、US8 场景 1～3；data-model §2.1/§2.3。
 - **证据**：`hermes_constants.py:112-124` `get_hermes_home()`：上下文覆盖 → 环境变量 `HERMES_HOME` → 平台默认；
   `hermes_constants.py:50-57` `_get_platform_default_hermes_home()`：非 Windows 为 `Path.home()/".hermes"`（可带 `HERMES_DATA_DIR_SUFFIX`），Windows 为 `%LOCALAPPDATA%/hermes`。
 - **证据**：`hermes_constants.py:280-300` `profile_name_for_home()` 文档串明确：“The default home is the Hermes root itself … not the profile id `default`”。
-- **结论**：**default 档案就是根目录自身**，不存在 `profiles/default`。本项目单根定位：本机设置键 `hermes_root`，缺省 `~/.hermes`。
+- **结论**：**default 档案就是根目录自身**，不存在 `profiles/default`。本项目单根定位：按 `HERMES_HOME` 环境变量与平台默认解析（2026-10-16 清理 T097：原先规划的 `hermes_root` 可写设置键已移除，见 D23 与 `data-model.md` §2.6；`hermes:default` 部署路径与 `HermesService` 共用该解析）。
 - **证据**：`hermes_constants.py:216-232` `get_default_hermes_root()`：`HERMES_HOME` 指向 `<root>/profiles/<name>` 时回退到 `<root>`（`env_path.parent.parent`）。因此“进程 home”与“含全部档案的根”需要分开，本项目只使用**根**。
 
 ### 5.2 具名档案发现（不能凭任意子目录认作档案）

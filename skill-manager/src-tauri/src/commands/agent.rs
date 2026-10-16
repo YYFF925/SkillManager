@@ -7,7 +7,6 @@ use skill_manager_core::deploy::{
     AgentConfigService, AgentView, DirKind, LocalDeleteOutcome, LocalSkillService,
     LocalSkillView, TargetResolver,
 };
-use skill_manager_core::state::setting_key;
 use skill_manager_core::vault::{
     InstructionScope, InstructionSourceView, InstructionTargetResult, InstructionsService,
 };
@@ -163,9 +162,9 @@ pub fn shared_dir_get(state: tauri::State<'_, AppState>) -> Result<Option<String
     let ctx = state.get()?;
     Ok(ctx
         .state()
-        .setting(setting_key::SHARED_DIR)
+        .shared_dir()
         .map_err(|err| err.to_string())?
-        .filter(|value| !value.trim().is_empty()))
+        .map(|path| path.display().to_string()))
 }
 
 /// 设置或清除共享部署目录；传空字符串表示清除。
@@ -177,21 +176,20 @@ pub fn shared_dir_set(
     let ctx = state.get()?;
     let value = path.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
     match &value {
-        Some(value) => {
-            if !std::path::Path::new(value).is_absolute() {
-                return Err("共享目录必须是绝对路径".to_string());
-            }
-            ctx.state()
-                .set_setting(setting_key::SHARED_DIR, value)
-                .map_err(|err| err.to_string())?;
-        }
-        None => {
-            ctx.state()
-                .remove_setting(setting_key::SHARED_DIR)
-                .map_err(|err| err.to_string())?;
-        }
+        Some(value) => ctx
+            .state()
+            .set_shared_dir(value)
+            .map_err(|err| err.to_string())?,
+        None => ctx
+            .state()
+            .clear_shared_dir()
+            .map_err(|err| err.to_string())?,
     }
-    Ok(value)
+    Ok(ctx
+        .state()
+        .shared_dir()
+        .map_err(|err| err.to_string())?
+        .map(|path| path.display().to_string()))
 }
 
 fn instructions_service<'a>(

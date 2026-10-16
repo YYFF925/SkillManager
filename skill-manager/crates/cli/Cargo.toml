@@ -47,6 +47,10 @@ path = "../../tests/cli_preset.rs"
 name = "cli_tool"
 path = "../../tests/cli_tool.rs"
 
+[[test]]
+name = "cli_settings"
+path = "../../tests/cli_settings.rs"
+
 [dependencies]
 skill-manager-core.workspace = true
 clap.workspace = true

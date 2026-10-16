@@ -130,7 +130,7 @@ skill-manager skill update code/skill-manager-maintenance
 ## M5 补充 — 本机运行侧双入口（2026-10-16 规划补齐）
 
 对应 spec.md FR-050「本机运行侧」、FR-052、FR-053 与 contracts/cli.md 的 `settings` 命令组；
-实现任务见 tasks.md T093～T096。
+实现任务见 tasks.md T093～T100。
 
 | # | 操作 | 预期 |
 |---|---|---|

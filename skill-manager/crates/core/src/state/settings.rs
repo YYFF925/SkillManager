@@ -3,6 +3,8 @@
 //! 只存本机状态；自动检查频率三项共用（FR-029），上传确认只表达 GUI 保存这一条已授权
 //! 来源，不是逐次同意账本（T050）。
 
+use std::path::{Path, PathBuf};
+
 use crate::error::{CoreError, Result};
 use crate::state::{
     setting_key, StateStore, AUTO_CHECK_MINUTES_ALLOWED, AUTO_CHECK_MINUTES_DEFAULT,
@@ -51,6 +53,31 @@ impl StateStore {
             setting_key::AUTO_CHECK_MINUTES,
             &minutes.to_string(),
         )
+    }
+
+    /// 共享部署目录；未设置或为空时为 None。
+    pub fn shared_dir(&self) -> Result<Option<PathBuf>> {
+        Ok(self
+            .setting(setting_key::SHARED_DIR)?
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from))
+    }
+
+    /// 设置共享部署目录；只接受绝对路径（`shared` 部署目标的前置）。
+    pub fn set_shared_dir(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path.as_ref();
+        if !path.is_absolute() {
+            return Err(CoreError::other(format!(
+                "共享目录必须是绝对路径，收到 {}",
+                path.display()
+            )));
+        }
+        self.set_setting(setting_key::SHARED_DIR, &path.to_string_lossy())
+    }
+
+    /// 清除共享部署目录设置。
+    pub fn clear_shared_dir(&self) -> Result<()> {
+        self.remove_setting(setting_key::SHARED_DIR)
     }
 
     /// 最近一次成功 `sync pull` 的时间；无记录为 None。

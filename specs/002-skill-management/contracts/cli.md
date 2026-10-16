@@ -227,22 +227,22 @@ settings capacity
 | 工具维护任务 | `tool task --action register/edit/install/update/guide` | 实际执行；`register` 可无 slug | 通过 |
 | 库同步 | `sync pull/push/status/conflicts` | 实际执行（临时裸远端）；后台路径不推送 | 通过 |
 | Agent 配置/本地技能/指令 | `agent list/detect/enable/disable/reorder/set-dir/reset-dir/local-skills/delete-local`，`instruction get/set` | 实际执行（临时 HOME 假目录） | 通过 |
-| 本机运行配置与只读报告 | `settings get/set-shared-dir/set-auto-check/diagnostics/capacity` | **尚未实现**（2026-10-16 规划补齐，见缺口 ① 与 tasks T093～T096） | 待实现 |
+| 本机运行配置与只读报告 | `settings get/set-shared-dir/set-auto-check/diagnostics/capacity` | 实际执行（临时库 + 临时 HOME + 独立 `--state-dir`）：`get` 全键/指定键与 `null` 语义、`set-shared-dir --path` 后 `deploy to shared` 成功且 `--clear` 后如实报"尚未设置共享目录路径"、`set-auto-check` 接受 0/30/60/360/1440 并拒绝 45、`theme`/`font_scale`/`git_auto_push` 无 CLI 写入口（`--help` 无对应子命令，调用退出 2）、`diagnostics --export` 返回真实存在文件、`capacity` 空库返回 0 与空排行；并与 `--help` 逐项比对子命令与互斥关系。自动化见 `skill-manager/tests/cli_settings.rs`（8 项） | 通过 |
 
 **JSON/退出码核对**：`--json` 输出统一 `result`(`success|partial|failed`)/`data`/`errors`；退出码 0/1/2 = 成功/失败/部分完成。**已知碰撞**：clap 的参数用法错误也返回 2，调用方需按 `errors` 或提示前缀区分（本节如实记录，未新增机制消除该碰撞）。
 
-**无 GUI 裁决依赖核对**：GUI 的 85 个前端调用名与 87 个 Tauri 注册命令逐一对齐（无前端调用缺失），全部命令共用 core，均只做参数映射。除下方缺口 ① 外，所有核心管理操作均有 CLI 等价路径，**Agent 无需回 GUI 补做核心操作**；缺口 ① 已由 2026-10-16 的规划补齐（`settings` 命令组，待实现）。
+**无 GUI 裁决依赖核对**：GUI 的 85 个前端调用名与 87 个 Tauri 注册命令逐一对齐（无前端调用缺失），全部命令共用 core，均只做参数映射。除下方缺口 ① 外，所有核心管理操作均有 CLI 等价路径，**Agent 无需回 GUI 补做核心操作**；缺口 ① 已由 2026-10-16 的 `settings` 命令组补齐并实现，见上表 `settings` 行结论。但 GUI 独有的界面偏好写入仍有边界：`theme`/`font_scale`/`git_auto_push` 不由 CLI 写（FR-052/FR-038）。
 
 **维护任务 Skill 路径核对**：配套维护 Skill 未入库时，任务文本显示"配套维护 Skill：未入库（…此处不编造库内路径）"；入库后显示其**真实库内绝对路径**与技能引用，并含"按其规范执行"（FR-051）。均已实际执行验证。
 
 **发现的缺口与处理**
 
-1. **本机运行侧整类缺 CLI 入口**（原记为"仅共享目录路径"，2026-10-16 逐项清点后确认为整类，已在 `spec.md` FR-050/FR-052/FR-053 补齐表述并在本节补齐命令契约，见 `settings` 命令组与 tasks T093～T096）。清点结论：
+1. **本机运行侧整类缺 CLI 入口**（原记为"仅共享目录路径"，2026-10-16 逐项清点后确认为整类，已在 `spec.md` FR-050/FR-052/FR-053 补齐表述并在本节补齐命令契约，见 `settings` 命令组与 tasks T093～T100）。清点结论：
    - **必须 CLI 可写**：`shared_dir`（`shared` 部署目标前置）、`auto_check_minutes`（FR-029 三项共用周期）；
    - **必须 CLI 可读**：全部运行配置与调度事实（含仅由 GUI 写入的 `theme`、`font_scale`、`git_auto_push`）；
    - **不提供 CLI 写**：`theme`、`font_scale`（界面偏好）、`git_auto_push`（长期上传授权，FR-038）；
    - **有意单侧**：工具安装事实回写只有 CLI（FR-047/FR-050），不是缺口。
-2. **清理两处无写入点的配置键**：自定义日志目录不再保留；Hermes 根改为按 `HERMES_HOME` 与平台默认解析，不设可写设置键（见 tasks T096）。
+2. **清理两处无写入点的配置键**（T097 已实现）：自定义日志目录不再保留（日志固定 `<state-dir>/logs`）；Hermes 根改为按 `HERMES_HOME` 与平台默认解析，不设可写设置键。
 3. **新增候选入库时的标签/注释**（M3 已记录）。`skill import` / `skill update-repo` 无 `tags`/`comment` 参数，故 GUI 与 CLI 一致地只能补充分类；标签/注释继承上游 `.manager`，入库后可用 `skill set` 补齐。这是契约层面的限制而非入口不对齐，**保持现状**：批量入库用 `--tags` 会把同一份资料套给全部技能，与"不把同一段注释擅自套给全部技能"冲突；若确需入库时逐项给资料，应复用 `skill adopt` 的 `--metadata-file` 形式，需用户裁决。
 4. **`skill task --requirement` 原契约写必填、实现为可选** → 已按最小改动**修订契约文字**为可选（`[--requirement <text>]`），与 `tool task` 一致；理由见 `skill task` 条目注。
 5. **契约文字与实现的细节修正**：`skill list --deployed-to` 已实现（按本机部署记录筛选），原实现内的帮助文字标注"尚未接入"属过时描述，已更正为"按本机部署记录"；行为本身无需改动。

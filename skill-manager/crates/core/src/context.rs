@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::deploy::targets::{AgentCatalog, TargetResolver};
 use crate::error::{CoreError, Result};
-use crate::state::{setting_key, StateStore};
+use crate::state::StateStore;
 use crate::vault::VaultConnection;
 
 /// 入口共用的全局参数。
@@ -105,11 +105,7 @@ impl AppContext {
 
     /// 设置中的共享部署目录。
     pub fn shared_dir(&self) -> Result<Option<PathBuf>> {
-        Ok(self
-            .state
-            .setting(setting_key::SHARED_DIR)?
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from))
+        self.state.shared_dir()
     }
 
     /// 目标解析器（内置名单 + 本机共享目录设置 + 本机 Agent 目录覆盖）。
@@ -129,6 +125,7 @@ impl AppContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::setting_key;
 
     #[test]
     fn open_uses_given_state_dir() {

@@ -15,12 +15,12 @@ use crate::deploy::policy::{self, Admission, HERMES_AGENT_KEY};
 use crate::deploy::{current_os, TargetResolver};
 use crate::domain::{names_equal, validate_skill_name, Domain, SkillRef, Target};
 use crate::error::{CoreError, Result};
-use crate::state::setting_key::HERMES_ROOT;
 use crate::state::StateStore;
 use crate::vault::index::{CategoryFilter, SearchQuery, SkillEntry, SkillIndex};
 use crate::vault::scan;
 
 use super::disabled::{read_disabled, DisabledState};
+use super::hermes_home;
 use super::profiles::{discover_profiles, resolve_profile, ProfileInfo};
 
 /// 档案目录中外来副本来历：本管理器创建的链接。
@@ -171,8 +171,8 @@ impl<'a> HermesService<'a> {
         }
     }
 
-    /// 由本机上下文与本机状态构造服务：根优先用 `settings.hermes_root`，否则取
-    /// `hermes:default` 目标路径的父目录（缺省即 `~/.hermes`）。
+    /// 由本机上下文与本机状态构造服务：根按 [`hermes_home`] 解析
+    /// （`HERMES_HOME` 环境变量 → 平台默认），与 `hermes:default` 部署目标同源。
     pub fn from_context(
         ctx: &'a crate::context::AppContext,
         resolver: &'a TargetResolver<'static>,
@@ -186,20 +186,12 @@ impl<'a> HermesService<'a> {
         ))
     }
 
-    /// 解析本机 Hermes 根目录。
+    /// 解析本机 Hermes 根目录；不读任何可写设置键。
     fn root_of(
-        ctx: &'a crate::context::AppContext,
+        _ctx: &'a crate::context::AppContext,
         resolver: &TargetResolver<'static>,
     ) -> Result<PathBuf> {
-        if let Some(value) = ctx.state().setting(HERMES_ROOT)? {
-            let trimmed = value.trim();
-            if !trimmed.is_empty() {
-                return Ok(PathBuf::from(trimmed));
-            }
-        }
-        let resolution = resolver.resolve(&Target::HermesDefault)?;
-        let skills = PathBuf::from(&resolution.path);
-        Ok(skills.parent().map(Path::to_path_buf).unwrap_or(skills))
+        Ok(hermes_home(resolver.home()))
     }
 
     pub fn root(&self) -> &Path {

@@ -55,8 +55,8 @@ skill task <ref>... [--requirement <text>]
 
 - `--preset` 须同时给 `--domain`（避免跨域同 id 歧义）；否则报错退出 1。
 - `--deployed-to` 按本机部署记录筛选；`skill get` 的 `deployments` 列出该技能的实际部署位置。
-- **已知缺口**：共享目录路径（`shared_dir`）只有 GUI/Tauri 入口可设置，CLI 无对应命令；
-  未设置时 `deploy to shared <ref>` 报“尚未设置共享目录路径”。需要共享目录部署时应先在 GUI 设置。
+- 需要共享目录部署时，先用 `settings set-shared-dir --path <绝对路径>` 设置（见 `settings` 一节）；
+  未设置时 `deploy to shared <ref>` 报“尚未设置共享目录路径”。
 - `--agents`：`all` 删除限制键（= 全支持）、`none` 写显式空集合、其余为逗号分隔名单；
   `--oses` 同规则。`--tags` 是替换集合，空字符串清空。`--comment` 空字符串清除。
 - `tag add/detach` 只增减目标标签（不替换）；`tag rename/remove` 两域统一治理，`remove` 只解除关联。
@@ -196,3 +196,30 @@ sync conflicts
 - `sync push` 提交并推送**整个工作区**改动；须先获得用户明确同意，CLI 写库/`deploy sync`/文件监听/定时同步都不构成授权。
 - `sync status` 只读事实（连接/未提交/未拉取/冲突），不提交、不推送、不改库。
 - `sync conflicts` 输出未合并路径与状态供你在 Git 层处理，之后再次 `sync pull` 继续。
+
+## settings — 本机运行配置与只读报告
+
+```text
+settings get [<key>...]
+settings set-shared-dir (--path <绝对路径> | --clear)
+settings set-auto-check <0|30|60|360|1440>
+settings diagnostics [--export]
+settings capacity
+```
+
+- 只读写**本机状态**，不改 SkillVault 内容、不触发上传。
+- `settings get` 不带参数返回全部键的当前生效值：`theme`、`font_scale`、`auto_check_minutes`、
+  `shared_dir`、`git_auto_push`、`vault_path`、`last_sync_at`、`last_check_at`；带参数只返回指定键。
+  **未设置的键返回 `null`**（不省略键、不用空字符串冒充）；已套用默认值：主题 `system`、字号 `default`、
+  自动检查频率 `60`。
+- **只有两个写入口**：
+  - `settings set-shared-dir --path <绝对路径>` 设置共享目录（`shared` 部署目标前置）；`--clear` 清除。
+  - `settings set-auto-check <0|30|60|360|1440>` 设置 FR-029 三项共用的自动检查周期（`0` = 关闭）。
+    其他取值被拒绝并列出合法值。
+- **不提供写入口**（只能经 `settings get` 读取）：`theme`、`font_scale`（界面偏好，在 GUI 设置页调整）、
+  `git_auto_push`（GUI 保存自动上传的长期授权记录，Agent 不得自行开启；上传仍需每次明确同意后 `sync push`）。
+- **无组合调度命令**：手动检查分别用 `skill check --all`、`sync pull`、`tool check --all` 表达，不合并成一条。
+- `settings diagnostics` 输出诊断报告与运行日志/崩溃记录的**真实文件路径**；`--export` 追加写出文件并返回其路径；
+  不提供上传诊断。
+- `settings capacity` 输出库总占用与较大技能排行；空库返回 0 与空排行。与 GUI 设置页共用同一 core。
+- Hermes 根不在这里设置：按 `HERMES_HOME` 环境变量与平台默认解析（`hermes profiles` 报出实际根）。
