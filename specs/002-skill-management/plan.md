@@ -199,7 +199,7 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 **不做**：不把共享目录变成可登记 Agent 或第二个管理库（FR-021 已定性）；不在该页增加"从库部署"按钮；
 不为共享目录实现收编（它是部署产物，不是来源）。
 
-**契约取法**：扩展现有 `agent local-skills` / `agent delete-local` 的取值（`<target>` = 内置 Agent key 或 `shared`），
+**契约取法**：扩展现有 `agent local-skills` / `agent delete-local` 的取值（`<target>` = 内置 Agent key、`shared` 或 `hermes:default`），
 不新开命令组——该能力与 Agent 目录同构，新开面只会制造两条平行入口。
 
 **本次规划变更的文件**：`docs/requirements.md`（新增"共享目录技能浏览"一节）、

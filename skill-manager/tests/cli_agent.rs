@@ -265,3 +265,38 @@ fn local_skills_for_agent_key_is_unaffected_by_shared_support() {
     let (code, value) = env.cli_json_raw(&["agent", "local-skills", "not-an-agent"]);
     assert_ne!(code, 0, "{value}");
 }
+
+// ---------------------------------------------------------------------------
+// Hermes default 档案（`hermes:default`）：与 `shared` 同批登记为正式取值，
+// 复用同一 `LocalSkillService` 与 `parse_target_arg`，行为同构（列出、标受管、删未受管）。
+// default 档案即 Hermes 根自身，技能目录为 `<Hermes 根>/skills`。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn local_skills_and_delete_local_support_hermes_default_target() {
+    let env = TestEnv::new();
+    env.hermes_init();
+    let default_skills = env.hermes_root().join("skills");
+    seed(&env);
+    env.write_skill("lobster", None, "beta", "---\nname: beta\ndescription: 龙虾技能\n---\n正文\n");
+    env.cli_json(&["deploy", "to", "hermes:default", "lobster/beta"]);
+    write_skill_at(&default_skills, "localonly", "仅本地\n");
+
+    // 列出：与 Agent 目录同构，区分受管（存在 `target=hermes:default` 记录）与仅本地。
+    let data = env.cli_json(&["agent", "local-skills", "hermes:default"]);
+    assert_eq!(data["skills_dir"], default_skills.display().to_string());
+    assert_eq!(data["managed"], 1);
+    let skills = data["skills"].as_array().unwrap();
+    let managed = skills.iter().find(|s| s["name"] == "beta").unwrap();
+    assert_eq!(managed["managed"], true);
+    assert_eq!(managed["status"], "managed");
+    let local = skills.iter().find(|s| s["name"] == "localonly").unwrap();
+    assert_eq!(local["managed"], false);
+    assert_eq!(local["status"], "local");
+
+    // 未受管项：删除实际文件，不改库。
+    let (code, result) = env.cli_json_raw(&["agent", "delete-local", "hermes:default", "localonly"]);
+    assert_eq!(code, 0, "{result}");
+    assert!(!default_skills.join("localonly").exists(), "未受管副本应删除实际文件");
+    assert!(env.path("lobster/beta/SKILL.md").exists(), "库内技能不得受影响");
+}

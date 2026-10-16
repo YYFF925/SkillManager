@@ -33,9 +33,9 @@ pub enum AgentAction {
     SetDir(SetDirArgs),
     /// 恢复一类目录为内置默认。
     ResetDir(ResetDirArgs),
-    /// 列出该目标目录下的本地技能（受管/仅本地）；目标为内置 Agent key 或 `shared`。
+    /// 列出该目标目录下的本地技能（受管/仅本地）；目标为内置 Agent key、`shared` 或 `hermes:default`。
     LocalSkills(LocalTargetArgs),
-    /// 删除该目标目录下的本地技能（未受管删文件不改库；受管走撤销与暂停规则）；目标为内置 Agent key 或 `shared`。
+    /// 删除该目标目录下的本地技能（未受管删文件不改库；受管走撤销与暂停规则）；目标为内置 Agent key、`shared` 或 `hermes:default`。
     DeleteLocal(DeleteLocalArgs),
 }
 
@@ -48,7 +48,7 @@ pub struct KeyArgs {
 
 #[derive(Args, Debug)]
 pub struct LocalTargetArgs {
-    /// 内置 Agent key 或 `shared`（共享目录是本机部署目标）。
+    /// 内置 Agent key、`shared`（共享目录是本机部署目标）或 `hermes:default`（Hermes default 档案）。
     #[arg(value_name = "target")]
     pub target: String,
 }
@@ -86,7 +86,7 @@ pub struct ResetDirArgs {
 
 #[derive(Args, Debug)]
 pub struct DeleteLocalArgs {
-    /// 内置 Agent key 或 `shared`（共享目录是本机部署目标）。
+    /// 内置 Agent key、`shared`（共享目录是本机部署目标）或 `hermes:default`（Hermes default 档案）。
     #[arg(value_name = "target")]
     pub target: String,
     /// 技能目录名（可重复）。

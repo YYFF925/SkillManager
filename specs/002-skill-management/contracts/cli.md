@@ -149,8 +149,8 @@ instruction get global|<key>
 instruction set global|<key> (--file <path> | --stdin)
 ```
 
-`local-skills` / `delete-local` 的 `<target>` 接受内置 Agent key 或 `shared`：共享目录是本机部署目标（FR-042/FR-055），
-按内置 Agent 的同一套语义列出与处理——受管项（存在 `target=shared` 的部署记录）按撤销部署规则处理，
+`local-skills` / `delete-local` 的 `<target>` 接受内置 Agent key、`shared` 或 `hermes:default`：共享目录与 Hermes default 档案同为本机部署目标（FR-042/FR-055），
+按内置 Agent 的同一套语义列出与处理——受管项（存在该目标部署记录）按撤销部署规则处理，
 未受管项直接删除实际文件。共享目录未设置路径时如实报错"尚未设置共享目录路径"，不猜测默认路径；
 `shared` 只对编码域有效（FR-021）。
 

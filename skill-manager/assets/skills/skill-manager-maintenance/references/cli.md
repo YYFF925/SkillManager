@@ -148,7 +148,7 @@ instruction set global|<key> (--file <path> | --stdin)
 ```
 
 - `agent` 的目录/启停/顺序只写本机状态；`detect` 只读目录存在性，不启动、不部署。
-- `local-skills` / `delete-local` 的 `<target>` 接受内置 Agent key 或 `shared`（共享目录是编码 Agent 的本机部署目标）：
+- `local-skills` / `delete-local` 的 `<target>` 接受内置 Agent key、`shared`（共享目录是编码 Agent 的本机部署目标）或 `hermes:default`（Hermes default 档案）：
   按内置 Agent 的同一套语义列出与处理——受管项（存在该目标部署记录）走撤销部署规则、不删库；
   未受管项直接删除实际文件、不改库。共享目录未设置路径时如实报错“尚未设置共享目录路径”，不猜测默认路径。
 - `instruction get` 返回源内容与按“全局在前、专属在后”的合成预览；

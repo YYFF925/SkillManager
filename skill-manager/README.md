@@ -75,8 +75,8 @@ skill-manager agent local-skills shared
 ```
 
 - `<ref>` = `<domain>/<name>`（**不含分类路径**；技能名在域内唯一，分类只影响目录位置）。
-- `<target>` = 内置 Agent key、`shared`（共享目录，编码 Agent 的本机部署目标）或 `hermes:default`；
-  `agent local-skills <target>` / `agent delete-local <target> <name>...` 也接受 `shared`，
+- `<target>` = 内置 Agent key、`shared`（共享目录，编码 Agent 的本机部署目标）或 `hermes:default`（Hermes default 档案）；
+  `agent local-skills <target>` / `agent delete-local <target> <name>...` 接受以上三类取值，
   受管项走撤销规则、未受管项直接删本机文件，共享目录未设置路径时如实报错。
 - 退出码：`0` 成功；`1` 失败；`2` 部分完成（参数用法错误也返回 `2`）。
 - `--json` 输出统一对象 `{result, data, errors}`。

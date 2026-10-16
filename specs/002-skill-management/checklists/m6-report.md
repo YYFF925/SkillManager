@@ -55,3 +55,15 @@
 
 - `m5-report.md` 第六节第 9 条状态更新为"已按链条补齐"，指向本报告。
 - `visual-comparison.md` 的 B 清单中"没有共享 Agent 页"一项在本批后不再成立，该文件第二节 03 行与本报告结论以本报告为准。
+
+## 六、`hermes:default` 作为 `<target>` 取值的登记（2026-10-16 追补）
+
+本批把 `local-skills` / `delete-local` 的 `<target>` 从"只按 Agent key"扩到"按目标"时，复用了既有目标解析
+`parse_target_arg`（对 `shared` 或含冒号输入走通用目标语法），因此 `hermes:default` 被**顺带**接受，
+但规格、契约、`plan.md`、`docs/requirements.md`、`README.md` 与 CLI 帮助文本当时只写了"内置 Agent key 或 `shared`"。
+
+经用户裁决，**选择放开并登记**（而非收紧为只接受 `shared`）：`<target>` 正式接受内置 Agent key、`shared`
+或 `hermes:default` 三类本机部署目标；`hermes:default` 指向 `<Hermes 根>/skills`（default 档案即 Hermes 根自身，
+受管判定沿用 `target=hermes:default` 的部署记录），据此同步更新上述规格、契约、规划、需求、README 与 CLI 帮助文本。
+**行为逻辑不变**（`parse_target_arg` 与 core 未改），另在 `tests/cli_agent.rs` 增加用例
+`local_skills_and_delete_local_support_hermes_default_target` 把该取值固定下来。

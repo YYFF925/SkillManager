@@ -112,7 +112,7 @@ pub struct LocalSkillsView {
     pub total: usize,
 }
 
-/// 列出目标技能目录下的本地技能（受管/仅本地）；目标为内置 Agent key 或 `shared`。
+/// 列出目标技能目录下的本地技能（受管/仅本地）；目标为内置 Agent key、`shared` 或 `hermes:default`。
 #[tauri::command]
 pub fn agent_local_skills(
     state: tauri::State<'_, AppState>,
