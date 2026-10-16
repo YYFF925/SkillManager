@@ -1,8 +1,10 @@
 /**
  * Agent 页面：本机 Agent 分组、重新检测、启停与拖动排序、目录行内修改，
- * 以及单个 Agent 的本地技能列表与删除（受管/仅本地/本地有变更）。
+ * 以及单个目标（内置 Agent 目录或共享目录）的本地技能列表与删除
+ * （受管/仅本地/本地有变更）。
  *
  * 检测只读本机存在事实；启停、顺序与目录只写本机状态，不改动已有部署。
+ * 共享目录是本机部署目标，不是可登记的 Agent 或第二个管理库。
  * US2 的收编入口在同页后续追加，本期不实现。
  */
 import { useCallback, useEffect, useState } from "react";
@@ -31,6 +33,7 @@ import {
   agentResetDir,
   agentSetDir,
   copySkill,
+  sharedDirGet,
   type AgentDirKind,
   type AgentView,
   type Domain,
@@ -39,6 +42,14 @@ import {
 import { AdoptDialog } from "../components/AdoptDialog";
 import { CopyToDomainDialog } from "../components/SkillDialogs";
 import { Badge, Button, ConfirmDialog, Notice, Segmented } from "../components/ui";
+
+/** 共享目录目标标识（与 core 的 `shared` 取值一致）；它是编码 Agent 的部署目标。 */
+const SHARED_TARGET = "shared";
+
+/** 目标展示名：内置 Agent 用其名称，共享目录用固定标签。 */
+function targetLabel(target: string, agent: AgentView | undefined): string {
+  return agent?.display_name ?? (target === SHARED_TARGET ? "共享 Agent" : target);
+}
 
 function agentIconSrc(agent: AgentView): string | null {
   return agent.icon ? `/${agent.icon}` : null;
@@ -176,23 +187,26 @@ function PathLine({
 
 export interface AgentPageProps {
   domain: Domain;
-  /** 选中的单个 Agent；为 null 时显示该管理域的 Agent 管理视图。 */
-  selectedKey: string | null;
+  /** 选中的单个目标（内置 Agent key 或共享目录 `shared`）；为 null 时显示该管理域的 Agent 管理视图。 */
+  selectedTarget: string | null;
   agents: AgentView[];
-  onSelectAgent: (key: string | null) => void;
+  onSelectTarget: (target: string | null) => void;
   onAgentsChanged: (agents: AgentView[]) => void;
   onNotice: (message: string) => void;
+  /** 前往设置页（共享目录未设置时提供入口，不代为猜测路径）。 */
+  onOpenSettings: () => void;
   /** 保存库内修改后的统一流程（先刷新已有部署，再按已确认策略上传）。 */
   onLibrarySaved?: () => Promise<void>;
 }
 
 export function AgentPage({
   domain,
-  selectedKey,
+  selectedTarget,
   agents,
-  onSelectAgent,
+  onSelectTarget,
   onAgentsChanged,
   onNotice,
+  onOpenSettings,
   onLibrarySaved,
 }: AgentPageProps) {
   const [busy, setBusy] = useState(false);
@@ -278,15 +292,16 @@ export function AgentPage({
     void run(() => agentReorder(ordered), `已调整显示顺序（本机配置）。`);
   }
 
-  if (selectedKey !== null) {
-    const agent = agents.find((item) => item.key === selectedKey);
+  if (selectedTarget !== null) {
+    const agent = agents.find((item) => item.key === selectedTarget);
     return (
       <LocalSkillsView
-        agentKey={selectedKey}
+        target={selectedTarget}
         agent={agent}
         agents={agents}
         busy={busy}
-        onBack={() => onSelectAgent(null)}
+        onBack={() => onSelectTarget(null)}
+        onOpenSettings={onOpenSettings}
         onNotice={onNotice}
         onLibrarySaved={onLibrarySaved}
       />
@@ -371,7 +386,7 @@ export function AgentPage({
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => dropOn(agent.key)}
                 onToggle={() => void toggle(agent)}
-                onSelect={() => onSelectAgent(agent.key)}
+                onSelect={() => onSelectTarget(agent.key)}
                 onSaveDir={(kind, path) => void updateDir(agent.key, kind, path)}
                 onResetDir={(kind) => void resetDir(agent.key, kind)}
               />
@@ -405,7 +420,7 @@ export function AgentPage({
                 onDragOver={() => {}}
                 onDrop={() => {}}
                 onToggle={() => void toggle(agent)}
-                onSelect={() => onSelectAgent(agent.key)}
+                onSelect={() => onSelectTarget(agent.key)}
                 onSaveDir={(kind, path) => void updateDir(agent.key, kind, path)}
                 onResetDir={(kind) => void resetDir(agent.key, kind)}
               />
@@ -516,26 +531,29 @@ function AgentCard({
   );
 }
 
-/** 单个 Agent 的本地技能列表。 */
+/** 本机目标的技能列表：内置 Agent 目录与共享目录共用同一套筛选与删除。 */
 function LocalSkillsView({
-  agentKey,
+  target,
   agent,
   agents,
   busy,
   onBack,
+  onOpenSettings,
   onNotice,
   onLibrarySaved,
 }: {
-  agentKey: string;
+  target: string;
   agent: AgentView | undefined;
   agents: AgentView[];
   busy: boolean;
   onBack: () => void;
+  onOpenSettings: () => void;
   onNotice: (message: string) => void;
   onLibrarySaved?: () => Promise<void>;
 }) {
   const [skills, setSkills] = useState<LocalSkillView[]>([]);
   const [skillsDir, setSkillsDir] = useState("");
+  const [dirUnset, setDirUnset] = useState(false);
   const [filter, setFilter] = useState<"all" | "managed" | "local" | "changed">("all");
   const [selected, setSelected] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string[] | null>(null);
@@ -545,18 +563,31 @@ function LocalSkillsView({
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
 
+  /** 共享目录是编码 Agent 的部署目标，不提供收编（它是部署产物，不是来源）。 */
+  const isShared = target === SHARED_TARGET;
+  const canAdopt = !isShared;
+  const label = targetLabel(target, agent);
   const agentDomain: Domain = agent?.domain ?? "code";
 
   const reload = useCallback(async () => {
     try {
-      const view = await agentLocalSkills(agentKey);
+      // 未设置共享目录路径时如实提示：不猜默认路径，也不显示成“没有技能”。
+      if (isShared && (await sharedDirGet()) === null) {
+        setSkills([]);
+        setSkillsDir("");
+        setDirUnset(true);
+        setError(null);
+        return;
+      }
+      setDirUnset(false);
+      const view = await agentLocalSkills(target);
       setSkills(view.skills);
       setSkillsDir(view.skills_dir);
       setError(null);
     } catch (err) {
       setError(String(err));
     }
-  }, [agentKey]);
+  }, [target, isShared]);
 
   useEffect(() => {
     void reload();
@@ -564,7 +595,7 @@ function LocalSkillsView({
 
   useEffect(() => {
     setSelected([]);
-  }, [agentKey, filter]);
+  }, [target, filter]);
 
   const visible = skills.filter((skill) => {
     if (filter === "all") return true;
@@ -606,7 +637,7 @@ function LocalSkillsView({
     setLocalBusy(true);
     setError(null);
     try {
-      const result = await agentDeleteLocal(agentKey, names);
+      const result = await agentDeleteLocal(target, names);
       const parts = [`已移除本机副本 ${result.removed.length} 项`];
       if (result.errors.length > 0) {
         parts.push(
@@ -636,46 +667,48 @@ function LocalSkillsView({
             全部 Agents
           </button>
           <span className="text-faint">/</span>
-          <span className="text-[14px] font-semibold">
-            {agent?.display_name ?? agentKey}
-          </span>
+          <span className="text-[14px] font-semibold">{label}</span>
           <span className="text-[12px] text-faint">
-            {skillsDir || "未设置"} · {managedCount} 个受管理
+            {dirUnset ? "未设置" : `${skillsDir || "未设置"} · ${managedCount} 个受管理`}
           </span>
         </div>
-        <Segmented
-          options={[
-            { value: "all", label: "全部" },
-            { value: "managed", label: "受管理" },
-            { value: "local", label: "仅本地" },
-            { value: "changed", label: "有变更" },
-          ]}
-          value={filter}
-          onChange={(value) => setFilter(value)}
-        />
+        {!dirUnset && (
+          <Segmented
+            options={[
+              { value: "all", label: "全部" },
+              { value: "managed", label: "受管理" },
+              { value: "local", label: "仅本地" },
+              { value: "changed", label: "有变更" },
+            ]}
+            value={filter}
+            onChange={(value) => setFilter(value)}
+          />
+        )}
       </div>
 
       {error && <Notice tone="danger">{error}</Notice>}
 
-      {selected.length > 0 && (
+      {!dirUnset && selected.length > 0 && (
         <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
           <span className="text-[13px] text-muted">已选择 {selected.length}</span>
           <Button compact onClick={() => setSelected([])}>
             取消选择
           </Button>
-          <Button
-            compact
-            disabled={unmanagedSelected.length === 0}
-            title={
-              unmanagedSelected.length === 0
-                ? "收编只针对未受管的“仅本地”技能"
-                : undefined
-            }
-            onClick={() => setAdoptTargets(unmanagedSelected)}
-          >
-            <Upload className="size-3.5" strokeWidth={1.75} />
-            收编仅本地{unmanagedSelected.length > 0 ? `（${unmanagedSelected.length}）` : ""}
-          </Button>
+          {canAdopt && (
+            <Button
+              compact
+              disabled={unmanagedSelected.length === 0}
+              title={
+                unmanagedSelected.length === 0
+                  ? "收编只针对未受管的“仅本地”技能"
+                  : undefined
+              }
+              onClick={() => setAdoptTargets(unmanagedSelected)}
+            >
+              <Upload className="size-3.5" strokeWidth={1.75} />
+              收编仅本地{unmanagedSelected.length > 0 ? `（${unmanagedSelected.length}）` : ""}
+            </Button>
+          )}
           <Button compact disabled={localBusy} onClick={() => setDeleteTarget(selected)}>
             <Trash2 className="size-3.5" strokeWidth={1.75} />
             删除本机副本
@@ -683,10 +716,25 @@ function LocalSkillsView({
         </div>
       )}
 
-      {visible.length === 0 ? (
+      {dirUnset ? (
+        <div className="rounded-lg border border-line-soft bg-panel p-4 text-[13px] text-muted">
+          <p>
+            尚未设置共享目录路径（共享目录是编码 Agent 的部署目标），因此无法列出技能。
+          </p>
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="mt-2 text-accent hover:underline"
+          >
+            前往设置
+          </button>
+        </div>
+      ) : visible.length === 0 ? (
         <p className="rounded-lg border border-line-soft bg-panel p-4 text-[13px] text-muted">
           {skills.length === 0
-            ? "该 Agent 技能目录下没有技能（未安装或尚未部署）。"
+            ? isShared
+              ? "共享技能目录下没有技能（尚未部署）。"
+              : "该 Agent 技能目录下没有技能（未安装或尚未部署）。"
             : "没有符合筛选条件的技能。"}
         </p>
       ) : (
@@ -738,7 +786,7 @@ function LocalSkillsView({
                       </span>
                     )}
                   </h3>
-                  {!skill.managed && (
+                  {!skill.managed && canAdopt && (
                     <button
                       type="button"
                       title={`收编 ${skill.name} 到技能库并接管原部署`}
@@ -788,14 +836,16 @@ function LocalSkillsView({
         </div>
       )}
 
-      <p className="text-[12px] text-faint">
-        仅本地：直接删除实际文件，不改 SkillVault；受管理：按撤销部署规则处理，删除本机副本不会删库。
-      </p>
+      {!dirUnset && (
+        <p className="text-[12px] text-faint">
+          仅本地：直接删除实际文件，不改 SkillVault；受管理：按撤销部署规则处理，删除本机副本不会删库。
+        </p>
+      )}
 
       {deleteTarget && (
         <ConfirmDialog
           title="删除本机技能副本"
-          subtitle="只影响该 Agent 的技能目录，不改变 SkillVault 中的技能。"
+          subtitle="只影响该技能目录，不改变 SkillVault 中的技能。"
           message={`将删除 ${deleteTarget.length} 项：${deleteTarget.join("、")}。受管理项按撤销规则处理；有本地变更的副本会暂停并保留。`}
           confirmLabel="删除"
           danger
@@ -806,8 +856,8 @@ function LocalSkillsView({
 
       {adoptTargets && (
         <AdoptDialog
-          agentKey={agentKey}
-          agentLabel={agent?.display_name ?? agentKey}
+          agentKey={target}
+          agentLabel={label}
           domain={agentDomain}
           skills={adoptTargets}
           agents={agents}

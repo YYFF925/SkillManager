@@ -170,3 +170,98 @@ fn local_skills_report_empty_when_agent_dir_absent() {
     assert_eq!(data["total"], 0);
     assert!(data["skills"].as_array().unwrap().is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// 共享目录技能浏览（FR-042/FR-055）：`shared` 是编码域的本机部署目标，
+// 与 Agent 目录同构——列出、标受管、删除未受管/撤销受管。
+// ---------------------------------------------------------------------------
+
+/// 在任意目录下放一个技能副本（共享目录不在 home 下，不能用 agent_skill）。
+fn write_skill_at(dir: &std::path::Path, name: &str, body: &str) {
+    let skill = dir.join(name);
+    std::fs::create_dir_all(&skill).unwrap();
+    std::fs::write(skill.join("SKILL.md"), body).unwrap();
+}
+
+#[test]
+fn local_skills_and_delete_local_report_unset_shared_dir() {
+    let env = TestEnv::new();
+
+    let (code, value) = env.cli_json_raw(&["agent", "local-skills", "shared"]);
+    assert_ne!(code, 0, "未设置共享目录必须非 0 退出：{value}");
+    let message = value["errors"][0]["message"].as_str().unwrap_or("");
+    assert!(message.contains("尚未设置共享目录路径"), "{value}");
+
+    let (code, value) = env.cli_json_raw(&["agent", "delete-local", "shared", "alpha"]);
+    assert_ne!(code, 0, "未设置共享目录必须非 0 退出：{value}");
+    let message = value["errors"][0]["message"].as_str().unwrap_or("");
+    assert!(message.contains("尚未设置共享目录路径"), "{value}");
+}
+
+#[test]
+fn local_skills_shared_lists_and_marks_managed() {
+    let env = TestEnv::new();
+    seed(&env);
+    let shared = env.root.path().join("shared-skills");
+    std::fs::create_dir_all(&shared).unwrap();
+    let shared_arg = shared.to_str().unwrap().to_string();
+    env.cli_json(&["settings", "set-shared-dir", "--path", &shared_arg]);
+    env.cli_json(&["deploy", "to", "shared", "code/alpha"]);
+    write_skill_at(&shared, "localonly", "仅本地\n");
+
+    let data = env.cli_json(&["agent", "local-skills", "shared"]);
+    assert_eq!(data["skills_dir"], shared_arg);
+    assert_eq!(data["managed"], 1);
+    let skills = data["skills"].as_array().unwrap();
+    let alpha = skills.iter().find(|s| s["name"] == "alpha").unwrap();
+    assert_eq!(alpha["managed"], true);
+    assert_eq!(alpha["status"], "managed");
+    let local = skills.iter().find(|s| s["name"] == "localonly").unwrap();
+    assert_eq!(local["managed"], false);
+    assert_eq!(local["status"], "local");
+}
+
+#[test]
+fn delete_local_shared_removes_unmanaged_and_undoes_managed() {
+    let env = TestEnv::new();
+    seed(&env);
+    let shared = env.root.path().join("shared-skills");
+    std::fs::create_dir_all(&shared).unwrap();
+    let shared_arg = shared.to_str().unwrap().to_string();
+    env.cli_json(&["settings", "set-shared-dir", "--path", &shared_arg]);
+    env.cli_json(&["deploy", "to", "shared", "code/alpha"]);
+    write_skill_at(&shared, "localonly", "仅本地\n");
+
+    // 未受管项：删除实际文件，不动库。
+    let (code, result) = env.cli_json_raw(&["agent", "delete-local", "shared", "localonly"]);
+    assert_eq!(code, 0, "{result}");
+    assert!(!shared.join("localonly").exists(), "未受管副本应删除实际文件");
+    assert!(env.path("code/alpha/SKILL.md").exists(), "库内技能不得受影响");
+
+    // 受管项：按撤销部署规则移除副本并清理记录，库内技能保留。
+    let (code, result) = env.cli_json_raw(&["agent", "delete-local", "shared", "alpha"]);
+    assert_eq!(code, 0, "{result}");
+    assert!(!shared.join("alpha").exists(), "受管副本按撤销规则移除");
+    assert!(env.path("code/alpha/SKILL.md").exists(), "删本机副本不得删库");
+    let status = env.cli_json(&["deploy", "status"]);
+    assert!(status["deployments"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn local_skills_for_agent_key_is_unaffected_by_shared_support() {
+    let env = TestEnv::new();
+    seed(&env);
+    env.agent_skill(".codex/skills", "localonly", "仅本地\n");
+    let shared = env.root.path().join("shared-skills");
+    std::fs::create_dir_all(&shared).unwrap();
+    env.cli_json(&["settings", "set-shared-dir", "--path", shared.to_str().unwrap()]);
+
+    // 设置共享目录不改变内置 Agent key 的浏览结果。
+    let data = env.cli_json(&["agent", "local-skills", "codex"]);
+    assert_eq!(data["total"], 1);
+    assert_eq!(data["skills"][0]["name"], "localonly");
+
+    // 其它命令仍只接受内置 Agent key。
+    let (code, value) = env.cli_json_raw(&["agent", "local-skills", "not-an-agent"]);
+    assert_ne!(code, 0, "{value}");
+}

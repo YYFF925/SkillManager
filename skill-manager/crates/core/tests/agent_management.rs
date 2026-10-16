@@ -174,7 +174,7 @@ fn local_list_marks_managed_and_unmanaged() {
     env.deploy(&resolver, &code_ref("alpha"), agent("codex"));
 
     let service = LocalSkillService::new(&resolver, &env.state, Some(env.vault.clone()));
-    let skills = service.list("codex").unwrap();
+    let skills = service.list(&agent("codex")).unwrap();
     let alpha = skills.iter().find(|skill| skill.name == "alpha").unwrap();
     assert!(alpha.managed);
     assert_eq!(alpha.status, "managed");
@@ -194,7 +194,7 @@ fn unmanaged_delete_removes_files_without_touching_library() {
 
     let resolver = env.resolver();
     let service = LocalSkillService::new(&resolver, &env.state, Some(env.vault.clone()));
-    let outcome = service.delete("codex", &["localonly".to_string()]).unwrap();
+    let outcome = service.delete(&agent("codex"), &["localonly".to_string()]).unwrap();
 
     assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
     assert_eq!(outcome.removed.len(), 1);
@@ -213,7 +213,7 @@ fn managed_delete_uses_undo_and_keeps_library_skill() {
     assert!(copy.exists());
 
     let service = LocalSkillService::new(&resolver, &env.state, Some(env.vault.clone()));
-    let outcome = service.delete("codex", &["alpha".to_string()]).unwrap();
+    let outcome = service.delete(&agent("codex"), &["alpha".to_string()]).unwrap();
 
     assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
     assert_eq!(outcome.removed.len(), 1);
@@ -232,7 +232,7 @@ fn managed_delete_pauses_when_copy_changed_externally() {
     std::fs::write(copy.join("SKILL.md"), "手改内容\n").unwrap();
 
     let service = LocalSkillService::new(&resolver, &env.state, Some(env.vault.clone()));
-    let outcome = service.delete("codex", &["alpha".to_string()]).unwrap();
+    let outcome = service.delete(&agent("codex"), &["alpha".to_string()]).unwrap();
 
     assert!(outcome.removed.is_empty());
     assert_eq!(outcome.errors.len(), 1);
@@ -256,7 +256,7 @@ fn delete_rejects_paths_outside_the_agents_skills_dir() {
 
     let resolver = env.resolver();
     let service = LocalSkillService::new(&resolver, &env.state, Some(env.vault.clone()));
-    let outcome = service.delete("codex", &["evil".to_string()]).unwrap();
+    let outcome = service.delete(&agent("codex"), &["evil".to_string()]).unwrap();
 
     assert!(outcome.removed.is_empty());
     assert_eq!(outcome.errors.len(), 1);
@@ -268,7 +268,7 @@ fn delete_rejects_paths_outside_the_agents_skills_dir() {
     assert!(outside.join("SKILL.md").exists(), "外部文件不得被删除");
 
     // 带路径分隔符的名字也不接受。
-    let escaped = service.delete("codex", &["../../etc".to_string()]).unwrap();
+    let escaped = service.delete(&agent("codex"), &["../../etc".to_string()]).unwrap();
     assert!(escaped.removed.is_empty());
     assert_eq!(escaped.errors.len(), 1);
 }

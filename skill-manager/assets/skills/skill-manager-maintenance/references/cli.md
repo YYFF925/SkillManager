@@ -142,12 +142,15 @@ agent list | agent detect
 agent enable <key> | agent disable <key> | agent reorder --order <key,...>
 agent set-dir <key> (--skills <path> | --project-rel <path> | --instructions <path>)
 agent reset-dir <key> --kind skills|project-rel|instructions
-agent local-skills <key> | agent delete-local <key> <name>...
+agent local-skills <target> | agent delete-local <target> <name>...
 instruction get global|<key>
 instruction set global|<key> (--file <path> | --stdin)
 ```
 
 - `agent` 的目录/启停/顺序只写本机状态；`detect` 只读目录存在性，不启动、不部署。
+- `local-skills` / `delete-local` 的 `<target>` 接受内置 Agent key 或 `shared`（共享目录是编码 Agent 的本机部署目标）：
+  按内置 Agent 的同一套语义列出与处理——受管项（存在该目标部署记录）走撤销部署规则、不删库；
+  未受管项直接删除实际文件、不改库。共享目录未设置路径时如实报错“尚未设置共享目录路径”，不猜测默认路径。
 - `instruction get` 返回源内容与按“全局在前、专属在后”的合成预览；
   `set` 写入源后立即覆盖本机已启用目标的 `<detect_dir>/AGENTS.md`（可用 `--instructions` 覆盖路径），
   空内容可正常保存并覆盖；单目标写入失败不中断其余并逐项报告。

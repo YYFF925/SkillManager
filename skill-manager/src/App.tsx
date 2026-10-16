@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Bot, Blocks, FileText, FolderTree, Layers, Settings, Wrench } from "lucide-react";
+import { Bot, Blocks, FileText, FolderTree, Layers, Settings, Share2, Wrench } from "lucide-react";
 
 import { AppShell, type NavGroup, type NavItem } from "./components/AppShell";
 import { LibraryPage } from "./pages/LibraryPage";
@@ -45,10 +45,14 @@ const VIEWS: Record<string, { title: string; subtitle?: string; pending?: string
   "presets-code": { title: "预设", subtitle: "按组合叠加部署与按成员撤销；定义编辑不触发部署" },
   "agents-code": { title: "编码 Agent", subtitle: "本机编码 Agent 的配置与本地技能" },
   "agents-lobster": { title: "龙虾 Agent", subtitle: "本机龙虾 Agent 的配置与本地技能" },
+  "agent:shared": { title: "共享 Agent", subtitle: "本机共享技能目录 · 编码 Agent 的部署目标" },
   settings: { title: "设置", subtitle: "本机配置与 SkillVault 接入" },
 };
 
 const settingsItem: NavItem = { key: "settings", label: "设置", icon: Settings };
+
+/** 共享目录是编码 Agent 的部署目标，入口与单个 Agent 同级并始终显示（未设置路径也不隐藏）。 */
+const SHARED_VIEW_KEY = "agent:shared";
 
 /** 首次接入：只选择已存在的本地 SkillVault，不提供克隆或创建向导（FR-002）。 */
 function VaultWelcome({
@@ -228,6 +232,9 @@ export function App() {
   const groups: NavGroup[] = useMemo(() => {
     const agentItems = (domain: Domain, allKey: string, allLabel: string): NavItem[] => [
       { key: allKey, label: allLabel, icon: Bot },
+      ...(domain === "code"
+        ? [{ key: SHARED_VIEW_KEY, label: "共享 Agent", icon: Share2 }]
+        : []),
       ...sidebarAgents(agents, domain).map((agent) => ({
         key: `agent:${agent.key}`,
         label: agent.display_name,
@@ -273,10 +280,10 @@ export function App() {
   }
 
   const isLibrary = activeKey === "library-code" || activeKey === "library-lobster";
-  const selectedAgentKey = activeKey.startsWith("agent:") ? activeKey.slice("agent:".length) : null;
-  const selectedAgent = agents.find((agent) => agent.key === selectedAgentKey);
+  const selectedTarget = activeKey.startsWith("agent:") ? activeKey.slice("agent:".length) : null;
+  const selectedAgent = agents.find((agent) => agent.key === selectedTarget);
   const isAgentView =
-    activeKey === "agents-code" || activeKey === "agents-lobster" || selectedAgentKey !== null;
+    activeKey === "agents-code" || activeKey === "agents-lobster" || selectedTarget !== null;
   const agentDomain: Domain =
     activeKey === "agents-lobster" || selectedAgent?.domain === "lobster" ? "lobster" : "code";
 
@@ -353,13 +360,22 @@ export function App() {
       ) : isAgentView ? (
         <AgentPage
           domain={agentDomain}
-          selectedKey={selectedAgentKey}
+          selectedTarget={selectedTarget}
           agents={agents}
-          onSelectAgent={(key) =>
+          onSelectTarget={(target) =>
             setActiveKey(
-              key ? `agent:${key}` : agentDomain === "lobster" ? "agents-lobster" : "agents-code",
+              target
+                ? `agent:${target}`
+                : agentDomain === "lobster"
+                  ? "agents-lobster"
+                  : "agents-code",
             )
           }
+          onOpenSettings={() => {
+            setActiveKey("settings");
+            setCount(null);
+            setNotice(null);
+          }}
           onAgentsChanged={setAgents}
           onLibrarySaved={saveFlow.afterSave}
           onNotice={(message) => {

@@ -20,7 +20,8 @@ skill-manager/
 ├── crates/cli/                # clap 命令行入口（Agent 主要用户）
 ├── src-tauri/                 # Tauri 2 壳：command 层薄封装 core，无业务逻辑；托盘、诊断、调度
 ├── src/                       # 前端（React + TypeScript + Vite + Tailwind）
-│   ├── pages/                 #   技能库（code/lobster）、预设、Agent、Hermes、工具中心、设置
+│   ├── pages/                 #   技能库（code/lobster）、预设、Agent（编码 Agent 分组下含「共享 Agent」页：
+│   │                          #   列出共享目录技能、区分受管/仅本地）、Hermes、工具中心、设置
 │   ├── components/            #   详情、弹窗、部署/入库/上游、诊断与容量面板
 │   └── services/client.ts     #   Tauri command 的类型化调用封装
 ├── assets/skills/             # 配套维护 Skill 源文件（见下）
@@ -70,9 +71,13 @@ skill-manager settings set-shared-dir --path /Users/you/.agents/skills
 skill-manager settings set-auto-check 30
 skill-manager settings diagnostics --export
 skill-manager settings capacity
+skill-manager agent local-skills shared
 ```
 
 - `<ref>` = `<domain>/<name>`（**不含分类路径**；技能名在域内唯一，分类只影响目录位置）。
+- `<target>` = 内置 Agent key、`shared`（共享目录，编码 Agent 的本机部署目标）或 `hermes:default`；
+  `agent local-skills <target>` / `agent delete-local <target> <name>...` 也接受 `shared`，
+  受管项走撤销规则、未受管项直接删本机文件，共享目录未设置路径时如实报错。
 - 退出码：`0` 成功；`1` 失败；`2` 部分完成（参数用法错误也返回 `2`）。
 - `--json` 输出统一对象 `{result, data, errors}`。
 - `settings` 命令组只读写本机状态：`get` 读全部运行配置与调度事实（未设置的键为 `null`）；

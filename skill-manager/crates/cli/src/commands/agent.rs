@@ -6,7 +6,7 @@
 use clap::{Args, Subcommand};
 use serde_json::{Value, json};
 use skill_manager_core::deploy::{
-    AgentConfigService, DirKind, LocalSkillService, TargetResolver,
+    AgentConfigService, DirKind, LocalSkillService, TargetResolver, parse_target_arg,
 };
 use skill_manager_core::output::BatchOutcome;
 use skill_manager_core::{AppContext, CliResult, CoreError, GlobalOptions};
@@ -33,9 +33,9 @@ pub enum AgentAction {
     SetDir(SetDirArgs),
     /// 恢复一类目录为内置默认。
     ResetDir(ResetDirArgs),
-    /// 列出该 Agent 技能目录下的本地技能（受管/仅本地）。
-    LocalSkills(KeyArgs),
-    /// 删除该 Agent 技能目录下的本地技能（未受管删文件不改库；受管走撤销与暂停规则）。
+    /// 列出该目标目录下的本地技能（受管/仅本地）；目标为内置 Agent key 或 `shared`。
+    LocalSkills(LocalTargetArgs),
+    /// 删除该目标目录下的本地技能（未受管删文件不改库；受管走撤销与暂停规则）；目标为内置 Agent key 或 `shared`。
     DeleteLocal(DeleteLocalArgs),
 }
 
@@ -44,6 +44,13 @@ pub struct KeyArgs {
     /// 内置 Agent key。
     #[arg(value_name = "key")]
     pub key: String,
+}
+
+#[derive(Args, Debug)]
+pub struct LocalTargetArgs {
+    /// 内置 Agent key 或 `shared`（共享目录是本机部署目标）。
+    #[arg(value_name = "target")]
+    pub target: String,
 }
 
 #[derive(Args, Debug)]
@@ -79,8 +86,9 @@ pub struct ResetDirArgs {
 
 #[derive(Args, Debug)]
 pub struct DeleteLocalArgs {
-    #[arg(value_name = "key")]
-    pub key: String,
+    /// 内置 Agent key 或 `shared`（共享目录是本机部署目标）。
+    #[arg(value_name = "target")]
+    pub target: String,
     /// 技能目录名（可重复）。
     #[arg(value_name = "name", required = true)]
     pub names: Vec<String>,
@@ -109,8 +117,8 @@ fn dispatch(action: AgentAction, ctx: &AppContext) -> Result<(CliResult, String)
         AgentAction::Reorder(args) => reorder(ctx, &args.order),
         AgentAction::SetDir(args) => set_dir(ctx, args),
         AgentAction::ResetDir(args) => reset_dir(ctx, args),
-        AgentAction::LocalSkills(args) => local_skills(ctx, &args.key),
-        AgentAction::DeleteLocal(args) => delete_local(ctx, &args.key, &args.names),
+        AgentAction::LocalSkills(args) => local_skills(ctx, &args.target),
+        AgentAction::DeleteLocal(args) => delete_local(ctx, &args.target, &args.names),
     }
 }
 
@@ -256,15 +264,17 @@ fn dir_label(kind: DirKind) -> &'static str {
 // local-skills / delete-local
 // ---------------------------------------------------------------------------
 
-fn local_skills(ctx: &AppContext, key: &str) -> Result<(CliResult, String)> {
+fn local_skills(ctx: &AppContext, raw_target: &str) -> Result<(CliResult, String)> {
+    let target = parse_target_arg(raw_target)?;
     let resolver = ctx.target_resolver()?;
     let service = local_service(ctx, &resolver)?;
-    let dir = service.skills_dir(key)?;
-    let views = service.list(key)?;
+    let dir = service.skills_dir(&target)?;
+    let views = service.list(&target)?;
     let managed = views.iter().filter(|view| view.managed).count();
+    let label = raw_target.trim();
 
     let data = json!({
-        "agent": key,
+        "agent": label,
         "skills_dir": dir.display().to_string(),
         "skills": views,
         "managed": managed,
@@ -273,7 +283,7 @@ fn local_skills(ctx: &AppContext, key: &str) -> Result<(CliResult, String)> {
 
     let mut human = format!(
         "{}：{} · {} 项（受管理 {}）",
-        key,
+        label,
         dir.display(),
         views.len(),
         managed
@@ -293,10 +303,11 @@ fn local_skills(ctx: &AppContext, key: &str) -> Result<(CliResult, String)> {
     Ok((CliResult::from_data(&data), human))
 }
 
-fn delete_local(ctx: &AppContext, key: &str, names: &[String]) -> Result<(CliResult, String)> {
+fn delete_local(ctx: &AppContext, raw_target: &str, names: &[String]) -> Result<(CliResult, String)> {
+    let target = parse_target_arg(raw_target)?;
     let resolver = ctx.target_resolver()?;
     let service = local_service(ctx, &resolver)?;
-    let outcome = service.delete(key, names)?;
+    let outcome = service.delete(&target, names)?;
 
     let mut batch = BatchOutcome::default();
     for item in &outcome.removed {

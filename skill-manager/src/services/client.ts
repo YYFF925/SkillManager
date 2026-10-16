@@ -492,19 +492,22 @@ export async function agentResetDir(
   return invoke<AgentView>("agent_reset_dir", { key, kind });
 }
 
-/** 列出该 Agent 技能目录下的本地技能（受管/仅本地）。 */
-export async function agentLocalSkills(key: string): Promise<LocalSkillsView> {
+/**
+ * 列出目标技能目录下的本地技能（受管/仅本地）。
+ * 目标为内置 Agent key 或 `shared`（共享目录是本机部署目标）。
+ */
+export async function agentLocalSkills(target: DeployTarget): Promise<LocalSkillsView> {
   requireDesktop();
-  return invoke<LocalSkillsView>("agent_local_skills", { key });
+  return invoke<LocalSkillsView>("agent_local_skills", { target });
 }
 
-/** 删除该 Agent 本机技能副本；未受管删文件不改库，受管走撤销与暂停规则。 */
+/** 删除该目标本机技能副本；未受管删文件不改库，受管走撤销与暂停规则。 */
 export async function agentDeleteLocal(
-  key: string,
+  target: DeployTarget,
   names: string[],
 ): Promise<LocalDeleteOutcome> {
   requireDesktop();
-  return invoke<LocalDeleteOutcome>("agent_delete_local", { key, names });
+  return invoke<LocalDeleteOutcome>("agent_delete_local", { target, names });
 }
 
 /** 共享部署目录设置；null 表示尚未设置。 */

@@ -141,6 +141,19 @@ skill-manager skill update code/skill-manager-maintenance
 | 5.18 | 按 FR-050 边界核对不允许的写入 | `theme`/`font_scale`/`git_auto_push` **没有** CLI 写入口（命令不存在或明确不支持），只能经 `settings get` 读取；工具安装事实回写仍只有 CLI（GUI 无入口） |
 | 5.19 | 清理项核对 | 设置中不再存在自定义日志目录键；Hermes 根按 `HERMES_HOME` 与平台默认解析，`settings get` 不再返回可写的 Hermes 根键 |
 
+## M6 补充 — 共享目录技能浏览（2026-10-16 规划补齐）
+
+对应 spec.md FR-042（已扩到"本机目标"）与 FR-055、contracts/cli.md 的 `agent` 命令组；
+需求来由与范围见 `docs/requirements.md` 的"共享目录技能浏览"一节（原型该页此前在需求链上遗漏）；
+实现任务见 tasks.md T101～T108。
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 6.1 | 未设置共享目录时：`agent local-skills shared`、`agent delete-local shared <名>`；GUI 打开「共享 Agent」 | CLI 以非 0 退出并如实报"尚未设置共享目录路径"；GUI **保留入口**并提示未设置 + 提供前往设置入口，不显示成空列表、不猜默认路径 |
+| 6.2 | `settings set-shared-dir --path <临时目录>` → `deploy to shared <ref>` → `agent local-skills shared`；GUI 同页 | 列出该目录技能并区分受管（存在 `target=shared` 部署记录）与仅本地；GUI 显示同样三态与筛选 |
+| 6.3 | `agent delete-local shared <仅本地名>` 与 `<受管名>` | 前者删除该目录实际文件、不改库；后者按撤销部署规则移除副本并清理记录、库内技能保留 |
+| 6.4 | `agent local-skills codex`（对照） | 行为与本次变更前一致，不受共享目录支持影响 |
+
 ## 自动化与人工分工
 
 - M1~M3 的 CLI 场景（1.4~1.8、2.x 命令部分、3.x）纳入集成测试（`tests/`，cargo test 驱动 CLI 断言 JSON 输出与文件系统结果）；

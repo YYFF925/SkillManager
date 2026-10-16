@@ -5,7 +5,7 @@
 use serde::Serialize;
 use skill_manager_core::deploy::{
     AgentConfigService, AgentView, DirKind, LocalDeleteOutcome, LocalSkillService,
-    LocalSkillView, TargetResolver,
+    LocalSkillView, TargetResolver, parse_target_arg,
 };
 use skill_manager_core::vault::{
     InstructionScope, InstructionSourceView, InstructionTargetResult, InstructionsService,
@@ -112,24 +112,27 @@ pub struct LocalSkillsView {
     pub total: usize,
 }
 
-/// 列出该 Agent 技能目录下的本地技能（受管/仅本地）。
+/// 列出目标技能目录下的本地技能（受管/仅本地）；目标为内置 Agent key 或 `shared`。
 #[tauri::command]
 pub fn agent_local_skills(
     state: tauri::State<'_, AppState>,
-    key: String,
+    target: String,
 ) -> Result<LocalSkillsView, String> {
     let ctx = state.get()?;
+    let target = parse_target_arg(&target).map_err(|err| err.to_string())?;
     let resolver: TargetResolver<'static> = ctx.target_resolver().map_err(|err| err.to_string())?;
     let service = LocalSkillService::new(
         &resolver,
         ctx.state(),
         ctx.vault_opt().map(|vault| vault.root().to_path_buf()),
     );
-    let skills_dir = service.skills_dir(&key).map_err(|err| err.to_string())?;
-    let skills = service.list(&key).map_err(|err| err.to_string())?;
+    let skills_dir = service
+        .skills_dir(&target)
+        .map_err(|err| err.to_string())?;
+    let skills = service.list(&target).map_err(|err| err.to_string())?;
     let managed = skills.iter().filter(|skill| skill.managed).count();
     Ok(LocalSkillsView {
-        agent: key,
+        agent: target.as_str(),
         skills_dir: skills_dir.display().to_string(),
         total: skills.len(),
         managed,
@@ -137,14 +140,15 @@ pub fn agent_local_skills(
     })
 }
 
-/// 删除该 Agent 本机技能副本；未受管直接删文件且不改库，受管走撤销与暂停规则。
+/// 删除该目标本机技能副本；未受管直接删文件且不改库，受管走撤销与暂停规则。
 #[tauri::command]
 pub fn agent_delete_local(
     state: tauri::State<'_, AppState>,
-    key: String,
+    target: String,
     names: Vec<String>,
 ) -> Result<LocalDeleteOutcome, String> {
     let ctx = state.get()?;
+    let target = parse_target_arg(&target).map_err(|err| err.to_string())?;
     let resolver: TargetResolver<'static> = ctx.target_resolver().map_err(|err| err.to_string())?;
     let service = LocalSkillService::new(
         &resolver,
@@ -152,7 +156,7 @@ pub fn agent_delete_local(
         ctx.vault_opt().map(|vault| vault.root().to_path_buf()),
     );
     service
-        .delete(&key, &names)
+        .delete(&target, &names)
         .map_err(|err| err.to_string())
 }
 

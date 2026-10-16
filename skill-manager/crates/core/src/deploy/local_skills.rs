@@ -1,6 +1,6 @@
-//! Agent 本地技能列表与删除（T068）。
+//! 本机目标技能列表与删除（T068）。
 //!
-//! 列出某 Agent 技能目录下的技能，标注受管/仅本地（受管判定以本机部署记录与实际路径为依据）；
+//! 列出某目标（内置 Agent 目录或共享目录）下的技能，标注受管/仅本地（受管判定以本机部署记录与实际路径为依据）；
 //! 未受管项直接删除实际文件且不改库，受管项走 US3 的撤销与暂停规则，不把删除本机副本变成删库。
 //! 删除前做路径包含性校验：名字来自用户输入，越权路径会删掉技能目录之外的无关文件。
 
@@ -67,18 +67,18 @@ impl<'a> LocalSkillService<'a> {
         }
     }
 
-    /// 目标技能目录。
-    pub fn skills_dir(&self, key: &str) -> Result<PathBuf> {
-        self.resolver.agent_skills_dir(key)
+    /// 目标技能目录：内置 Agent key 用其技能目录（含本机覆盖），`shared` 用配置的共享路径。
+    pub fn skills_dir(&self, target: &Target) -> Result<PathBuf> {
+        Ok(PathBuf::from(self.resolver.resolve(target)?.path))
     }
 
-    /// 列出该 Agent 技能目录下的技能；目录不存在时如实为空（该 Agent 可能未安装）。
-    pub fn list(&self, key: &str) -> Result<Vec<LocalSkillView>> {
-        let dir = self.skills_dir(key)?;
+    /// 列出该目标目录下的技能；目录不存在时如实为空（该 Agent 可能未安装）。
+    pub fn list(&self, target: &Target) -> Result<Vec<LocalSkillView>> {
+        let dir = self.skills_dir(target)?;
         if !dir.is_dir() {
             return Ok(Vec::new());
         }
-        let records = self.records_for(key)?;
+        let records = self.records_for(target)?;
         let library = self.vault_root.as_ref().map(SkillIndex::build).transpose()?;
         let mut out = Vec::new();
         for entry in std::fs::read_dir(&dir).map_err(|err| CoreError::io(dir.clone(), err))? {
@@ -95,19 +95,16 @@ impl<'a> LocalSkillService<'a> {
             }
             let name = entry.file_name().to_string_lossy().into_owned();
             let record = find_record(&records, &candidate);
-            out.push(self.view(key, name, candidate, record, library.as_ref()));
+            out.push(self.view(target, name, candidate, record, library.as_ref()));
         }
         out.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(out)
     }
 
     /// 单项/多选删除：未受管直接删除文件且不改库；受管走撤销与暂停规则。
-    pub fn delete(&self, key: &str, names: &[String]) -> Result<LocalDeleteOutcome> {
-        let dir = self.skills_dir(key)?;
-        let records = self.records_for(key)?;
-        let target = Target::Agent {
-            key: key.to_string(),
-        };
+    pub fn delete(&self, target: &Target, names: &[String]) -> Result<LocalDeleteOutcome> {
+        let dir = self.skills_dir(target)?;
+        let records = self.records_for(target)?;
         let mut outcome = LocalDeleteOutcome::default();
 
         for name in names {
@@ -120,16 +117,16 @@ impl<'a> LocalSkillService<'a> {
             let candidate = dir.join(name);
             if !candidate.exists() {
                 outcome.errors.push(
-                    ItemError::new("该 Agent 技能目录下没有这项技能")
+                    ItemError::new("该目标的技能目录下没有这项技能")
                         .skill(name.clone())
                         .path(candidate.display().to_string()),
                 );
                 continue;
             }
-            // 路径包含性校验：必须落在该 Agent 的 skills_dir 内，防止越权删除其他路径。
+            // 路径包含性校验：必须落在该目标的技能目录内，防止越权删除其他路径。
             if !is_within(&dir, &candidate) {
                 outcome.errors.push(
-                    ItemError::new("路径不在该 Agent 的技能目录内，已拒绝删除")
+                    ItemError::new("路径不在该目标的技能目录内，已拒绝删除")
                         .skill(name.clone())
                         .path(candidate.display().to_string()),
                 );
@@ -137,7 +134,7 @@ impl<'a> LocalSkillService<'a> {
             }
 
             if let Some(record) = find_record(&records, &candidate) {
-                if let Err(err) = self.undo_managed(record, &target, &mut outcome) {
+                if let Err(err) = self.undo_managed(record, target, &mut outcome) {
                     outcome
                         .errors
                         .push(ItemError::from_error(&err).skill(name.clone()));
@@ -196,29 +193,24 @@ impl<'a> LocalSkillService<'a> {
         Ok(())
     }
 
-    fn records_for(&self, key: &str) -> Result<Vec<DeploymentRecord>> {
-        let target = Target::Agent {
-            key: key.to_string(),
-        };
+    fn records_for(&self, target: &Target) -> Result<Vec<DeploymentRecord>> {
+        let target_str = target.as_str();
         Ok(self
             .state
             .deployments()?
             .into_iter()
-            .filter(|record| record.target == target.as_str())
+            .filter(|record| record.target == target_str)
             .collect())
     }
 
     fn view(
         &self,
-        key: &str,
+        target: &Target,
         name: String,
         path: PathBuf,
         record: Option<&DeploymentRecord>,
         library: Option<&SkillIndex>,
     ) -> LocalSkillView {
-        let target = Target::Agent {
-            key: key.to_string(),
-        };
         match record {
             Some(record) => {
                 let library_skill = record.reference().to_string();
