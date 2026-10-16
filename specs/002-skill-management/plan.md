@@ -186,6 +186,26 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 `data-model.md` §2.6（逐键可达性表、清理两键）、`research.md` D22/D23、
 `quickstart.md`（新增场景）、`tasks.md`（T093～T100）。
 
+## 规划补齐：共享目录技能浏览（2026-10-16）
+
+**触发**：交付后追查"共享 Agent 页"缺失，结论是需求在**原型规格层**就断了——原型有该页、规格未立条目，
+002 规格／规划／任务三层连续未接手，实现与后端入口均缺失（证据：`checklists/m5-report.md` 第六节第 9 条、
+`checklists/visual-comparison.md` 的差异清单 B 项）。用户已确认该能力必须做，故按整条链补齐。
+
+**范围判定（最小充分）**：不新增第二套目录浏览能力，而是把既有的"本机目标技能浏览"从**只按 Agent key**
+扩到**按目标**——路径解析复用 `TargetResolver::resolve_with_override` 的 `Target::Shared` 分支（`deploy/targets.rs`），
+目录扫描与受管判定复用 `LocalSkillService`（`deploy/local_skills.rs`），`shared` 的受管判定沿用 `target=shared` 的部署记录。
+
+**不做**：不把共享目录变成可登记 Agent 或第二个管理库（FR-021 已定性）；不在该页增加"从库部署"按钮；
+不为共享目录实现收编（它是部署产物，不是来源）。
+
+**契约取法**：扩展现有 `agent local-skills` / `agent delete-local` 的取值（`<target>` = 内置 Agent key 或 `shared`），
+不新开命令组——该能力与 Agent 目录同构，新开面只会制造两条平行入口。
+
+**本次规划变更的文件**：`docs/requirements.md`（新增"共享目录技能浏览"一节）、
+`spec.md`（FR-042 扩到本机目标、新增 FR-055）、`contracts/cli.md`（`agent` 命令组取值与说明）、
+`tasks.md`（Phase 16，T101～T108）、`quickstart.md`（新增场景，见 T107）。
+
 ## 需求质检后的实施边界
 
 - 本次评审记录位于 `checklists/readiness.md`，勾选只表示需求文字质量通过，不表示代码、远端或第三方协议已验证。

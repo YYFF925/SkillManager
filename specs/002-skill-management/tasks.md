@@ -295,6 +295,20 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 - [X] T100 同步 `skill-manager/README.md` 与 `skill-manager/assets/skills/skill-manager-maintenance/references/cli.md` 的 CLI 参考（新增 `settings` 命令组、两个写入口与三条只读边界的说明）；运行 `cargo test --workspace` 与前端构建，不新增兼容路径或仅复述实现的测试。
 
+## Phase 16: 增量 — 共享目录技能浏览（T101～T108）
+
+来源：原型「共享 Agent」页（`renders/03`）在需求链上被遗漏，用户 2026-10-16 确认该能力必须做。
+规格依据 FR-042（扩到本机目标）与 FR-055；契约变更见 `contracts/cli.md` 的 `agent` 命令组；规划见 `plan.md` 的"规划补齐：共享目录技能浏览"。
+
+- [ ] T101 [P] [US3] 在 `skill-manager/tests/`（按需在 `crates/cli/Cargo.toml` 注册 `[[test]]`）先写 CLI 断言：共享目录未设置时 `agent local-skills shared` 与 `agent delete-local shared <name>` 均如实报"尚未设置共享目录路径"且退出码非 0；设置共享目录后 `agent local-skills shared` 列出目录内技能并区分受管（有 `target=shared` 部署记录）与未受管；`agent delete-local shared <未受管名>` 删除实际目录、`shared <受管名>` 按撤销部署规则处理；非编码域的库不受影响。
+- [ ] T102 [US3] 在 `skill-manager/crates/core/src/deploy/local_skills.rs` 让本机目标技能浏览按**目标**工作：路径解析复用 `TargetResolver` 的 `Target::Shared` 分支（`deploy/targets.rs`），受管判定沿用该目标的部署记录；不新增第二套扫描或判定逻辑，不引入新抽象层。
+- [ ] T103 [US3] 在 `skill-manager/crates/core/src/deploy/` 让"删除本机技能"支持共享目录目标：未受管项删除实际文件、受管项走撤销部署；沿用既有确认语义，不新增额外保护机制。
+- [ ] T104 [US3] 在 `skill-manager/crates/cli/src/commands/agent.rs` 让 `agent local-skills` 与 `agent delete-local` 接受 `shared` 取值（复用既有目标解析），并核对 `--help` 输出与 `contracts/cli.md` 的 `agent` 命令组一致。
+- [ ] T105 [US3] 在 `skill-manager/src/services/client.ts`、`skill-manager/src/App.tsx`、`skill-manager/src/components/AppShell.tsx`、`skill-manager/src/pages/AgentPage.tsx` 增加编码域「共享目录」入口与页面：复用本机 Agent 技能视图（受管／未受管／本地有变更筛选、删除），未设置共享目录路径时**保留入口**并如实提示 + 前往设置；不增加"从库部署"按钮，不实现收编。
+- [ ] T106 [P] [US3] 前端测试：覆盖"未设置共享目录时入口保留与提示文案"、"受管／仅本地渲染与删除确认文案"；不为此引入整页 mock 基础设施。
+- [ ] T107 [US3] 在 `specs/002-skill-management/quickstart.md` 增加共享目录浏览场景，并执行验证（含 GUI 实操取证：从 `.app` 启动、设置共享目录、列出、删除未受管项），结果写入 `specs/002-skill-management/checklists/m6-report.md`；未取得证据的项保持未过并写明原因。
+- [ ] T108 收尾：同步 `skill-manager/README.md` 与 `skill-manager/assets/skills/skill-manager-maintenance/references/cli.md` 的 CLI 参考；运行 `cargo test --workspace`、`npm test`、前端构建；把 `m5-report.md` 第六节第 9 条状态更新为"已按链条补齐"。
+
 ## Dependencies & Execution Order（依赖与执行顺序）
 
 ### 故事依赖图
@@ -338,6 +352,7 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 4. M4：T050～T055 → T069、T070、T072、T073（指令与双机验收）。
 5. M5：T062～T066（预设）、T074～T081（工具核心）、T083～T087（环境）；T082 工具真实任务路径验收等待 T088～T089 配套 Skill 普通入库后完成，最终执行 T090～T092 整体核对。
 6. M5 补充：T093、T094（测试先写并确认失败，两项可并行）→ T095、T096（`settings` 命令实现，两项都改同一文件，串行）→ T097（清理无写入点配置，与 T095/T096 不同文件可并行）→ T098（公共入口注册，串行）→ T099（场景验证与 T090 表更新）；T100 收尾同步文档。T095/T096 与 T100 都会改配套 Skill 的 CLI 参考，**串行合入**。
+7. 共享目录浏览：T101（测试先行，确认失败）→ T102、T103（core 两处不同文件，可并行）→ T104（CLI 取值）→ T105（GUI 入口与页面）→ T106（前端测试，可与 T105 并行）→ T107（场景与 GUI 取证）→ T108（收尾与被遗漏项的链条回填）。T104 与 T108 都改配套 Skill 的 CLI 参考，**串行合入**。
 
 阶段号和故事编号用于归属，以上里程碑用于真实开工顺序；US8 已将 M2 Agent 页面与 M4 指令页面拆为独立任务。每期报告使用 `场景号 | 预期 | 实际 | 结论（通过/未过+偏差说明）`，证据缺失保持未过，不把未实现功能当作成功。
 

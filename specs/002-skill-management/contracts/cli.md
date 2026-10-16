@@ -144,10 +144,15 @@ agent list | agent detect
 agent enable <key> | agent disable <key> | agent reorder --order <key,...>
 agent set-dir <key> (--skills <path> | --project-rel <path> | --instructions <path>)
 agent reset-dir <key> --kind skills|project-rel|instructions
-agent local-skills <key> | agent delete-local <key> <name>...
+agent local-skills <target> | agent delete-local <target> <name>...
 instruction get global|<key>
 instruction set global|<key> (--file <path> | --stdin)
 ```
+
+`local-skills` / `delete-local` 的 `<target>` 接受内置 Agent key 或 `shared`：共享目录是本机部署目标（FR-042/FR-055），
+按内置 Agent 的同一套语义列出与处理——受管项（存在 `target=shared` 的部署记录）按撤销部署规则处理，
+未受管项直接删除实际文件。共享目录未设置路径时如实报错"尚未设置共享目录路径"，不猜测默认路径；
+`shared` 只对编码域有效（FR-021）。
 
 Agent 目录/启停/顺序只在本机；检测不启动、不部署。指令编辑沿用单保存动作，保存源并按“全局+专属”覆盖本机目标；没有独立分发勾选。指令路径与技能路径独立，不把源跨机一致视为已经完成目标分发。用户已确认：`sync pull` 拉取到指令源变化后，按同一拼接覆盖规则自动刷新本机已有启用目标，不改变启用名单/指令路径；刷新失败分别报告，不把源同步成功冒充目标刷新成功。
 
