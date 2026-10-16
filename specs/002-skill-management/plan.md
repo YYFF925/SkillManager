@@ -54,6 +54,12 @@
 
 技术基线核对：与宪章"技术栈与架构基线"完全一致；"SQLite 经 rusqlite 访问，本机状态及必要的索引或缓存"的使用方式收缩为"仅本机状态"（索引用内存，必要时后续加缓存，不预建）。
 
+**Phase 1 设计后复查（含 2026-10-16 规划补齐）**：原则 I——本机运行侧的双入口分类按"是否影响管理结果"划分，
+并把 `git_auto_push`（上传长期授权）明确为**不得** CLI 可写，避免 Agent 绕过 FR-038 的授权边界，通过。
+原则 V——本次补齐正是为消除"GUI 有入口、CLI 无入口"的不对称，`settings` 命令组与 GUI 设置页共用同一 core，通过。
+原则 VI——契约取法为"一条读 + 两个写 + 两条只读报告"，并**拒绝**为每个配置键都加 CLI 入口、拒绝新增组合调度命令
+（CLI 手动检查由 FR-029 的三条既有命令分别表达）、删除两处无写入点的死配置；新增复杂度均有具体后果支撑，通过。
+
 ## Project Structure
 
 ### Documentation (this feature)
@@ -117,6 +123,66 @@ skill-manager/
 | M5 预设/工具/收尾 | 预设全链路、工具中心全链路（登记/检查命令/任务/回写/配套 Skill/未安装展示）、任务书含配套 Skill 指引、配套维护 Skill 编写并从本仓库远端入库、设置页、主题/字号、托盘、诊断、容量 | FR-016~025（预设）、FR-044~054 | US7/9/10 + SC-001 完整旅程 |
 
 每期收尾动作（固定流程）：跑该期 quickstart 场景 → 生成核对表（场景、预期、实际、结论）→ 与规格偏差项列出并说明（纠偏或修订规格）。
+
+## Implementation Status（M1～M5 实际结果，2026-10-15）
+
+**代码入口**：`skill-manager/`（Cargo workspace：`crates/core` 业务核心、`crates/cli` clap 命令、
+`src-tauri` Tauri 2 壳、`src/` React/TypeScript 前端）。开发、构建、测试与 CLI 用法见
+[skill-manager/README.md](../../skill-manager/README.md)。SkillVault 是共享内容真值；
+本机状态在 SQLite `skill-manager.db`（macOS：`~/Library/Application Support/SkillManager/`），
+CLI 用 `--vault` / `--state-dir` 覆盖，可在一台机器上模拟两台电脑。
+
+| 期 | 结果 | 报告 |
+|---|---|---|
+| M1 底座 | 实施完成；quickstart 1.1～1.8 通过（1.1 首次选库对话框、1.3/1.4/1.6 的 GUI 保存点按未取证） | `checklists/m1-report.md` |
+| M2 部署 | 实施完成；2.1～2.14 通过；Windows 模拟、部署弹窗结果面板仍保持未验证 | `checklists/m2-report.md` |
+| M3 获取/上游 | 实施完成；3.1～3.12 通过；SC-007 通过，SC-008 CLI 侧通过（GUI 侧进度/取消未取证） | `checklists/m3-report.md` |
+| M4 同步/指令 | 实施完成；4.1～4.8 通过；GUI"未连接"状态已补取证，冲突界面渲染与定时器长时行为未实测 | `checklists/m4-report.md` |
+| M5 预设/工具/环境 | 实施完成；预设、工具中心、设置/主题/字号/容量/诊断均实现并有运行证据；托盘长时运行与部分界面点按流程未取证 | `checklists/m5-report.md`（由主代理写入） |
+
+**验证基线**：`cargo test --workspace` 241 项通过、`npm test` 22 项通过、
+`cargo build --workspace` / `npx tsc --noEmit` / `npm run build` 通过。
+
+**未闭合项（保持未过/待授权，不用勾任务代替验收）**：
+
+1. **本机运行侧整类缺 CLI 入口**——原记为"共享目录路径缺 CLI 命令"，2026-10-16 逐项清点后确认
+   是"本机运行配置与只读报告"整类（同时缺 CLI 的还有自动检查频率、运行配置读取、诊断资料获取与导出、
+   容量报告）。**规格与命令契约已按类补齐**（spec.md FR-050/FR-052/FR-053、contracts/cli.md 的
+   `settings` 命令组、data-model.md §2.6、research.md D22/D23），实现见 T093～T096。
+2. **新增候选入库无 `tags`/`comment` 参数**——GUI/CLI 一致地只能补充分类；属契约限制（缺口 ②）。
+3. **Hermes 档案独有技能的只读查看**未实现（交互缺口，GUI 与 CLI 都没有）。
+4. **配套维护 Skill 的 Gitea 入库/更新待授权**：远端写入未被授权；机制本身已用临时本地 Git 上游
+   完整验证（preview → import → 推进上游 → check → update）。
+5. **平台兼容不声明**：仅 macOS（arm64）实际运行验证；Hermes 启用的符号链接在 Windows 行为未验证。
+6. **性能数据**：Apple M6 / 24 GB / macOS 27.0.1 / debug 构建下，50/200/500 个技能的
+   `skill list` 与筛选、`skill get`、`skill check --all` 实测均 ≤ 0.08s；这是本机实测值，
+   不作为"任何环境 <1s"的承诺。
+7. **GUI 人工取证不完整**：卡片三点菜单、多选批量栏、入库/部署弹窗部分点按流程、
+   托盘隐藏后长时检查运行等，按各期报告保持"未验证"。
+
+## 规划补齐：本机运行侧的双入口覆盖（2026-10-16）
+
+**触发**：实施收尾核对（T090）只发现"共享目录路径缺 CLI 命令"一项；用户要求按**整类**重扫，
+而不是只修这一项。逐项清点的完整覆盖面矩阵见 `contracts/cli.md` 的 T090 一节。
+
+**判定准则**（已写入 FR-050）：按"**是否影响管理动作的结果**"分类，不按"是不是设置"分类。
+
+| 类别 | 项 | 依据 |
+|---|---|---|
+| 必须 CLI 可写 | `shared_dir`（`shared` 部署目标前置）、`auto_check_minutes`（FR-029 三项共用周期） | 缺前者则无 GUI 的机器无法完成共享目录部署；缺后者 Agent 无法按用户指令调整自动检查 |
+| 必须 CLI 可读 | 全部运行配置与调度事实（含仅 GUI 写入的 `theme`、`font_scale`、`git_auto_push`） | Agent 需能解释当前行为（例如为何未自动检查） |
+| 不提供 CLI 写 | `theme`、`font_scale`（界面偏好）、`git_auto_push`（上传长期授权） | 界面偏好不改变管理结果；长期上传授权只能由用户在 GUI 给出（FR-038） |
+| 有意单侧 | 工具本机安装事实回写（只有 CLI） | FR-047/FR-050 明令 GUI 只生成任务 |
+| 清理 | 自定义日志目录（删除）、Hermes 根（改按 `HERMES_HOME` 与平台默认解析） | 两键无任何写入点；可写 Hermes 根会与 Hermes 自身定位规则分叉 |
+
+**契约取法（最小充分）**：新增单一 `settings` 命令组 = 一条读命令（读全部配置与调度事实）
+\+ 两个写命令（共享目录、检查频率）+ 两条只读报告（诊断、容量）。**不新增组合调度命令**——
+CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` 分别表达 FR-029 的三项。
+
+**本次规划变更的文件**：`spec.md`（FR-029/050/052/053 与 Clarifications）、
+`contracts/cli.md`（`settings` 命令组、FR-050 覆盖表、T090 缺口重述）、
+`data-model.md` §2.6（逐键可达性表、清理两键）、`research.md` D22/D23、
+`quickstart.md`（新增场景）、`tasks.md`（T093～T096）。
 
 ## 需求质检后的实施边界
 

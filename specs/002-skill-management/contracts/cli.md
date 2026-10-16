@@ -29,13 +29,14 @@ skill overlay list <ref>
 skill overlay get <ref> --path <relative-path> [--agent <key>] [--os <os>]
 skill overlay set <ref> --path <relative-path> (--file <path> | --stdin) [--agent <key>] [--os <os>]
 skill overlay remove <ref> --path <relative-path> [--agent <key>] [--os <os>]
-skill task <ref>... --requirement <text>                     # 单项/多选技能维护任务
+skill task <ref>... [--requirement <text>]                     # 单项/多选技能维护任务
 ```
 
 - `--agents all` / `--oses all` 删除对应限制键，`none` 写显式空集合；未传保持原声明，不能清除本机未显示的 Agent 声明。
 - `--tags` 是替换标签集合；`tag add/detach` 仅增减目标标签；空字符串清空集合。`--preset` 须同时给 `--domain`，避免跨域同 id 歧义。
 - overlay 命令省略的维度表示该维度通用；同一相对路径的优先顺序与文件布局由 M2 T021 先落定，不在入口另定规则。
 - `skill task` 对单个或多个明确技能生成一份维护说明；保留 FR-051 规定的用户要求、库/技能路径、管理资料概况和本机已有部署。规范仅引用配套维护 Skill，正文/完整文件由 Agent 到库内读取；生成任务不改库、不部署、不上传。
+  `--requirement` 可省略（与 `tool task` 一致），省略时任务文本如实写明"未填写（按技能现有管理资料与配套维护 Skill 规范执行）"，不编造用户要求。契约不把用户要求设为必填：FR-051 只要求"保留用户要求"，省略即如实表达为未填写，比强制报错更贴近"生成可复制任务"的用途，且与工具维护任务的处理一致；实现按此为准。
 
 ### skill — 获取与上游维护
 
@@ -115,10 +116,11 @@ tool task [<slug>] --action register|edit|install|update|guide [--requirement <t
 tool skill-link <slug> <ref>                                 # 配套 Skill 来源资料随 tool set 维护
 ```
 
-- `register` 新登记，`set` 修改已有共享资料；`--dir` 提供 tool.yaml、guide.md 及其所需检查脚本；`--stdin` 接收对象 `{"tool": <字段映射>, "guide": <正文>}`，其他脚本通过资料目录维护。
-- 工具登记、资料维护、安装与验证回写由外部 Agent 完成；GUI 生成/复制对应任务，全部实际管理动作 CLI 可达。`task --action register` 允许尚无 slug；其他动作必须给已登记工具。任务不等于安装或更新完成。
-- 检查只执行登记的单个最新版本检查命令，保存检查事实，不改 `tool_installs`。无命令、失败、未检查分别表达；未安装工具获得上游版本后仍是未安装，不显示“本机最新”。具体非标准版本比较由 T074 落定，不可比较的结果如实说明。
-- `set-install` 仅在 Agent 核实实际结果后回写安装事实并重置该工具检查结果；命令本身不安装程序。工具版本与配套技能版本互不代替。
+- `register` 新登记，`set` 修改已有共享资料；`--dir` 提供 tool.yaml、guide.md 及其所需检查脚本；`--stdin` 接收对象 `{"tool": <字段映射>, "guide": <正文>}`，其他脚本通过资料目录维护。登记的 slug 由 `tool.yaml` 的 `name` 派生（保留 ASCII 字母数字，其余折为 `-`）；已登记时 `register` 报错，改用 `set`。`--dir` 中缺失的 `guide.md` 或其他文件表示保持原值，不表示清空；未知字段写回时保留。
+- 工具登记、资料维护、安装与验证回写由外部 Agent 完成；GUI 生成/复制对应任务，全部实际管理动作 CLI 可达。`task --action register` 允许尚无 slug（由 `--requirement` 说明工具名称与来源/安装要求）；其他动作必须给已登记工具。任务不等于安装或更新完成。
+- 检查只执行登记的单个最新版本检查命令，保存检查事实，不改 `tool_installs`。无命令、失败、未检查分别表达；未安装工具获得上游版本后仍是未安装，不显示“本机最新”。版本比较约定见 data-model.md §1.5（T074 落定）；无法比较或上游低于本机记录时如实说明，不冒充“最新/可更新”。
+- `set-install` 仅在 Agent 核实实际结果后回写安装事实并重置该工具检查结果；命令本身不安装程序。`--version ""`（空字符串）表示 Agent 核实该工具已不在本机：清除安装记录并同样重置检查结果。工具版本与配套技能版本互不代替。
+- `skill-link <slug> <ref>` 追加一个配套 Skill 关联（`<ref>` = `<domain>/<name>`）；来源资料（repo/subpath）随 `tool set` 维护。未入库时如实显示“未入库”，可经 `skill preview`/`skill import` 选择入库，入库不自动部署。
 
 ### sync — SkillVault 跨机同步
 
@@ -129,9 +131,11 @@ sync status                                                 # 连接/未提交/�
 sync conflicts                                              # Git 冲突信息供 Agent 检查
 ```
 
-- GUI 保存沿用已有自动上传确认；Agent 修改后每次询问得到明确同意才 `push`。CLI 写库、部署同步、文件监听及后台检查/重试都不构成上传授权。
-- 已同意的上传失败可由用户主动重试；后台路径不提交或推送。冲突由 Agent 按用户裁决完成 Git 层处理后，再 `sync pull` 继续；不新增应用内合并流程。
-- 库同步与技能上游更新分开；拉取新增只让库内容一致，不产生首次部署/档案启用/工具安装。
+- GUI 保存沿用已有自动上传确认（设置键 `git_auto_push`，见 data-model.md §2.6）：首次保存时询问一次，确认后每次保存自动 `push`；Agent 修改后每次询问得到明确同意才 `push`。CLI 写库、`deploy sync`、文件监听及后台检查/重试都不构成上传授权，也不读 `git_auto_push`。
+- 已同意的上传失败可由用户主动重试（再次 `sync push`）；后台路径不提交或推送。冲突由 Agent 按用户裁决完成 Git 层处理后，再 `sync pull` 继续；不新增应用内合并流程或“保留本地/远端/双方”选项。冲突时本次同步暂停并保留 Git 冲突现场，`sync conflicts` 输出未合并路径与状态供 Agent 检查。
+- `sync status` 只读事实：连接状态（远端可用/不可用）、未提交改动、相对 upstream 的未拉取提交数、进行中的冲突；不提交、不推送、不改库。
+- 远端不可用时 `sync pull`/`sync push` 明确报“未连接”，本地库管理、部署与 `deploy sync` 继续可用；不提供断开远端或重新克隆修复入口。
+- 库同步与技能上游更新分开；拉取新增只让库内容一致，不产生首次部署/档案启用/工具安装。拉取到指令源变化后按同一拼接规则刷新本机已有启用指令目标（不新增启用目标、不改本机路径）。
 
 ### agent / instruction — 本机配置与指令
 
@@ -146,6 +150,29 @@ instruction set global|<key> (--file <path> | --stdin)
 ```
 
 Agent 目录/启停/顺序只在本机；检测不启动、不部署。指令编辑沿用单保存动作，保存源并按“全局+专属”覆盖本机目标；没有独立分发勾选。指令路径与技能路径独立，不把源跨机一致视为已经完成目标分发。用户已确认：`sync pull` 拉取到指令源变化后，按同一拼接覆盖规则自动刷新本机已有启用目标，不改变启用名单/指令路径；刷新失败分别报告，不把源同步成功冒充目标刷新成功。
+
+- `instruction get global|<key>` 返回该作用域的**源内容**（`instructions/global.md` 或 `instructions/<key>.md`；文件不存在按空内容）以及按拼接规则得到的合成预览；`instruction set` 写入源后立即按“全局在前、专属在后”覆盖本机已启用目标的 `<detect_dir>/AGENTS.md`（可被 `agent set-dir <key> --instructions` 覆盖），空内容正常保存并覆盖目标。单目标写入失败不中断其余，逐项如实报告。
+
+### settings — 本机运行配置与只读报告
+
+```text
+settings get [<key>...]                                  # 只读：运行配置与调度事实
+settings set-shared-dir (--path <绝对路径> | --clear)
+settings set-auto-check <0|30|60|360|1440>
+settings diagnostics [--export]
+settings capacity
+```
+
+2026-10-16 按 spec.md FR-050 的“本机运行侧”条款补齐（此前这一整类只有 GUI 入口）：
+
+- `settings get` 不带参数返回全部键的**当前生效值**（含默认值推导，例如主题缺省 `system`、检查频率缺省 60、未设置的共享目录为 `null`）；带参数只返回指定键。**未设置的键返回 `null`**，不省略键、不用空字符串冒充。
+- 只暴露**两个写入口**：`shared_dir`（`shared` 部署目标的前置）与 `auto_check_minutes`（FR-029 三项共用周期，值须为 0/30/60/360/1440）。其余键按 FR-050 保持单侧：
+  - `theme`、`font_scale` **不提供写**（界面偏好，不影响管理结果，见 FR-052）；
+  - `git_auto_push`（GUI 保存自动上传的长期授权记录）**不提供写**——该授权只能由用户在 GUI 给出，Agent 的上传仍需每次取得明确同意后显式 `sync push`（FR-038）；允许 CLI 读取以便解释当前行为。
+- 手动检查**不新增组合命令**：CLI 以 `skill check --all`、`sync pull`、`tool check --all` 分别表达同一批动作（FR-029 的三项），不合并成一条命令。
+- `settings diagnostics` 输出诊断报告内容与日志/崩溃记录的**真实文件路径**；`--export` 追加写出可交给 Agent 的文件并返回其路径。**不提供上传诊断**。
+- `settings capacity` 输出库总占用与较大技能排行；空库如实返回 0 与空排行。
+- 这一组命令只读写本机状态，不改 SkillVault 内容、不触发上传。
 
 ## 输出与状态约定
 
@@ -173,5 +200,51 @@ Agent 目录/启停/顺序只在本机；检测不启动、不部署。指令编
 | 工具维护任务 | tool task | 生成/复制，不冒充执行 |
 | 库同步 | sync * | 同意边界与全量提交一致 |
 | Agent 配置/本地技能/指令 | agent *，instruction * | 本机配置与单保存指令入口 |
+| 本机运行配置与只读报告 | settings get/set-shared-dir/set-auto-check/diagnostics/capacity | 设置页同一核心；主题/字号与上传长期授权不提供 CLI 写入 |
 
 **覆盖结论**：上表为需求与命令契约映射，不是命令已实现的证明。各入口实施后仍须按 SC-002 实际验收；CHK026 已确认拉取后自动刷新本机已有启用指令目标。
+
+## T090 双入口核对（FR-050/051，2026-10-15）
+
+核对方式：`skill-manager <命令> --help` 逐条与本节命令表比对（参数、子命令、互斥关系），再在**临时库 + 临时 HOME + 独立 `--state-dir`** 中实际执行每条命令，记录退出码与输出；GUI 侧用同一核心的 Tauri 命令，逐项对照其 CLI 等价路径。汇总：53 条调用、91 个参数与实现一致；102 条子命令实际执行，除下列有意用例（缺共享目录、已登记重复登记、删除不存在的本机副本）外全部退出 0。
+
+**核对项目（每项：CLI 路径 | 验证方式 | 结论）**
+
+| FR-050 操作 | CLI 路径 | 验证方式 | 结论 |
+|---|---|---|---|
+| 组合查询/正文/文件详情 | `skill list`（含 `--deployed-to` 按本机部署记录筛选）/`get`/`read` | 实际执行并核对 JSON 键 | 通过 |
+| 入库/收编/自建/跨域复制 | `skill preview/import/adopt/adopt-hermes/create/copy` | 实际执行；入库含显式子路径与来源记录 | 通过 |
+| 上游检查/单项与仓库更新 | `skill check`（`<ref>`/`--repo`/`--all` 三者之一必给）/`update`/`update-repo` | 实际执行；检查只写事实不应用 | 通过 |
+| 新增拒绝/跳过与恢复 | `skill reject-new/rejected/skip/unskip/skipped`，`update --to` | 实际执行 | 通过 |
+| 部署/撤销/同步/暂停处置 | `deploy to/preset/undo/undo-preset/sync/status` | 实际执行；`--dry-run` 不变文件 | 通过 |
+| 预设 | `preset list/get/create/delete/members/rename/icon/reorder/reorder-members` | 实际执行；两种排序校验全量排列 | 通过 |
+| 标签/分类/注释/支持范围 | `skill tag add/detach/rename/remove`、`skill set`、`skill move` | 实际执行；`--agents all/none/csv` 写回核对 | 通过 |
+| 译文/覆盖层维护 | `skill translation get/set/remove`、`skill overlay list/get/set/remove` | 实际执行；`set` 缺 `--file/--stdin` 报错退出 1 | 通过 |
+| Hermes | `hermes profiles/list/enable/disable`，`skill adopt-hermes` | 实际执行（假根 + 具名档案） | 通过 |
+| 技能维护任务 | `skill task <ref>... [--requirement <text>]` | 实际执行；任务引用维护 Skill **真实库内路径** | 通过 |
+| 工具清单/状态/检查 | `tool list`（`--status` 八态）/`get`/`check`（单项/`--all`） | 实际执行 | 通过 |
+| 工具登记/修改/本机回写 | `tool register/set`（`--dir`/`--stdin`）/`set-install`/`skill-link` | 实际执行；`--version ""` 清记录并重置检查 | 通过 |
+| 工具维护任务 | `tool task --action register/edit/install/update/guide` | 实际执行；`register` 可无 slug | 通过 |
+| 库同步 | `sync pull/push/status/conflicts` | 实际执行（临时裸远端）；后台路径不推送 | 通过 |
+| Agent 配置/本地技能/指令 | `agent list/detect/enable/disable/reorder/set-dir/reset-dir/local-skills/delete-local`，`instruction get/set` | 实际执行（临时 HOME 假目录） | 通过 |
+| 本机运行配置与只读报告 | `settings get/set-shared-dir/set-auto-check/diagnostics/capacity` | **尚未实现**（2026-10-16 规划补齐，见缺口 ① 与 tasks T093～T096） | 待实现 |
+
+**JSON/退出码核对**：`--json` 输出统一 `result`(`success|partial|failed`)/`data`/`errors`；退出码 0/1/2 = 成功/失败/部分完成。**已知碰撞**：clap 的参数用法错误也返回 2，调用方需按 `errors` 或提示前缀区分（本节如实记录，未新增机制消除该碰撞）。
+
+**无 GUI 裁决依赖核对**：GUI 的 85 个前端调用名与 87 个 Tauri 注册命令逐一对齐（无前端调用缺失），全部命令共用 core，均只做参数映射。除下方缺口 ① 外，所有核心管理操作均有 CLI 等价路径，**Agent 无需回 GUI 补做核心操作**；缺口 ① 已由 2026-10-16 的规划补齐（`settings` 命令组，待实现）。
+
+**维护任务 Skill 路径核对**：配套维护 Skill 未入库时，任务文本显示"配套维护 Skill：未入库（…此处不编造库内路径）"；入库后显示其**真实库内绝对路径**与技能引用，并含"按其规范执行"（FR-051）。均已实际执行验证。
+
+**发现的缺口与处理**
+
+1. **本机运行侧整类缺 CLI 入口**（原记为"仅共享目录路径"，2026-10-16 逐项清点后确认为整类，已在 `spec.md` FR-050/FR-052/FR-053 补齐表述并在本节补齐命令契约，见 `settings` 命令组与 tasks T093～T096）。清点结论：
+   - **必须 CLI 可写**：`shared_dir`（`shared` 部署目标前置）、`auto_check_minutes`（FR-029 三项共用周期）；
+   - **必须 CLI 可读**：全部运行配置与调度事实（含仅由 GUI 写入的 `theme`、`font_scale`、`git_auto_push`）；
+   - **不提供 CLI 写**：`theme`、`font_scale`（界面偏好）、`git_auto_push`（长期上传授权，FR-038）；
+   - **有意单侧**：工具安装事实回写只有 CLI（FR-047/FR-050），不是缺口。
+2. **清理两处无写入点的配置键**：自定义日志目录不再保留；Hermes 根改为按 `HERMES_HOME` 与平台默认解析，不设可写设置键（见 tasks T096）。
+3. **新增候选入库时的标签/注释**（M3 已记录）。`skill import` / `skill update-repo` 无 `tags`/`comment` 参数，故 GUI 与 CLI 一致地只能补充分类；标签/注释继承上游 `.manager`，入库后可用 `skill set` 补齐。这是契约层面的限制而非入口不对齐，**保持现状**：批量入库用 `--tags` 会把同一份资料套给全部技能，与"不把同一段注释擅自套给全部技能"冲突；若确需入库时逐项给资料，应复用 `skill adopt` 的 `--metadata-file` 形式，需用户裁决。
+4. **`skill task --requirement` 原契约写必填、实现为可选** → 已按最小改动**修订契约文字**为可选（`[--requirement <text>]`），与 `tool task` 一致；理由见 `skill task` 条目注。
+5. **契约文字与实现的细节修正**：`skill list --deployed-to` 已实现（按本机部署记录筛选），原实现内的帮助文字标注"尚未接入"属过时描述，已更正为"按本机部署记录"；行为本身无需改动。
+6. **Hermes 档案独有技能的只读查看**：GUI 与 CLI **都没有**读取某档案中未收编技能正文的入口（契约无此命令）。这是交互层未实现，不是双入口不对称；记录为待用户裁决的交互缺口（M2 已记录）。
+

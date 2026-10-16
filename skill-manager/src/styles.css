@@ -1,0 +1,269 @@
+@import "tailwindcss";
+
+/* 视觉基线取自 specs/001-skill-management-prototype/visual-reference.md
+   与 docs/technical-reference/assets/theme-tokens.css。 */
+:root {
+  --c-bg: #fafafa;
+  --c-bg-subtle: #f4f4f5;
+  --c-surface: #ffffff;
+  --c-surface-hover: #f4f4f5;
+  --c-surface-active: #e4e4e7;
+  --c-line: #d4d4d8;
+  --c-line-soft: #e4e4e7;
+  --c-line-faint: #eeeef0;
+  --c-ink: #18181b;
+  --c-ink-2: #27272a;
+  --c-ink-3: #52525b;
+  --c-muted: #71717a;
+  --c-faint: #8b8b94;
+  --c-accent: #059669;
+  --c-accent-light: #10b981;
+  --c-accent-strong: #047857;
+  --c-accent-soft: rgba(5, 150, 105, 0.08);
+  --c-accent-line: rgba(5, 150, 105, 0.25);
+  --c-danger: #dc2626;
+  --c-danger-soft: rgba(220, 38, 38, 0.08);
+  --c-warn: #d97706;
+  --c-warn-soft: rgba(217, 119, 6, 0.1);
+  --shadow-card-value: 0 1px 2px rgba(24, 24, 27, 0.04);
+  --shadow-card-hover-value: 0 4px 12px rgba(24, 24, 27, 0.07);
+}
+
+.dark {
+  --c-bg: #0c0c0f;
+  --c-bg-subtle: #0f0f13;
+  --c-surface: #131317;
+  --c-surface-hover: #17171e;
+  --c-surface-active: #1e1e28;
+  --c-line: #222229;
+  --c-line-soft: #1c1c22;
+  --c-line-faint: #18181e;
+  --c-ink: #f4f4f5;
+  --c-ink-2: #d4d4d8;
+  --c-ink-3: #a1a1aa;
+  --c-muted: #8e8e96;
+  --c-faint: #71717a;
+  --c-accent: #10b981;
+  --c-accent-light: #34d399;
+  --c-accent-strong: #059669;
+  --c-accent-soft: rgba(16, 185, 129, 0.08);
+  --c-accent-line: rgba(16, 185, 129, 0.25);
+  --c-danger: #ef4444;
+  --c-danger-soft: rgba(239, 68, 68, 0.08);
+  --c-warn: #f59e0b;
+  --c-warn-soft: rgba(245, 158, 11, 0.1);
+  --shadow-card-value: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover-value: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+@theme inline {
+  --color-app: var(--c-bg);
+  --color-subtle: var(--c-bg-subtle);
+  --color-panel: var(--c-surface);
+  --color-hover: var(--c-surface-hover);
+  --color-selected: var(--c-surface-active);
+  --color-line: var(--c-line);
+  --color-line-soft: var(--c-line-soft);
+  --color-line-faint: var(--c-line-faint);
+  --color-ink: var(--c-ink);
+  --color-ink-2: var(--c-ink-2);
+  --color-ink-3: var(--c-ink-3);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-accent: var(--c-accent);
+  --color-accent-light: var(--c-accent-light);
+  --color-accent-strong: var(--c-accent-strong);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-accent-line: var(--c-accent-line);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-warn: var(--c-warn);
+  --color-warn-soft: var(--c-warn-soft);
+  --shadow-card: var(--shadow-card-value);
+  --shadow-card-hover: var(--shadow-card-hover-value);
+  --font-sans: "SF Pro Text", "PingFang SC", "Noto Sans SC", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-mono: "SF Mono", Menlo, ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--c-bg);
+  color: var(--c-ink);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 键盘焦点样式沿用原型；鼠标点击不显示焦点环。 */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(5, 150, 105, 0.4);
+  outline-offset: 2px;
+}
+
+@layer components {
+  /* ---------------------------------------------------------------------------
+     组件样式：取值沿用 specs/001-skill-management-prototype 的可操作原型，
+     用于无法用类名组合表达的形态（标签色、徽标色、文件目录树分支线等）。
+     --------------------------------------------------------------------------- */
+
+  /* 标签与徽标的柔和底色（原型固定色板）。 */
+  .tag-tone-mint { background: #e2f4ec; color: #059669; }
+  .tag-tone-blue { background: #e7ecff; color: #4263ff; }
+  .tag-tone-violet { background: #eee5ff; color: #8537ff; }
+  .tag-tone-orange { background: #fff0df; color: #ef7800; }
+  .tag-tone-cyan { background: #e0f4f8; color: #0095b2; }
+  .tag-tone-rose { background: #ffe6ed; color: #eb3164; }
+  .tag-tone-neutral { background: var(--c-bg-subtle); color: var(--c-muted); }
+
+  .badge-tone-green { background: #e7f7f0; color: #059669; }
+  .badge-tone-gray { background: var(--c-bg-subtle); color: var(--c-muted); }
+  .badge-tone-amber { background: #fff1df; color: #ca6500; }
+  .badge-tone-blue { background: #edf3ff; color: #487df2; }
+
+  /* 说明性提示框（原型 .manager-notice）。 */
+  .notice {
+    border: 1px solid #daeee3;
+    background: #f1f8f5;
+    border-radius: 8px;
+    padding: 11px 13px;
+    color: #52836c;
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .notice-warn {
+    border-color: #f2dcc0;
+    background: var(--c-warn-soft);
+    color: #96540a;
+  }
+
+  .notice-danger {
+    border-color: #f3d3d3;
+    background: var(--c-danger-soft);
+    color: var(--c-danger);
+  }
+
+  /* 正文与文件阅读区。 */
+  .read-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: 13px/24px var(--font-mono);
+    margin: 0;
+    background: var(--c-bg-subtle);
+    color: var(--c-ink-3);
+    border-radius: 8px;
+    padding: 14px;
+  }
+
+  /* 表单控件。 */
+  .field-input {
+    display: block;
+    width: 100%;
+    height: 40px;
+    border: 1px solid var(--c-line-soft);
+    border-radius: 8px;
+    padding: 0 12px;
+    outline: 0;
+    background: var(--c-surface);
+    color: var(--c-ink-3);
+  }
+  .field-input:focus { border-color: var(--c-accent-line); }
+  textarea.field-input {
+    height: 165px;
+    resize: vertical;
+    line-height: 23px;
+    padding: 10px;
+    white-space: pre-wrap;
+  }
+  input.selectbox { accent-color: var(--c-accent); width: 15px; height: 15px; }
+  input.selectbox:disabled { cursor: default; }
+
+  /* 卡片三点菜单（原型 .card-menu）。 */
+  .card-menu {
+    position: fixed;
+    z-index: 105;
+    width: 178px;
+    max-height: 70vh;
+    overflow: auto;
+    background: var(--c-surface);
+    border: 1px solid var(--c-line-soft);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 5px 16px rgba(24, 24, 27, 0.14);
+  }
+  .card-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--c-ink);
+    text-align: left;
+    font-size: 13px;
+    padding: 7px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .card-menu button:hover { background: var(--c-surface-hover); }
+
+  /* 可折叠文件目录树：缩进与分支线（原型 .file-tree）。 */
+  .file-tree {
+    border: 1px solid var(--c-line-faint);
+    border-radius: 8px;
+    background: var(--c-surface);
+    padding: 9px 12px;
+    font: 12px/1.6 var(--font-mono);
+  }
+  .file-tree ul { list-style: none; margin: 0; padding: 0; }
+  .file-tree details > ul {
+    margin-left: 8px;
+    padding-left: 20px;
+    border-left: 1px solid var(--c-line);
+  }
+  .file-tree summary {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    padding: 5px 0;
+    color: var(--c-ink);
+    list-style: none;
+  }
+  .file-tree summary::-webkit-details-marker { display: none; }
+  .file-tree summary::before {
+    content: "›";
+    display: inline-block;
+    width: 10px;
+    text-align: center;
+    color: var(--c-faint);
+  }
+  .file-tree details[open] > summary::before { transform: rotate(90deg); }
+  .file-tree .file-link {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    color: var(--c-ink-3);
+    text-align: left;
+    padding: 5px 7px 5px 17px;
+    border-radius: 5px;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+  .file-tree .file-link:hover { background: var(--c-surface-hover); color: var(--c-accent); }
+}

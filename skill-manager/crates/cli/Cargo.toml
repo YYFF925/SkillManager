@@ -1,0 +1,59 @@
+[package]
+name = "skill-manager-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "skill-manager"
+path = "src/main.rs"
+
+# 根 tests/ 下的 CLI 集成测试；显式注册以确保 cargo test --workspace 真正执行。
+[[test]]
+name = "cli_library"
+path = "../../tests/cli_library.rs"
+
+[[test]]
+name = "cli_deploy"
+path = "../../tests/cli_deploy.rs"
+
+[[test]]
+name = "cli_agent"
+path = "../../tests/cli_agent.rs"
+
+[[test]]
+name = "cli_hermes"
+path = "../../tests/cli_hermes.rs"
+
+[[test]]
+name = "cli_acquire"
+path = "../../tests/cli_acquire.rs"
+
+[[test]]
+name = "cli_upstream"
+path = "../../tests/cli_upstream.rs"
+
+[[test]]
+name = "cli_sync"
+path = "../../tests/cli_sync.rs"
+
+[[test]]
+name = "cli_preset"
+path = "../../tests/cli_preset.rs"
+
+[[test]]
+name = "cli_tool"
+path = "../../tests/cli_tool.rs"
+
+[dependencies]
+skill-manager-core.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+yaml_serde.workspace = true
+ctrlc.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

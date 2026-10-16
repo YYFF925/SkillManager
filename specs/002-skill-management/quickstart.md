@@ -94,10 +94,52 @@
 | 5.7 | 配套 Skill 候选入库 | 列出具体候选与资料，勾选入库，不自动部署（US9-6） |
 | 5.8 | 定时器（缩短周期验证） | 到期自动执行上游检查+库同步+工具检查命令，结果分别提示（FR-029 共用周期） |
 | 5.9 | 主题/字号/关窗收托盘/托盘检查/诊断导出/容量报告 | US10 各场景 |
-| 5.10 | 配套维护 Skill：`skill import <本项目 Gitea 远端>` 入库 → 本仓库技能源推进新版本 → `skill check`/`skill update` | 走普通上游流程入库与更新，来源记录正确；任务书引用路径可解析（FR-051、D9） |
+| 5.10 | 配套维护 Skill：`skill import <本项目 Gitea 远端> --domain code --skills skill-manager/assets/skills/skill-manager-maintenance` 入库 → 本仓库技能源推进新版本 → `skill check`/`skill update` | 走普通上游流程入库与更新，来源记录正确；任务书引用路径可解析（FR-051、D9） |
 | 5.11 | **SC-001 完整旅程**：真实库上依次 入库→维护→部署→吸收一次上游更新→上传→机 B 拉取继续使用 | 全链贯通，每步与规格场景一致 |
 | 5.12 | 分别调整预设间顺序、某预设内成员顺序，使用 GUI 及 `preset reorder-members <domain> <id> --order <name,...>`，另一机拉取 | 两种显示顺序均共享；成员排序只改变数组顺序，不增减成员、不动目录、不改变已有部署（FR-025） |
 | 5.13 | 为一个技能和多个技能分别生成 `skill task <ref>... --requirement <text>` | 所选技能上下文完整且可定位；保留用户要求、库/技能路径、管理资料概况与已有部署，规范只引用维护 Skill；生成不改库/部署/上传（FR-051） |
+
+### 5.10 固定来源与实际命令（配套维护 Skill）
+
+配套维护 Skill 的源文件维护在本项目仓库 `skill-manager/assets/skills/skill-manager-maintenance/`（技能目录名即技能名
+`skill-manager-maintenance`）。按 D9/FR-051，它作为**普通上游技能**入库：本项目推送用户 Gitea 远端后，
+以该项目远端为上游仓库、以 `skill-manager/assets/skills/skill-manager-maintenance` 为来源子路径入库。
+
+本项目 `origin` = `http://192.168.200.7:3000/yfpoyuas/SkillManager.git`（Gitea，2026-10-15 核对）；
+另有 `github` 远端。**远端写入（提交/推送）未获用户授权**，因此 Gitea 路径的入库/更新保持“待授权”。
+
+实际命令（`<repo-url>` 为本项目远端地址）：
+
+```bash
+skill-manager skill preview <repo-url> --ref main
+skill-manager skill import <repo-url> --domain code \
+    --skills skill-manager/assets/skills/skill-manager-maintenance --ref main --category 维护
+# 上游推进新版本（本项目推送后）：
+skill-manager skill check code/skill-manager-maintenance
+skill-manager skill update code/skill-manager-maintenance
+```
+
+- 入库后来源记录 `source.yaml` 的 `repo` 指向本项目远端、`subpath` 为上述子路径、`version` 为采用提交；
+  后续更新走既有 `skill check` / `skill update`，不新增专用分发或升级机制。
+- 技能**未入库**时，软件生成的维护任务如实显示“配套维护 Skill：未入库”，不编造库内路径。
+- 机制验证（非 Gitea 发布验收）：以**临时本地 Git 仓库**（内容复制自本项目该目录）作为普通上游，
+  完整执行 `preview → import → 推进上游新版本 → check（只展示）→ update（显式采用）`，
+  来源记录与采用版本推进均正确，任务书引用路径可解析。证据见 m5 报告 5.10 与汇报。
+
+
+## M5 补充 — 本机运行侧双入口（2026-10-16 规划补齐）
+
+对应 spec.md FR-050「本机运行侧」、FR-052、FR-053 与 contracts/cli.md 的 `settings` 命令组；
+实现任务见 tasks.md T093～T096。
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 5.14 | `settings get`（不带参数与带参数各一次） | 返回全部键的**当前生效值**（主题缺省 `system`、检查频率缺省 60、未设置的共享目录为 `null`）；带参数只返回指定键；未设置的键返回 `null`，不省略键、不用空字符串冒充 |
+| 5.15 | 纯 CLI 环境（无 GUI 参与）：`settings set-shared-dir --path <临时目录>` → `deploy to shared <ref>` | 设置后共享目录部署成功；`settings set-shared-dir --clear` 后 `deploy to shared` 如实报"尚未设置共享目录路径" |
+| 5.16 | `settings set-auto-check 0` 与 `settings set-auto-check 30`；再试 `settings set-auto-check 45` | 前两者写入成功并可由 `settings get` 读回；45 被拒绝并给出合法取值（0/30/60/360/1440） |
+| 5.17 | `settings diagnostics`、`settings diagnostics --export`、`settings capacity` | 诊断输出含版本/平台/真实日志路径；`--export` 写出真实文件并返回其路径；容量输出库总占用与较大技能排行，空库返回 0 与空排行 |
+| 5.18 | 按 FR-050 边界核对不允许的写入 | `theme`/`font_scale`/`git_auto_push` **没有** CLI 写入口（命令不存在或明确不支持），只能经 `settings get` 读取；工具安装事实回写仍只有 CLI（GUI 无入口） |
+| 5.19 | 清理项核对 | 设置中不再存在自定义日志目录键；Hermes 根按 `HERMES_HOME` 与平台默认解析，`settings get` 不再返回可写的 Hermes 根键 |
 
 ## 自动化与人工分工
 

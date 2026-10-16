@@ -1,1 +1,16 @@
 .DS_Store
+
+# Rust
+skill-manager/target/
+
+# 前端
+skill-manager/node_modules/
+skill-manager/dist/
+
+# Tauri 在构建时生成的权限 schema（可重建）
+skill-manager/src-tauri/gen/schemas/
+
+# 本地环境与日志
+.env
+.env.*
+*.log
