@@ -1,197 +1,55 @@
 /**
- * Agent 页面：本机 Agent 分组、重新检测、启停与拖动排序、目录行内修改，
+ * Agent 页面：本机目标的**跨目标部署清单**（「全部编码 Agents」/「全部龙虾 Agent」，FR-057），
  * 以及单个目标（内置 Agent 目录或共享目录）的本地技能列表与删除
  * （受管/仅本地/本地有变更）。
  *
- * 检测只读本机存在事实；启停、顺序与目录只写本机状态，不改动已有部署。
+ * Agent 检测、启停、排序与目录配置在设置页（FR-041），本页不再承担 Agent 管理。
  * 共享目录是本机部署目标，不是可登记的 Agent 或第二个管理库。
- * US2 的收编入口在同页后续追加，本期不实现。
  */
-import { useCallback, useEffect, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  GripVertical,
-  Layers,
-  Pencil,
-  RefreshCw,
-  RotateCcw,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Copy, Plus, RefreshCw, Search, Trash2, Upload } from "lucide-react";
 
 import {
   agentDeleteLocal,
-  agentDetect,
-  agentDisable,
-  agentEnable,
   agentLocalSkills,
-  agentReorder,
-  agentResetDir,
-  agentSetDir,
   copySkill,
+  deployStatus,
+  listSkills,
   sharedDirGet,
-  type AgentDirKind,
+  sharedDirSet,
   type AgentView,
+  type DeploymentStatusView,
   type Domain,
   type LocalSkillView,
+  type SkillSummary,
 } from "../services/client";
 import { AdoptDialog } from "../components/AdoptDialog";
 import { CopyToDomainDialog } from "../components/SkillDialogs";
-import { Badge, Button, ConfirmDialog, Notice, Segmented } from "../components/ui";
+import { DeployDialog } from "../components/DeployDialog";
+// 部署记录的目标展示名（`agent:<key>`/`shared`/`hermes:default`）复用库内既有映射。
+import { targetLabel as deploymentTargetName } from "../lib/targets";
+import { Badge, Button, ConfirmDialog, Dialog, Notice, Segmented } from "../components/ui";
 
 /** 共享目录目标标识（与 core 的 `shared` 取值一致）；它是编码 Agent 的部署目标。 */
 const SHARED_TARGET = "shared";
 
-/** 目标展示名：内置 Agent 用其名称，共享目录用固定标签。 */
+/** 单个目标的展示名：内置 Agent 用其名称，共享目录用固定标签。 */
 function targetLabel(target: string, agent: AgentView | undefined): string {
   return agent?.display_name ?? (target === SHARED_TARGET ? "共享 Agent" : target);
 }
 
-function agentIconSrc(agent: AgentView): string | null {
-  return agent.icon ? `/${agent.icon}` : null;
-}
-
-/** 开关（原型 .toggle）。 */
-function Toggle({
-  checked,
-  onChange,
-  title,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  title: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      title={title}
-      onClick={onChange}
-      className={`relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors ${
-        checked ? "bg-accent" : "bg-line"
-      }`}
-    >
-      <span
-        className={`absolute top-[2px] size-[18px] rounded-full bg-white shadow-sm transition-all ${
-          checked ? "left-[18px]" : "left-[2px]"
-        }`}
-      />
-    </button>
-  );
-}
-
-/** 目录行：显示 + 行内编辑 + 保存/取消 + 恢复默认。 */
-function PathLine({
-  label,
-  value,
-  fallback,
-  isCustom,
-  busy,
-  onSave,
-  onReset,
-  allowReset,
-}: {
-  label: string;
-  value: string | null;
-  fallback?: string | null;
-  isCustom: boolean;
-  busy: boolean;
-  onSave: (next: string) => void;
-  onReset: () => void;
-  /** 项目相对路径允许留空（等于清除）；技能目录不允许。 */
-  allowReset: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value ?? "");
-  const display = value ?? fallback ?? "未设置";
-
-  useEffect(() => {
-    if (!editing) {
-      setDraft(value ?? "");
-    }
-  }, [value, editing]);
-
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1.5">
-        <input
-          autoFocus
-          className="field-input h-8 flex-1 text-[12px]"
-          value={draft}
-          placeholder={fallback ? `默认：${fallback}` : "绝对路径"}
-          onChange={(event) => setDraft(event.target.value)}
-        />
-        <button
-          type="button"
-          title="保存"
-          disabled={busy}
-          onClick={() => {
-            onSave(draft);
-            setEditing(false);
-          }}
-          className="grid size-6 place-items-center rounded-[5px] text-accent hover:bg-hover disabled:opacity-40"
-        >
-          <Check className="size-3.5" strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          title="取消"
-          onClick={() => {
-            setDraft(value ?? "");
-            setEditing(false);
-          }}
-          className="grid size-6 place-items-center rounded-[5px] text-faint hover:bg-hover"
-        >
-          <X className="size-3.5" strokeWidth={2} />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <span
-        title={display}
-        className={`min-w-0 flex-1 truncate text-[12px] ${isCustom ? "text-ink-3" : "text-muted"}`}
-      >
-        {label}：{display}
-        {!isCustom && fallback ? "（默认）" : ""}
-      </span>
-      <button
-        type="button"
-        title={`修改${label}`}
-        onClick={() => setEditing(true)}
-        className="grid size-6 shrink-0 place-items-center rounded-[5px] text-faint hover:bg-hover hover:text-accent"
-      >
-        <Pencil className="size-3.5" strokeWidth={1.75} />
-      </button>
-      {isCustom && allowReset && (
-        <button
-          type="button"
-          title="恢复默认"
-          disabled={busy}
-          onClick={onReset}
-          className="grid size-6 shrink-0 place-items-center rounded-[5px] text-faint hover:bg-hover hover:text-accent disabled:opacity-40"
-        >
-          <RotateCcw className="size-3.5" strokeWidth={1.75} />
-        </button>
-      )}
-    </div>
-  );
+/** 库内引用 `domain/name` 的技能名部分。 */
+function skillName(reference: string): string {
+  const slash = reference.indexOf("/");
+  return slash === -1 ? reference : reference.slice(slash + 1);
 }
 
 export interface AgentPageProps {
   domain: Domain;
-  /** 选中的单个目标（内置 Agent key 或共享目录 `shared`）；为 null 时显示该管理域的 Agent 管理视图。 */
+  /** 选中的单个目标（内置 Agent key 或共享目录 `shared`）；为 null 时显示该管理域的跨目标部署清单。 */
   selectedTarget: string | null;
   agents: AgentView[];
   onSelectTarget: (target: string | null) => void;
-  onAgentsChanged: (agents: AgentView[]) => void;
   onNotice: (message: string) => void;
   /** 前往设置页（共享目录未设置时提供入口，不代为猜测路径）。 */
   onOpenSettings: () => void;
@@ -204,94 +62,10 @@ export function AgentPage({
   selectedTarget,
   agents,
   onSelectTarget,
-  onAgentsChanged,
   onNotice,
   onOpenSettings,
   onLibrarySaved,
 }: AgentPageProps) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [othersOpen, setOthersOpen] = useState(false);
-  const [dragKey, setDragKey] = useState<string | null>(null);
-
-  const domainAgents = agents.filter((agent) => agent.domain === domain);
-  const sorted = [...domainAgents].sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
-  const detected = sorted.filter((agent) => agent.detected);
-  const others = sorted.filter((agent) => !agent.detected);
-  const enabled = detected.filter((agent) => agent.enabled).length;
-
-  async function run(action: () => Promise<AgentView[]>, message: string) {
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await action();
-      onAgentsChanged(next);
-      onNotice(message);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function toggle(agent: AgentView) {
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = agent.enabled
-        ? await agentDisable(agent.key)
-        : await agentEnable(agent.key);
-      onAgentsChanged(agents.map((item) => (item.key === updated.key ? updated : item)));
-      onNotice(`${updated.display_name} 已${updated.enabled ? "启用" : "停用"}（本机配置）。`);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function updateDir(key: string, kind: AgentDirKind, path: string) {
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await agentSetDir(key, kind, path);
-      onAgentsChanged(agents.map((item) => (item.key === updated.key ? updated : item)));
-      onNotice(`${updated.display_name} 的${kindLabel(kind)}已更新（本机配置）。`);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function resetDir(key: string, kind: AgentDirKind) {
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await agentResetDir(key, kind);
-      onAgentsChanged(agents.map((item) => (item.key === updated.key ? updated : item)));
-      onNotice(`${updated.display_name} 的${kindLabel(kind)}已恢复默认。`);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function dropOn(targetKey: string) {
-    if (!dragKey || dragKey === targetKey) {
-      return;
-    }
-    const ordered = detected.map((agent) => agent.key);
-    const from = ordered.indexOf(dragKey);
-    const to = ordered.indexOf(targetKey);
-    if (from === -1 || to === -1) {
-      return;
-    }
-    ordered.splice(to, 0, ...ordered.splice(from, 1));
-    void run(() => agentReorder(ordered), `已调整显示顺序（本机配置）。`);
-  }
-
   if (selectedTarget !== null) {
     const agent = agents.find((item) => item.key === selectedTarget);
     return (
@@ -299,7 +73,6 @@ export function AgentPage({
         target={selectedTarget}
         agent={agent}
         agents={agents}
-        busy={busy}
         onBack={() => onSelectTarget(null)}
         onOpenSettings={onOpenSettings}
         onNotice={onNotice}
@@ -309,225 +82,7 @@ export function AgentPage({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[13px] text-muted">
-          已检测 <b className="text-ink">{detected.length}</b>
-          <span className="mx-2 text-faint">·</span>
-          已启用 <b className="text-ink">{enabled}</b>
-        </div>
-        <div className="flex items-center gap-3 text-[13px]">
-          <button
-            type="button"
-            disabled={busy || detected.length === 0}
-            onClick={() => {
-              const pending = detected.filter((agent) => !agent.enabled);
-              void run(
-                () =>
-                  pending.length === 0
-                    ? Promise.resolve(agents)
-                    : Promise.all(pending.map((agent) => agentEnable(agent.key))),
-                "已启用全部已检测的 Agent。",
-              );
-            }}
-            className="text-accent hover:underline disabled:opacity-40"
-          >
-            全部启用
-          </button>
-          <button
-            type="button"
-            disabled={busy || detected.length === 0}
-            onClick={() => {
-              const pending = detected.filter((agent) => agent.enabled);
-              void run(
-                () =>
-                  pending.length === 0
-                    ? Promise.resolve(agents)
-                    : Promise.all(pending.map((agent) => agentDisable(agent.key))),
-                "已停用全部已检测的 Agent。",
-              );
-            }}
-            className="text-accent hover:underline disabled:opacity-40"
-          >
-            全部禁用
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void run(() => agentDetect(), "已按本机目录重新检测（检测不启动 Agent、不部署技能）。")
-            }
-            className="flex items-center gap-1.5 text-accent hover:underline disabled:opacity-40"
-          >
-            <RefreshCw className="size-3.5" strokeWidth={1.75} />
-            重新检测
-          </button>
-        </div>
-      </div>
-
-      {error && <Notice tone="danger">{error}</Notice>}
-
-      <div>
-        <p className="mb-2 text-[12px] text-faint">已检测到的 Agent {detected.length}</p>
-        {detected.length === 0 ? (
-          <p className="rounded-lg border border-line-soft bg-panel p-4 text-[13px] text-muted">
-            本机尚未检测到 Agent；可在安装 Agent 后重新检测。
-          </p>
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {detected.map((agent) => (
-              <AgentCard
-                key={agent.key}
-                agent={agent}
-                busy={busy}
-                draggable
-                dragging={dragKey === agent.key}
-                onDragStart={() => setDragKey(agent.key)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => dropOn(agent.key)}
-                onToggle={() => void toggle(agent)}
-                onSelect={() => onSelectTarget(agent.key)}
-                onSaveDir={(kind, path) => void updateDir(agent.key, kind, path)}
-                onResetDir={(kind) => void resetDir(agent.key, kind)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div>
-        <button
-          type="button"
-          onClick={() => setOthersOpen((value) => !value)}
-          className="flex items-center gap-1.5 text-[12px] text-muted hover:text-ink-2"
-        >
-          {othersOpen ? (
-            <ChevronDown className="size-3.5" strokeWidth={2} />
-          ) : (
-            <ChevronRight className="size-3.5" strokeWidth={2} />
-          )}
-          其他支持的 Agent（{others.length}）
-        </button>
-        {othersOpen && (
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            {others.map((agent) => (
-              <AgentCard
-                key={agent.key}
-                agent={agent}
-                busy={busy}
-                dragging={false}
-                onDragStart={() => {}}
-                onDragOver={() => {}}
-                onDrop={() => {}}
-                onToggle={() => void toggle(agent)}
-                onSelect={() => onSelectTarget(agent.key)}
-                onSaveDir={(kind, path) => void updateDir(agent.key, kind, path)}
-                onResetDir={(kind) => void resetDir(agent.key, kind)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function kindLabel(kind: AgentDirKind): string {
-  return kind === "skills" ? "技能目录" : kind === "project-rel" ? "项目相对路径" : "指令目标";
-}
-
-function AgentCard({
-  agent,
-  busy,
-  draggable = false,
-  dragging,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onToggle,
-  onSelect,
-  onSaveDir,
-  onResetDir,
-}: {
-  agent: AgentView;
-  busy: boolean;
-  draggable?: boolean;
-  dragging: boolean;
-  onDragStart: () => void;
-  onDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
-  onDrop: () => void;
-  onToggle: () => void;
-  onSelect: () => void;
-  onSaveDir: (kind: AgentDirKind, path: string) => void;
-  onResetDir: (kind: AgentDirKind) => void;
-}) {
-  const icon = agentIconSrc(agent);
-  return (
-    <div
-      draggable={draggable}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      className={`min-h-[94px] rounded-xl border border-line bg-panel px-3.5 py-3 shadow-card ${
-        dragging ? "opacity-60" : ""
-      }`}
-    >
-      <div className="flex items-center gap-2.5">
-        {draggable && (
-          <GripVertical className="size-3.5 shrink-0 cursor-grab text-faint" strokeWidth={1.75} />
-        )}
-        {icon ? (
-          <img
-            src={icon}
-            alt=""
-            className={`size-4 shrink-0 object-contain ${agent.invert_in_dark ? "dark:invert" : ""}`}
-          />
-        ) : (
-          <Layers className="size-4 shrink-0 text-muted" strokeWidth={1.75} />
-        )}
-        <button
-          type="button"
-          title={agent.key}
-          onClick={onSelect}
-          className="min-w-0 flex-1 truncate text-left text-[14px] font-semibold hover:text-accent"
-        >
-          {agent.display_name}
-        </button>
-        <Toggle
-          checked={agent.enabled}
-          onChange={onToggle}
-          title={`${agent.enabled ? "停用" : "启用"} ${agent.display_name}`}
-        />
-      </div>
-
-      <div className="mt-2.5 flex flex-col gap-1.5">
-        <PathLine
-          label="技能目录"
-          value={agent.skills_dir}
-          fallback={agent.skills_dir_default}
-          isCustom={agent.skills_dir_custom}
-          busy={busy}
-          allowReset
-          onSave={(next) => onSaveDir("skills", next)}
-          onReset={() => onResetDir("skills")}
-        />
-        <PathLine
-          label="项目路径"
-          value={agent.project_rel_dir}
-          fallback={agent.project_rel_dir_default}
-          isCustom={
-            agent.project_rel_dir !== agent.project_rel_dir_default
-          }
-          busy={busy}
-          allowReset
-          onSave={(next) => onSaveDir("project-rel", next)}
-          onReset={() => onResetDir("project-rel")}
-        />
-        <p className="text-[11px] text-faint">
-          检测目录：{agent.detected ? "存在" : "不存在"} · 目标 {`agent:${agent.key}`}
-        </p>
-      </div>
-    </div>
+    <DeploymentList domain={domain} agents={agents} onNotice={onNotice} />
   );
 }
 
@@ -536,7 +91,6 @@ function LocalSkillsView({
   target,
   agent,
   agents,
-  busy,
   onBack,
   onOpenSettings,
   onNotice,
@@ -545,7 +99,6 @@ function LocalSkillsView({
   target: string;
   agent: AgentView | undefined;
   agents: AgentView[];
-  busy: boolean;
   onBack: () => void;
   onOpenSettings: () => void;
   onNotice: (message: string) => void;
@@ -790,7 +343,7 @@ function LocalSkillsView({
                     <button
                       type="button"
                       title={`收编 ${skill.name} 到技能库并接管原部署`}
-                      disabled={busy || localBusy}
+                      disabled={localBusy}
                       onClick={() => setAdoptTargets([skill])}
                       className="grid size-6 shrink-0 place-items-center rounded-[5px] text-faint hover:bg-hover hover:text-accent disabled:opacity-40"
                     >
@@ -801,7 +354,7 @@ function LocalSkillsView({
                     <button
                       type="button"
                       title={`复制 ${skill.library_skill} 到另一库`}
-                      disabled={busy || localBusy}
+                      disabled={localBusy}
                       onClick={() => setCopySource(skill)}
                       className="grid size-6 shrink-0 place-items-center rounded-[5px] text-faint hover:bg-hover hover:text-accent disabled:opacity-40"
                     >
@@ -811,7 +364,7 @@ function LocalSkillsView({
                   <button
                     type="button"
                     title={`删除本机副本 ${skill.name}`}
-                    disabled={busy || localBusy}
+                    disabled={localBusy}
                     onClick={() => setDeleteTarget([skill.name])}
                     className="grid size-6 shrink-0 place-items-center rounded-[5px] text-faint hover:bg-hover hover:text-danger disabled:opacity-40"
                   >
@@ -883,3 +436,355 @@ function LocalSkillsView({
     </div>
   );
 }
+
+/** 部署清单筛选：全部 / 已部署（记录正常）/ 有变更（副本被外部修改而暂停）。 */
+type DeploymentFilter = "all" | "deployed" | "changed";
+
+/**
+ * 跨目标部署清单（FR-057）：「全部编码 Agents」/「全部龙虾 Agent」的页面内容。
+ *
+ * 数据与库页「文件与部署」同一份本机部署记录（`deploy_status`，跨目标的受管部署），
+ * 按「技能 × 目标」列出；前端只做展示、筛选与发起部署，准入与合成仍由 core 决定。
+ * 本批不做原型的「仅本地」筛选：那要对每个目标目录逐一扫描，成本高，只做记录侧筛选。
+ */
+function DeploymentList({
+  domain,
+  agents,
+  onNotice,
+}: {
+  domain: Domain;
+  agents: AgentView[];
+  onNotice: (message: string) => void;
+}) {
+  const [records, setRecords] = useState<DeploymentStatusView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<DeploymentFilter>("all");
+  const [sharedDir, setSharedDir] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+  const [picking, setPicking] = useState(false);
+  const [deployTargets, setDeployTargets] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await deployStatus();
+        if (!cancelled) {
+          setRecords(list);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(String(err));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [version]);
+
+  useEffect(() => {
+    void sharedDirGet()
+      .then(setSharedDir)
+      .catch(() => setSharedDir(null));
+  }, [version]);
+
+  const mine = useMemo(
+    () => records.filter((record) => record.skill.startsWith(`${domain}/`)),
+    [records, domain],
+  );
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return mine.filter((record) => {
+      if (filter === "deployed" && record.status !== "ok") {
+        return false;
+      }
+      if (filter === "changed" && record.status !== "paused_local_change") {
+        return false;
+      }
+      if (q === "") {
+        return true;
+      }
+      return [
+        record.skill,
+        skillName(record.skill),
+        deploymentTargetName(record.target, agents),
+        record.target_path,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [mine, filter, query, agents]);
+
+  async function changeSharedDir(path: string | null) {
+    try {
+      const saved = await sharedDirSet(path);
+      setSharedDir(saved);
+      setError(null);
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-faint"
+              strokeWidth={1.75}
+            />
+            <input
+              className="field-input h-9 w-[240px] pl-8 text-[12px]"
+              placeholder="搜索技能、目标或路径"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          <Segmented
+            options={[
+              { value: "all", label: "全部" },
+              { value: "deployed", label: "已部署" },
+              { value: "changed", label: "有变更" },
+            ]}
+            value={filter}
+            onChange={(value) => setFilter(value)}
+          />
+        </div>
+        <div className="flex items-center gap-2.5">
+          <span className="text-[12px] text-faint">本机部署记录 {mine.length} 项</span>
+          <Button compact onClick={() => setVersion((value) => value + 1)}>
+            <RefreshCw className="size-3.5" strokeWidth={1.75} />
+            刷新
+          </Button>
+          <Button kind="primary" compact onClick={() => setPicking(true)}>
+            <Plus className="size-3.5" strokeWidth={1.75} />
+            从库部署
+          </Button>
+        </div>
+      </div>
+
+      {error && <Notice tone="danger">{error}</Notice>}
+
+      {loading ? (
+        <p className="text-[13px] text-muted">正在读取本机部署记录…</p>
+      ) : visible.length === 0 ? (
+        <p className="rounded-lg border border-line-soft bg-panel p-4 text-[13px] text-muted">
+          {mine.length === 0
+            ? "本机还没有该管理域的部署记录；可用「从库部署」把库内技能部署到本机目标。"
+            : "没有符合筛选条件的部署记录。"}
+        </p>
+      ) : (
+        <div className="grid grid-cols-3 gap-3">
+          {visible.map((record) => {
+            const paused = record.status === "paused_local_change";
+            return (
+              <article
+                key={`${record.skill}:${record.target}`}
+                className="rounded-xl border border-line bg-panel p-3.5 shadow-card"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={`size-2 shrink-0 rounded-full ${paused ? "bg-warn" : "bg-accent-light"}`}
+                  />
+                  <h3
+                    className="min-w-0 flex-1 truncate text-[14px] font-semibold"
+                    title={record.skill}
+                  >
+                    {skillName(record.skill)}
+                  </h3>
+                  <Badge tone={paused ? "amber" : "green"}>
+                    {paused ? "本地有变更" : "已同步"}
+                  </Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-faint">
+                  <span>目标：{deploymentTargetName(record.target, agents)}</span>
+                  <span className="font-mono">库内引用 {record.skill}</span>
+                  {!record.library_exists && <Badge tone="amber">库内条目已删除，副本待处置</Badge>}
+                  {record.warning && (
+                    <Badge tone="amber" title={record.warning}>
+                      支持范围收窄
+                    </Badge>
+                  )}
+                </div>
+                <p
+                  className="mt-2 truncate font-mono text-[11px] text-faint"
+                  title={record.target_path}
+                >
+                  {record.target_path}
+                </p>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-[12px] text-faint">
+        同一个技能可部署到多个目标；本清单只列本机受管部署记录（未受管的「仅本地」技能需在对应目标页查看）。
+      </p>
+
+      {picking && (
+        <SkillPickerDialog
+          domain={domain}
+          onCancel={() => setPicking(false)}
+          onConfirm={(references) => {
+            setPicking(false);
+            setDeployTargets(references);
+          }}
+        />
+      )}
+
+      {deployTargets && (
+        <DeployDialog
+          domain={domain}
+          references={deployTargets}
+          agents={agents}
+          sharedDir={sharedDir}
+          onSharedDirChange={changeSharedDir}
+          onClose={() => setDeployTargets(null)}
+          onDone={(message) => {
+            setDeployTargets(null);
+            onNotice(message);
+            setError(null);
+            setVersion((value) => value + 1);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 从库部署的技能选择：只选技能，目标在既有部署弹窗里选。 */
+function SkillPickerDialog({
+  domain,
+  onCancel,
+  onConfirm,
+}: {
+  domain: Domain;
+  onCancel: () => void;
+  onConfirm: (references: string[]) => void;
+}) {
+  const [skills, setSkills] = useState<SkillSummary[] | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listSkills({ domain })
+      .then((result) => {
+        if (!cancelled) {
+          setSkills(result.skills);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(String(err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [domain]);
+
+  const visible = (skills ?? []).filter((skill) => {
+    const q = query.trim().toLowerCase();
+    if (q === "") {
+      return true;
+    }
+    return [skill.name, skill.comment ?? "", ...skill.tags].join(" ").toLowerCase().includes(q);
+  });
+
+  return (
+    <Dialog
+      title={`从库部署 · 选择技能（${domain === "code" ? "编码库" : "龙虾库"}）`}
+      subtitle="选择库内技能后，在部署弹窗里选择目标；部署生成合成副本，不改动库内技能。"
+      width="w-[640px]"
+      onClose={onCancel}
+      footer={
+        <>
+          <span className="text-[12px] text-faint">已选 {selected.length} 个技能</span>
+          <div className="flex gap-2.5">
+            <Button onClick={onCancel}>取消</Button>
+            <Button
+              kind="primary"
+              disabled={selected.length === 0}
+              onClick={() => onConfirm(selected)}
+            >
+              下一步：选择目标
+            </Button>
+          </div>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {error && <Notice tone="danger">{error}</Notice>}
+
+        <input
+          className="field-input"
+          placeholder="搜索名称、中文注释或标签"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+
+        {skills === null && error === null ? (
+          <p className="text-[13px] text-muted">正在读取库内技能…</p>
+        ) : visible.length === 0 ? (
+          <p className="rounded-lg border border-line-soft p-4 text-[13px] text-muted">
+            {skills?.length === 0 ? "该管理域还没有技能。" : "没有符合搜索条件的技能。"}
+          </p>
+        ) : (
+          <ul className="flex max-h-[45vh] flex-col gap-1.5 overflow-auto">
+            {visible.map((skill) => {
+              const reference = `${skill.domain}/${skill.name}`;
+              const on = selected.includes(reference);
+              return (
+                <li key={reference}>
+                  <label
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-[10px] border p-2.5 ${
+                      on ? "border-accent-line bg-accent-soft" : "border-line"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="selectbox mt-0.5"
+                      checked={on}
+                      onChange={() =>
+                        setSelected((current) =>
+                          current.includes(reference)
+                            ? current.filter((item) => item !== reference)
+                            : [...current, reference],
+                        )
+                      }
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-medium" title={skill.name}>
+                        {skill.name}
+                      </span>
+                      {skill.comment && (
+                        <span className="block truncate text-[12px] text-muted">{skill.comment}</span>
+                      )}
+                      <span className="block font-mono text-[11px] text-faint">{reference}</span>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+

@@ -43,8 +43,14 @@ const VIEWS: Record<string, { title: string; subtitle?: string; pending?: string
   hermes: { title: "Hermes 档案", subtitle: "档案共用库内一份技能内容" },
   tools: { title: "工具中心", subtitle: "本机工具清单 · 版本检查由 Skill Manager 负责，安装与更新交给外部 Agent" },
   "presets-code": { title: "预设", subtitle: "按组合叠加部署与按成员撤销；定义编辑不触发部署" },
-  "agents-code": { title: "编码 Agent", subtitle: "本机编码 Agent 的配置与本地技能" },
-  "agents-lobster": { title: "龙虾 Agent", subtitle: "本机龙虾 Agent 的配置与本地技能" },
+  "agents-code": {
+    title: "全部编码 Agents",
+    subtitle: "本机部署清单 · 同一个技能可部署到多个目标",
+  },
+  "agents-lobster": {
+    title: "全部龙虾 Agent",
+    subtitle: "本机部署清单 · 同一个技能可部署到多个目标",
+  },
   "agent:shared": { title: "共享 Agent", subtitle: "本机共享技能目录 · 编码 Agent 的部署目标" },
   settings: { title: "设置", subtitle: "本机配置与 SkillVault 接入" },
 };
@@ -376,7 +382,6 @@ export function App() {
             setCount(null);
             setNotice(null);
           }}
-          onAgentsChanged={setAgents}
           onLibrarySaved={saveFlow.afterSave}
           onNotice={(message) => {
             setNotice(message);
@@ -390,6 +395,13 @@ export function App() {
           onRetryUpload={saveFlow.retry}
           settings={settings}
           onSettingsChange={setSettings}
+          agents={agents}
+          onAgentsChanged={setAgents}
+          onOpenTarget={(target) => {
+            setActiveKey(`agent:${target}`);
+            setCount(null);
+            setNotice(null);
+          }}
           reloadToken={reloadToken}
         />
       ) : (

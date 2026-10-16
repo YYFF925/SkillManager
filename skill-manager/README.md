@@ -20,8 +20,9 @@ skill-manager/
 ├── crates/cli/                # clap 命令行入口（Agent 主要用户）
 ├── src-tauri/                 # Tauri 2 壳：command 层薄封装 core，无业务逻辑；托盘、诊断、调度
 ├── src/                       # 前端（React + TypeScript + Vite + Tailwind）
-│   ├── pages/                 #   技能库（code/lobster）、预设、Agent（编码 Agent 分组下含「共享 Agent」页：
-│   │                          #   列出共享目录技能、区分受管/仅本地）、Hermes、工具中心、设置
+│   ├── pages/                 #   技能库（code/lobster）、预设、跨目标部署清单（「全部编码 Agents」/「全部龙虾
+│   │                          #   Agent」按技能 × 目标列出本机部署记录）、Hermes、工具中心、设置（首个区块为
+│   │                          #   Agent 检测与启停排序、目录行内编辑；另有「共享 Agent」页列共享目录技能）
 │   ├── components/            #   详情、弹窗、部署/入库/上游、诊断与容量面板
 │   └── services/client.ts     #   Tauri command 的类型化调用封装
 ├── assets/skills/             # 配套维护 Skill 源文件（见下）

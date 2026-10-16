@@ -1,14 +1,15 @@
 /**
- * 共享目录技能浏览（T105/T106）：共享 Agent 页复用本机目标的技能列表视图。
+ * Agent 页面（T105/T106/T111）：跨目标部署清单，以及单个目标（共享 Agent 页）复用的本地技能列表视图。
  *
  * 只验证界面与 core 输出之间的接线：未设置共享目录路径时保留页面并如实提示、给出前往设置入口
- * （不猜路径、不显示成“没有技能”）；已设置时按受管／仅本地／本地有变更三态渲染并提供删除入口。
+ * （不猜路径、不显示成“没有技能”）；已设置时按受管／仅本地／本地有变更三态渲染并提供删除入口；
+ * 「全部 Agents」渲染部署记录，不再出现 Agent 管理入口（FR-057）。
  */
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentPage } from "./AgentPage";
-import type { LocalSkillView } from "../services/client";
+import type { AgentView, DeploymentStatusView, LocalSkillView } from "../services/client";
 
 /** 受管（已同步）。 */
 const managed: LocalSkillView = {
@@ -52,15 +53,68 @@ const skillsFixture = {
   total: 3,
 };
 
+/** 本机内置 Agent（用于部署清单的目标展示名）。 */
+const codex: AgentView = {
+  key: "codex",
+  display_name: "Codex",
+  domain: "code",
+  detected: true,
+  enabled: true,
+  order: 0,
+  skills_dir: "/tmp/codex/skills",
+  skills_dir_default: "/tmp/codex/skills",
+  skills_dir_custom: false,
+  project_rel_dir: null,
+  project_rel_dir_default: null,
+  instructions_target: "/tmp/codex/AGENTS.md",
+  icon: null,
+  invert_in_dark: false,
+};
+
+/** 跨目标部署记录：同一技能部署到两个目标，其一本地有变更。 */
+const deployRecords: DeploymentStatusView[] = [
+  {
+    skill: "code/agent-skill-deployment",
+    target: "agent:codex",
+    target_path: "/tmp/codex/skills/agent-skill-deployment",
+    status: "ok",
+    source_hash: "a",
+    deployed_hash: "a",
+    synced_at: null,
+    library_exists: true,
+  },
+  {
+    skill: "code/agent-skill-deployment",
+    target: "shared",
+    target_path: "/tmp/shared-skills/agent-skill-deployment",
+    status: "paused_local_change",
+    source_hash: "a",
+    deployed_hash: "b",
+    synced_at: null,
+    library_exists: true,
+  },
+];
+
 vi.mock("../services/client", () => ({
   // 共享目录未设置时为 null；各用例按需覆盖。
   sharedDirGet: vi.fn(async () => "/tmp/shared-skills"),
+  sharedDirSet: vi.fn(async () => "/tmp/shared-skills"),
   agentLocalSkills: vi.fn(async () => skillsFixture),
   agentDeleteLocal: vi.fn(async () => ({ removed: [], errors: [] })),
   copySkill: vi.fn(),
+  // 部署清单与「从库部署」；默认无记录，用例按需覆盖。
+  deployStatus: vi.fn(async () => []),
+  listSkills: vi.fn(async () => ({
+    skills: [],
+    total: 0,
+    tag_candidates: [],
+    categories: [],
+  })),
+  deployTo: vi.fn(),
+  deployUndo: vi.fn(),
 }));
 
-import { agentDeleteLocal, agentLocalSkills, sharedDirGet } from "../services/client";
+import { agentDeleteLocal, agentLocalSkills, deployStatus, sharedDirGet } from "../services/client";
 
 const noop = () => {};
 
@@ -68,6 +122,7 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.mocked(sharedDirGet).mockResolvedValue("/tmp/shared-skills");
   vi.mocked(agentLocalSkills).mockResolvedValue(skillsFixture);
+  vi.mocked(deployStatus).mockResolvedValue([]);
 });
 
 function renderShared() {
@@ -77,7 +132,6 @@ function renderShared() {
       selectedTarget="shared"
       agents={[]}
       onSelectTarget={noop}
-      onAgentsChanged={noop}
       onNotice={noop}
       onOpenSettings={noop}
     />,
@@ -94,7 +148,6 @@ describe("AgentPage · 共享 Agent", () => {
         selectedTarget="shared"
         agents={[]}
         onSelectTarget={noop}
-        onAgentsChanged={noop}
         onNotice={noop}
         onOpenSettings={onOpenSettings}
       />,
@@ -160,5 +213,61 @@ describe("AgentPage · 共享 Agent", () => {
       expect(screen.getByText("共享技能目录下没有技能（尚未部署）。")).toBeTruthy(),
     );
     expect(screen.queryByText(/尚未设置共享目录路径/)).toBeNull();
+  });
+});
+
+describe("AgentPage · 全部编码 Agents（跨目标部署清单）", () => {
+  it("按技能 × 目标渲染部署记录，且不再出现 Agent 管理入口", async () => {
+    vi.mocked(deployStatus).mockResolvedValue(deployRecords);
+    render(
+      <AgentPage
+        domain="code"
+        selectedTarget={null}
+        agents={[codex]}
+        onSelectTarget={noop}
+        onNotice={noop}
+        onOpenSettings={noop}
+      />,
+    );
+
+    // 同一技能的两个目标都出现，目标名与路径、库内引用、状态都在卡片上。
+    await waitFor(() => expect(screen.getAllByText("agent-skill-deployment")).toHaveLength(2));
+    expect(deployStatus).toHaveBeenCalled();
+    expect(screen.getByText("目标：Codex")).toBeTruthy();
+    expect(screen.getByText("目标：共享目录")).toBeTruthy();
+    expect(screen.getAllByText("库内引用 code/agent-skill-deployment")).toHaveLength(2);
+    expect(screen.getByText("/tmp/codex/skills/agent-skill-deployment")).toBeTruthy();
+    expect(screen.getByText("已同步")).toBeTruthy();
+    expect(screen.getByText("本地有变更")).toBeTruthy();
+
+    // Agent 管理（检测/启停/排序/目录编辑）已迁到设置页，本页不再出现。
+    expect(screen.queryByText("重新检测")).toBeNull();
+    expect(screen.queryByText(/其他支持的 Agent/)).toBeNull();
+    expect(screen.queryByTitle("修改技能目录")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
+  it("按状态筛选部署记录（已部署 / 有变更）", async () => {
+    vi.mocked(deployStatus).mockResolvedValue(deployRecords);
+    render(
+      <AgentPage
+        domain="code"
+        selectedTarget={null}
+        agents={[codex]}
+        onSelectTarget={noop}
+        onNotice={noop}
+        onOpenSettings={noop}
+      />,
+    );
+    await waitFor(() => expect(screen.getAllByText("agent-skill-deployment")).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "有变更" }));
+    expect(screen.getAllByText("agent-skill-deployment")).toHaveLength(1);
+    expect(screen.getByText("目标：共享目录")).toBeTruthy();
+    expect(screen.queryByText("目标：Codex")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "已部署" }));
+    expect(screen.getByText("目标：Codex")).toBeTruthy();
+    expect(screen.queryByText("目标：共享目录")).toBeNull();
   });
 });
