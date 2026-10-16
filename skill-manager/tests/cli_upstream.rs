@@ -33,6 +33,74 @@ fn check_all(env: &TestEnv) -> Value {
     env.cli_json(&["skill", "check", "--all"])
 }
 
+#[test]
+fn upstream_delete_reports_paused_copy_as_partial() {
+    let env = TestEnv::new();
+    let up = repo(&env);
+    import(&env, &up, "tools/alpha", "code");
+    env.cli_json(&["deploy", "to", "codex", "code/alpha"]);
+    let copy = env.home.join(".codex/skills/alpha/SKILL.md");
+    std::fs::write(&copy, "本地需要保留的修改").unwrap();
+    std::fs::remove_dir_all(up.path.join("tools/alpha")).unwrap();
+    up.commit("删除 alpha");
+    check_all(&env);
+
+    let (code, result) = env.cli_json_raw(&["skill", "update", "code/alpha"]);
+    assert_eq!(code, 2, "{result}");
+    assert_eq!(result["result"], "partial");
+    assert_eq!(result["data"]["action"], "removed");
+    assert_eq!(result["errors"][0]["skill"], "code/alpha");
+    assert_eq!(result["errors"][0]["target"], "agent:codex");
+    assert!(result["errors"][0]["path"].as_str().unwrap().ends_with("alpha"));
+    assert!(!env.path("code/alpha").exists());
+    assert_eq!(std::fs::read_to_string(copy).unwrap(), "本地需要保留的修改");
+    assert_eq!(env.cli_json(&["deploy", "status", "--paused"])["deployments"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn repo_update_refreshes_only_existing_deployments_and_reports_pauses() {
+    let env = TestEnv::new();
+    let up = repo(&env);
+    import(&env, &up, "tools/alpha", "code");
+    import(&env, &up, "tools/beta", "code");
+    env.cli_json(&["deploy", "to", "codex", "code/alpha", "code/beta"]);
+    let alpha = env.home.join(".codex/skills/alpha/SKILL.md");
+    let beta = env.home.join(".codex/skills/beta/SKILL.md");
+    std::fs::write(&beta, "本地修改").unwrap();
+    up.skill(Some("tools"), "alpha", "alpha v2\n");
+    up.skill(Some("tools"), "beta", "beta v2\n");
+    up.skill(Some("tools"), "gamma", "gamma v1\n");
+    up.commit("v2");
+    check_all(&env);
+    let (code, report) = env.cli_json_raw(&["skill", "update-repo", &up.url(), "--include-new", "tools/gamma", "--domain", "code", "--uncategorized"]);
+    assert_eq!(code, 2, "{report}");
+    assert_eq!(std::fs::read_to_string(alpha).unwrap(), "alpha v2\n");
+    assert_eq!(std::fs::read_to_string(beta).unwrap(), "本地修改");
+    assert!(env.path("code/gamma/SKILL.md").exists());
+    assert!(!env.home.join(".codex/skills/gamma").exists());
+    assert_eq!(report["errors"][0]["skill"], "code/beta");
+}
+
+#[test]
+fn reapplying_adopted_version_keeps_later_local_maintenance() {
+    let env = TestEnv::new();
+    let up = repo(&env);
+    up.write("tools/alpha/.manager/meta.yaml", "comment: upstream\n");
+    up.commit("上游注释");
+    import(&env, &up, "tools/alpha", "code");
+    env.cli_json(&["deploy", "to", "codex", "code/alpha"]);
+    env.cli_json(&["skill", "set", "code/alpha", "--comment", "local-maintained"]);
+    env.write("code/alpha/SKILL.md", "本地维护的正文\n");
+    let copy = env.home.join(".codex/skills/alpha/SKILL.md");
+    let before = std::fs::read(&copy).unwrap();
+    check_all(&env);
+    let result = env.cli_json(&["skill", "update", "code/alpha"]);
+    assert_eq!(result["action"], "unchanged");
+    assert!(env.read("code/alpha/.manager/meta.yaml").unwrap().contains("local-maintained"));
+    assert_eq!(alpha_entry(&env), "本地维护的正文\n");
+    assert_eq!(std::fs::read(copy).unwrap(), before);
+}
+
 fn skill_result(report: &Value, skill: &str) -> Value {
     report["skills"]
         .as_array()
@@ -269,7 +337,9 @@ fn paused_copy_is_not_overwritten_by_update() {
     let (code, result) = env.cli_json_raw(&["skill", "update", "code/alpha"]);
     assert_ne!(code, 0, "部署同步暂停应如实报告未完成：{result}");
     let message = result["errors"][0]["message"].as_str().unwrap();
-    assert!(message.contains("部署") && message.contains("未完成"), "{message}");
+    assert!(message.contains("暂停"), "{message}");
+    assert_eq!(result["result"], "partial");
+    assert_eq!(result["data"]["action"], "updated");
     assert_eq!(
         std::fs::read_to_string(copy.join("SKILL.md")).unwrap(),
         "用户手改的副本\n",

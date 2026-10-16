@@ -77,30 +77,8 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 fn check_updates<R: Runtime>(app: &AppHandle<R>) {
     let app = app.clone();
     std::thread::spawn(move || {
-        let state: tauri::State<'_, crate::commands::AppState> = app.state();
-        let Ok(ctx) = state.get() else {
-            return;
-        };
-        match skill_manager_core::scheduler::run(&ctx, skill_manager_core::Trigger::Manual) {
-            Ok(report) => {
-                let _ = skill_manager_core::diagnostics::record(
-                    ctx.state(),
-                    "info",
-                    "tray.check",
-                    &format!(
-                        "托盘检查完成：上游 {}，库拉取 {}",
-                        report.upstream.status, report.pull.status
-                    ),
-                );
-            }
-            Err(err) => {
-                let _ = skill_manager_core::diagnostics::record(
-                    ctx.state(),
-                    "error",
-                    "tray.check",
-                    &err.to_string(),
-                );
-            }
+        if let Err(err) = crate::commands::run_schedule(&app, skill_manager_core::Trigger::Manual) {
+            eprintln!("托盘检查失败：{err}");
         }
     });
 }

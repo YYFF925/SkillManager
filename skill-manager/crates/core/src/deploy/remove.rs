@@ -41,33 +41,21 @@ impl DeploymentService<'_> {
                 };
 
                 let path = PathBuf::from(&record.target_path);
-                if self.is_locally_changed(&record, &path)? && !discard_local_changes {
-                    report.push_failure(
-                        ItemError::new(
-                            "受管副本已被外部修改，撤销暂停；确认丢弃请加 --discard-local-changes",
-                        )
-                        .skill(reference.to_string())
-                        .target(target_str)
-                        .path(record.target_path.clone()),
-                    );
-                    continue;
+                let result = (|| -> Result<()> {
+                    if self.is_locally_changed(&record, &path)? && !discard_local_changes {
+                        return Err(CoreError::other("受管副本已被外部修改，撤销暂停；确认丢弃请加 --discard-local-changes"));
+                    }
+                    remove_path(&path)?;
+                    self.state.delete_deployment(reference.domain, &reference.name, &target_str).map(|_| ())
+                })();
+                match result {
+                    Ok(()) => report.push_item(DeployItemView {
+                        skill: reference.to_string(), target: target_str,
+                        path: record.target_path.clone(), action: "removed".to_string(),
+                        status: DeploymentStatus::Ok.as_str().to_string(), applied_overlays: Vec::new(), message: None,
+                    }),
+                    Err(err) => report.push_failure(ItemError::from_error(&err).skill(reference.to_string()).target(target_str).path(record.target_path.clone())),
                 }
-
-                remove_path(&path)?;
-                self.state.delete_deployment(
-                    reference.domain,
-                    &reference.name,
-                    &target_str,
-                )?;
-                report.push_item(DeployItemView {
-                    skill: reference.to_string(),
-                    target: target_str,
-                    path: record.target_path.clone(),
-                    action: "removed".to_string(),
-                    status: DeploymentStatus::Ok.as_str().to_string(),
-                    applied_overlays: Vec::new(),
-                    message: None,
-                });
             }
         }
         Ok(report)
@@ -78,31 +66,21 @@ impl DeploymentService<'_> {
         let mut report = DeployReport::default();
         for record in self.state.deployments_for(reference.domain, &reference.name)? {
             let path = PathBuf::from(&record.target_path);
-            if self.is_locally_changed(&record, &path)? {
-                // 保留定位记录，并把状态如实标记为暂停，便于后续继续清理。
-                self.state.upsert_deployment(&super::apply::paused_record(&record))?;
-                report.push_failure(
-                    ItemError::new(
-                        "库已删除、该副本清理暂停（副本已被外部修改）；请检查后继续清理",
-                    )
-                    .skill(record.reference().to_string())
-                    .target(record.target.clone())
-                    .path(record.target_path.clone()),
-                );
-                continue;
+            let result = (|| -> Result<()> {
+                if self.is_locally_changed(&record, &path)? {
+                    self.state.upsert_deployment(&super::apply::paused_record(&record))?;
+                    return Err(CoreError::other("库已删除、该副本清理暂停（副本已被外部修改）；请检查后继续清理"));
+                }
+                remove_path(&path)?;
+                self.state.delete_deployment(reference.domain, &record.name, &record.target).map(|_| ())
+            })();
+            match result {
+                Ok(()) => report.push_item(DeployItemView {
+                    skill: record.reference().to_string(), target: record.target.clone(), path: record.target_path.clone(),
+                    action: "removed".to_string(), status: DeploymentStatus::Ok.as_str().to_string(), applied_overlays: Vec::new(), message: None,
+                }),
+                Err(err) => report.push_failure(ItemError::from_error(&err).skill(record.reference().to_string()).target(record.target.clone()).path(record.target_path.clone())),
             }
-            remove_path(&path)?;
-            self.state
-                .delete_deployment(reference.domain, &record.name, &record.target)?;
-            report.push_item(DeployItemView {
-                skill: record.reference().to_string(),
-                target: record.target.clone(),
-                path: record.target_path.clone(),
-                action: "removed".to_string(),
-                status: DeploymentStatus::Ok.as_str().to_string(),
-                applied_overlays: Vec::new(),
-                message: None,
-            });
         }
         Ok(report)
     }

@@ -23,6 +23,7 @@ import {
 import {
   agentDeleteLocal,
   agentLocalSkills,
+  agentReadLocal,
   copySkill,
   deployStatus,
   listSkills,
@@ -202,6 +203,7 @@ function LocalSkillsView({
       onNotice(
         `已复制 ${skill.library_skill} 到${to === "code" ? "编码" : "龙虾"}库：${to}/${created.name}（不部署，两份独立维护）。`,
       );
+      await onLibrarySaved?.();
     } catch (err) {
       setError(String(err));
     } finally {
@@ -433,7 +435,7 @@ function LocalSkillsView({
                   {skill.path}
                 </p>
                 <div className="mt-2 flex">
-                  <QuickDeploy reference={skill.library_exists ? skill.library_skill : null} domain={agentDomain}
+                  <QuickDeploy deploymentBlocks={skill.deployment_blocks} reference={skill.library_exists ? skill.library_skill : null} domain={agentDomain}
                     agents={agents} records={records} onChange={reload} onError={setError} />
                 </div>
               </article>
@@ -444,7 +446,7 @@ function LocalSkillsView({
 
       {detailSkill && (
         <LocalSkillDetail
-          target={target}
+          readFile={(file) => agentReadLocal(target, detailSkill.name, file)}
           skill={detailSkill}
           onClose={() => setDetailSkill(null)}
           onAdopt={() => { setAdoptTargets([detailSkill]); setDetailSkill(null); }}
@@ -703,7 +705,7 @@ function DeploymentList({
                   {record.target_path}
                 </p>
                 <div className="mt-2 flex">
-                  <QuickDeploy reference={record.library_exists ? record.skill : null} domain={domain}
+                  <QuickDeploy deploymentBlocks={record.deployment_blocks} reference={record.library_exists ? record.skill : null} domain={domain}
                     agents={agents} records={records} onChange={async () => setRecords(await deployStatus())} onError={setError} />
                 </div>
               </article>

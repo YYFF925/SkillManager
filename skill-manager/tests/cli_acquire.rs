@@ -6,6 +6,27 @@ mod common;
 use common::TestEnv;
 use serde_json::Value;
 
+#[test]
+fn failed_manual_acquisition_is_available_in_diagnostics() {
+    let env = TestEnv::new();
+    let missing = env.root.path().join("missing-source");
+    for action in ["preview", "import"] {
+        let mut args = vec!["skill", action, missing.to_str().unwrap()];
+        if action == "import" {
+            args.extend(["--domain", "code", "--skills", "alpha"]);
+        }
+        let (code, _) = env.cli_json_raw(&args);
+        assert_ne!(code, 0);
+    }
+    let report = env.cli_json(&["settings", "diagnostics"]);
+    let logs = report["recent_logs"].as_array().unwrap();
+    for action in ["acquire.preview", "acquire.import"] {
+        let entry = logs.iter().find(|entry| entry["action"] == action).unwrap();
+        assert!(!entry["at"].as_str().unwrap().is_empty());
+        assert!(entry["message"].as_str().unwrap().contains("missing-source"));
+    }
+}
+
 fn skill_exists(env: &TestEnv, rel: &str) -> bool {
     env.path(rel).join("SKILL.md").exists()
 }
@@ -61,6 +82,12 @@ fn import_inherits_upstream_manager_material() {
     up.write("tools/alpha/.manager/translation.md", "上游中文译文\n");
     up.write("tools/alpha/.manager/overlay/_/_/notes.txt", "覆盖层补充\n");
     up.commit("初始");
+
+    let preview = env.cli_json(&["skill", "preview", &up.url()]);
+    assert_eq!(preview["candidates"][0]["comment"], "上游注释");
+    assert_eq!(preview["candidates"][0]["description"], "甲");
+    assert_eq!(preview["candidates"][0]["tags"], serde_json::json!(["上游标签"]));
+    assert!(!skill_exists(&env, "code/alpha"), "阅读来源资料不入库");
 
     env.cli_json(&[
         "skill", "import", &up.url(),

@@ -26,6 +26,7 @@ export interface DeploymentStatusProps {
   /** 本机全部部署记录；组件内部按技能筛选。 */
   records: DeploymentStatusView[];
   agents: AgentView[];
+  deploymentBlocks: Record<string, string>;
   onNotice?: (message: string) => void;
   /** 直接部署/撤销后通知父页面刷新本机记录。 */
   onChanged?: () => void | Promise<void>;
@@ -36,6 +37,7 @@ export function DeploymentStatus({
   domain,
   records,
   agents,
+  deploymentBlocks,
   onNotice,
   onChanged,
 }: DeploymentStatusProps) {
@@ -142,13 +144,15 @@ export function DeploymentStatus({
         {shown.map((item) => {
           const record = byTarget.get(item.value);
           const deployed = record !== undefined;
+          const reason = deploymentBlocks[item.value.includes(":") || item.value === SHARED_TARGET ? item.value : `agent:${item.value}`];
           const warned = record?.warning !== undefined;
           return (
-            <FastTooltip key={item.value} label={item.label}>
+            <FastTooltip key={item.value} label={!deployed && reason ? `${item.label}：${reason}` : item.label}>
               <button
                 type="button"
-                disabled={busy !== null}
+                disabled={busy !== null || (!deployed && !!reason)}
                 aria-label={`${item.label} · ${deployed ? "已部署，点击撤销" : "未部署，点击部署"}`}
+                title={!deployed ? reason : undefined}
                 onClick={() => void toggle(item)}
                 className={`relative grid size-8 place-items-center rounded-lg border transition-colors hover:bg-hover disabled:cursor-default ${
                   deployed

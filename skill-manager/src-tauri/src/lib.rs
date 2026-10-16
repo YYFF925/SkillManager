@@ -47,6 +47,8 @@ pub fn run() {
             commands::vault::vault_open,
             commands::vault::vault_current,
             commands::environment::environment_os,
+            commands::environment::environment_check,
+            commands::environment::environment_schedule_current,
             commands::environment::environment_diagnostics,
             commands::environment::environment_diagnostics_export,
             commands::environment::environment_capacity,
@@ -97,6 +99,7 @@ pub fn run() {
             commands::agent::shared_dir_get,
             commands::hermes::hermes_profiles,
             commands::hermes::hermes_list,
+            commands::hermes::hermes_read,
             commands::hermes::hermes_enable,
             commands::hermes::hermes_disable,
             commands::hermes::hermes_adopt,
@@ -151,11 +154,7 @@ fn spawn_scheduler(app: tauri::AppHandle) {
 }
 
 fn run_schedule(app: &tauri::AppHandle, trigger: skill_manager_core::Trigger) {
-    let state: tauri::State<'_, AppState> = app.state();
-    let Ok(ctx) = state.get() else {
-        return;
-    };
-    if let Err(err) = skill_manager_core::scheduler::run(&ctx, trigger) {
+    if let Err(err) = commands::run_schedule(app, trigger) {
         eprintln!("统一调度失败：{err}");
     }
 }

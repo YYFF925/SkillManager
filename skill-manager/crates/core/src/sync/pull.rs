@@ -42,6 +42,8 @@ pub struct PullReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub connection_error: Option<String>,
     pub message: String,
+    /// 库文件已应用，但部署或指令目标尚未完成的逐项原因。
+    pub errors: Vec<ItemError>,
 }
 
 impl PullReport {
@@ -60,6 +62,7 @@ impl PullReport {
             instruction_targets: Vec::new(),
             connection_error: None,
             message: message.into(),
+            errors: Vec::new(),
         }
     }
 }
@@ -192,15 +195,24 @@ impl SyncService<'_> {
         self.state
             .set_last_sync_at(&crate::deploy::apply::now_iso())?;
 
-        let message = format!(
+        let mut errors = deploy.failures.clone();
+        errors.extend(instruction_targets.iter().filter(|target| !target.ok).map(|target| {
+            ItemError::new(target.error.clone().unwrap_or_else(|| "指令刷新失败".to_string()))
+                .target(format!("agent:{}", target.agent))
+                .path(target.path.clone())
+        }));
+        let mut message = format!(
             "已拉取并应用库变更；刷新已有部署 {} 项{}",
             deploy.items.len(),
             if instructions_changed {
-                format!("；指令源已变化，刷新 {} 个已启用目标", instruction_targets.len())
+                format!("；指令源已变化，刷新 {} 个已启用目标", instruction_targets.iter().filter(|target| target.ok).count())
             } else {
                 String::new()
             }
         );
+        for error in &errors {
+            message.push_str(&format!("\n未完成：{} {} {}", error.target.as_deref().unwrap_or(""), error.path.as_deref().unwrap_or(""), error.message));
+        }
 
         Ok(PullReport {
             outcome: "pulled".to_string(),
@@ -216,6 +228,7 @@ impl SyncService<'_> {
             instruction_targets,
             connection_error: None,
             message,
+            errors,
         })
     }
 

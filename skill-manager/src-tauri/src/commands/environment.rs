@@ -8,6 +8,17 @@ use skill_manager_core::vault::capacity::CapacityReport;
 
 use super::AppState;
 
+#[tauri::command]
+pub async fn environment_check(app: tauri::AppHandle) -> Result<skill_manager_core::ScheduleReport, String> {
+    tauri::async_runtime::spawn_blocking(move || super::run_schedule(&app, skill_manager_core::Trigger::Manual))
+        .await.map_err(|err| err.to_string())?
+}
+
+#[tauri::command]
+pub fn environment_schedule_current(state: tauri::State<'_, AppState>) -> Result<Option<skill_manager_core::ScheduleReport>, String> {
+    state.schedule_report.lock().map(|report| report.clone()).map_err(|_| "检查报告锁已损坏".to_string())
+}
+
 /// 当前操作系统标识；取值与 `.manager/meta.yaml` 的 `oses` 一致。
 #[tauri::command]
 pub fn environment_os() -> &'static str {

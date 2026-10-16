@@ -31,6 +31,7 @@ describe("QuickDeploy", () => {
   it("编码库快捷部署包含共享 Agent，并以即时提示显示名称", () => {
     render(
       <QuickDeploy
+        deploymentBlocks={{}}
         reference="code/shared-credentials"
         domain="code"
         agents={[codex]}

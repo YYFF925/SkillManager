@@ -24,6 +24,7 @@ use crate::vault::scan;
 /// 本机技能目录下的一项。
 #[derive(Clone, Debug, Serialize)]
 pub struct LocalSkillView {
+    pub deployment_blocks: std::collections::BTreeMap<String, String>,
     pub name: String,
     pub path: String,
     /// 受管：该 Agent 目标下存在指向此路径的本机部署记录。
@@ -88,25 +89,7 @@ impl<'a> LocalSkillService<'a> {
     pub fn read(&self, target: &Target, name: &str, file: Option<&str>) -> Result<LocalSkillRead> {
         validate_skill_name(name)?;
         let dir = self.skills_dir(target)?.join(name);
-        let (_, entry) = scan::entry_file(&dir)
-            .ok_or_else(|| CoreError::other(format!("该目标下没有这项技能：{name}")))?;
-        let file = file.unwrap_or(entry);
-        let path = dir.join(file);
-        if !is_within(&dir, &path) {
-            return Err(CoreError::other(format!("只能阅读技能目录内的文件：{file}")));
-        }
-        let bytes = std::fs::read(&path).map_err(|err| CoreError::io(path.clone(), err))?;
-        let size = bytes.len() as u64;
-        let mut files = Vec::new();
-        collect_file_paths(&file_tree(&dir)?, "", &mut files);
-        Ok(LocalSkillRead {
-            name: name.to_string(),
-            path: dir.display().to_string(),
-            file: file.to_string(),
-            text: String::from_utf8(bytes).ok(),
-            size,
-            files,
-        })
+        read_skill_dir(&dir, file)
     }
 
     /// 列出该目标目录下的技能；目录不存在时如实为空（该 Agent 可能未安装）。
@@ -194,6 +177,7 @@ impl<'a> LocalSkillService<'a> {
                 library_skill: None,
                 library_exists: false,
                 comment: None,
+                deployment_blocks: Default::default(),
             });
         }
         Ok(outcome)
@@ -224,6 +208,7 @@ impl<'a> LocalSkillService<'a> {
                 library_skill: Some(item.skill),
                 library_exists: true,
                 comment: None,
+                deployment_blocks: Default::default(),
             });
         }
         outcome.errors.extend(report.failures);
@@ -264,6 +249,7 @@ impl<'a> LocalSkillService<'a> {
                     library_skill: Some(library_skill),
                     library_exists: entry.is_some(),
                     comment: entry.and_then(|entry| entry.comment.clone()),
+                    deployment_blocks: entry.map(|entry| entry.deployment_blocks()).unwrap_or_default(),
                 }
             }
             None => LocalSkillView {
@@ -275,6 +261,7 @@ impl<'a> LocalSkillService<'a> {
                 library_skill: None,
                 library_exists: false,
                 comment: None,
+                deployment_blocks: Default::default(),
             },
         }
     }
@@ -308,4 +295,27 @@ fn canonical_or_self(path: &Path) -> PathBuf {
 
 fn item_skill_name(skill: &str) -> &str {
     skill.split_once('/').map(|(_, name)| name).unwrap_or(skill)
+}
+
+/// 复用本机技能文件读取与目录边界，用于普通目标和 Hermes 档案。
+pub(crate) fn read_skill_dir(dir: &Path, file: Option<&str>) -> Result<LocalSkillRead> {
+        let (_, entry) = scan::entry_file(&dir)
+            .ok_or_else(|| CoreError::other(format!("该目标下没有技能入口：{}", dir.display())))?;
+        let file = file.unwrap_or(entry);
+        let path = dir.join(file);
+        if !is_within(&dir, &path) {
+            return Err(CoreError::other(format!("只能阅读技能目录内的文件：{file}")));
+        }
+        let bytes = std::fs::read(&path).map_err(|err| CoreError::io(path.clone(), err))?;
+        let size = bytes.len() as u64;
+        let mut files = Vec::new();
+        collect_file_paths(&file_tree(&dir)?, "", &mut files);
+        Ok(LocalSkillRead {
+            name: dir.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+            path: dir.display().to_string(),
+            file: file.to_string(),
+            text: String::from_utf8(bytes).ok(),
+            size,
+            files,
+        })
 }

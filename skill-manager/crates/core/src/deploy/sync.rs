@@ -39,9 +39,10 @@ impl DeploymentService<'_> {
                     continue;
                 }
             }
-            match self.sync_record(&index, &record, overwrite_local)? {
-                PairOutcome::Done(item) => report.push_item(item),
-                PairOutcome::Failed(error) => report.push_failure(error),
+            match self.sync_record(&index, &record, overwrite_local) {
+                Ok(PairOutcome::Done(item)) => report.push_item(item),
+                Ok(PairOutcome::Failed(error)) => report.push_failure(error),
+                Err(err) => report.push_failure(ItemError::from_error(&err).skill(record.reference().to_string()).target(record.target.clone()).path(record.target_path.clone())),
             }
         }
         Ok(report)

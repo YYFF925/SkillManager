@@ -73,6 +73,11 @@ fn run_with<T>(
     run(&service)
 }
 
+#[tauri::command]
+pub fn hermes_read(state: tauri::State<'_, AppState>, profile: String, name: String, file: Option<String>) -> Result<skill_manager_core::deploy::local_skills::LocalSkillRead, String> {
+    run_with(&state, |service| service.read(&profile, &name, file.as_deref()).map_err(|err| err.to_string()))
+}
+
 /// 本机现有档案（default 与具名档案）。
 #[tauri::command]
 pub fn hermes_profiles(state: tauri::State<'_, AppState>) -> Result<HermesProfilesView, String> {

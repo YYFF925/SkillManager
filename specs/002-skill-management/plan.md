@@ -136,7 +136,7 @@ CLI 用 `--vault` / `--state-dir` 覆盖，可在一台机器上模拟两台电�
 |---|---|---|
 | M1 底座 | 实施完成；quickstart 1.1～1.8 通过（1.1 首次选库对话框、1.3/1.4/1.6 的 GUI 保存点按未取证） | `checklists/m1-report.md` |
 | M2 部署 | 实施完成；2.1～2.14 通过；Windows 模拟、部署弹窗结果面板仍保持未验证 | `checklists/m2-report.md` |
-| M3 获取/上游 | 实施完成；3.1～3.12 通过；SC-007 通过，SC-008 CLI 侧通过（GUI 侧进度/取消未取证） | `checklists/m3-report.md` |
+| M3 获取/上游 | 实施完成；3.1～3.12 通过；SC-007 通过，SC-008 已补齐真实 GUI 进度/取消、成功与失败路径（2026-10-17 T123） | `checklists/m3-report.md` |
 | M4 同步/指令 | 实施完成；4.1～4.8 通过；GUI"未连接"状态已补取证，冲突界面渲染与定时器长时行为未实测 | `checklists/m4-report.md` |
 | M5 预设/工具/环境 | 实施完成；预设、工具中心、设置/主题/字号/容量/诊断均实现并有运行证据；托盘长时运行与部分界面点按流程未取证 | `checklists/m5-report.md`（由主代理写入） |
 
@@ -152,7 +152,7 @@ CLI 用 `--vault` / `--state-dir` 覆盖，可在一台机器上模拟两台电�
    research.md D22/D23、`crates/cli/src/commands/settings.rs`），quickstart 5.14～5.19 全部通过
    （证据见 `checklists/m5-report.md` 5.14～5.19 与 `contracts/cli.md` 的 T090 表 `settings` 行）。
 2. **新增候选入库无 `tags`/`comment` 参数**——GUI/CLI 一致地只能补充分类；属契约限制（缺口 ②）。
-3. **Hermes 档案独有技能的只读查看**未实现（交互缺口，GUI 与 CLI 都没有）。
+3. **Hermes 档案独有技能的只读查看**已于 2026-10-17 由 T125 补齐（core、`hermes read`、Tauri、GUI），查看不收编、不改变启用名单；阅读沿用 Markdown（结构化文本）视图和吸顶控件。
 4. **配套维护 Skill 的 Gitea 入库/更新待授权**：远端写入未被授权；机制本身已用临时本地 Git 上游
    完整验证（preview → import → 推进上游 → check → update）。
 5. **平台兼容不声明**：仅 macOS（arm64）实际运行验证；Hermes 启用的符号链接在 Windows 行为未验证。

@@ -17,6 +17,35 @@ use skill_manager_core::{AppContext, StateStore};
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
+fn scheduler_runs_all_three_tasks_and_timer_respects_disabled_setting() {
+    use skill_manager_core::scheduler::{run, Trigger};
+    let root = tempfile::TempDir::new().unwrap();
+    let vault = root.path().join("vault");
+    std::fs::create_dir_all(&vault).unwrap();
+    assert!(std::process::Command::new("git").args(["init", "--quiet"]).arg(&vault).status().unwrap().success());
+    let tool = vault.join("tools/fixture");
+    std::fs::create_dir_all(&tool).unwrap();
+    std::fs::write(tool.join("tool.yaml"), "name: fixture\ncheck_command: echo command-failed >&2; exit 1\n").unwrap();
+    let ctx = AppContext::open_with_vault(&vault, Some(root.path().join("state"))).unwrap();
+    ctx.state().set_auto_check_minutes(0).unwrap();
+    for trigger in [Trigger::Startup, Trigger::Manual] {
+        let report = run(&ctx, trigger).unwrap();
+        assert!(report.upstream.executed && report.pull.executed && report.tool_check.executed);
+        assert!(report.upstream_report.is_some());
+        assert_eq!(report.pull.status, "error");
+        assert_eq!(report.tool_check.status, "error");
+        assert!(report.tool_check.detail.unwrap().contains("command-failed"));
+    }
+    let timer = run(&ctx, Trigger::Timer).unwrap();
+    assert!(timer.skipped_by_interval);
+    assert!(!timer.upstream.executed && !timer.pull.executed && !timer.tool_check.executed);
+    ctx.state().set_auto_check_minutes(30).unwrap();
+    ctx.state().set_last_check_at("2000-01-01T00:00:00Z").unwrap();
+    let timer = run(&ctx, Trigger::Timer).unwrap();
+    assert!(timer.upstream.executed && timer.pull.executed && timer.tool_check.executed);
+}
+
+#[test]
 fn shared_directory_is_derived_from_home_and_ignores_obsolete_setting() {
     let state_dir = tempfile::TempDir::new().unwrap();
     let ctx = AppContext::open(Some(state_dir.path().to_path_buf())).unwrap();

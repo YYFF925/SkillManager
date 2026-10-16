@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Copy } from "lucide-react";
 import {
-  deployStatus, deployTo, deployUndo,
+  deployStatus, deployTo, deployUndo, getSkill,
   type AgentView, type DeployReportView, type Domain,
 } from "../services/client";
 import { normalizeTarget, targetLabel, targetOptions } from "../lib/targets";
@@ -26,6 +26,7 @@ export function DeployDialog({
 }: DeployDialogProps) {
   const options = targetOptions(domain, agents);
   const [baseline, setBaseline] = useState<Set<string>>(new Set());
+  const [blocks, setBlocks] = useState<Record<string, Record<string, string>>>({});
   const [choices, setChoices] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -34,19 +35,29 @@ export function DeployDialog({
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    deployStatus().then((records) => {
-      if (!cancelled) setBaseline(new Set(records.map((record) => pairKey(record.skill, record.target))));
+    Promise.all([deployStatus(), Promise.all(references.map((ref) => getSkill(ref)))]).then(([records, skills]) => {
+      if (!cancelled) {
+        setBaseline(new Set(records.map((record) => pairKey(record.skill, record.target))));
+        setBlocks(Object.fromEntries(skills.map((detail) => [`${detail.skill.domain}/${detail.skill.name}`, detail.skill.deployment_blocks])));
+      }
     }).catch((err) => { if (!cancelled) setError(String(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [references.join("\n")]);
+
+  const canAdd = (reference: string, target: string) => !blocks[reference]?.[target.includes(":") ? target : `agent:${target}`];
 
   const changes = options.flatMap((option) => references.flatMap((reference) => {
     const before = baseline.has(pairKey(reference, option.value));
     const after = choices[option.value] ?? before;
+    if (after && !before && !canAdd(reference, option.value)) return [];
     return before === after ? [] : [{ reference, target: option.value, deploy: after }];
   }));
   const blocked = !!unsupportedReason && changes.some((change) => change.deploy);
+  const filtered = options.flatMap((option) => choices[option.value] === true ? references.flatMap((reference) => {
+    if (baseline.has(pairKey(reference, option.value)) || canAdd(reference, option.value)) return [];
+    return [`${reference} → ${option.label}：${blocks[reference][`agent:${option.value}`]}`];
+  }) : []);
 
   async function save() {
     setBusy(true);
@@ -109,14 +120,16 @@ export function DeployDialog({
               const choice = choices[option.value];
               const active = choice ?? (references.length > 0 && count === references.length);
               const mixed = choice === undefined && count > 0 && count < references.length;
+              const allowed = references.filter((reference) => canAdd(reference, option.value)).length;
               return (
                 <button
                   key={option.value}
                   type="button"
-                  disabled={busy || !!error}
+                  title={!count && !allowed ? references.map((ref) => blocks[ref]?.[`agent:${option.value}`]).filter(Boolean).join("\n") : undefined}
+                  disabled={busy || !!error || (!count && !allowed) || (!count && !!unsupportedReason)}
                   aria-pressed={mixed ? "mixed" : active}
                   onClick={() => setChoices((current) => ({
-                    ...current, [option.value]: mixed && unsupportedReason ? false : !active,
+                    ...current, [option.value]: mixed && (!allowed || unsupportedReason) ? false : !active,
                   }))}
                   className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[13px] transition-all ${
                     active ? "border-accent-line bg-accent-soft text-accent"
@@ -134,6 +147,7 @@ export function DeployDialog({
         )}
         {!loading && !options.length && <Notice>没有已检测且启用的 Agent。</Notice>}
         {blocked && <Notice tone="warn">{unsupportedReason}</Notice>}
+        {filtered.length > 0 && <Notice tone="warn">{filtered.map((message) => <p key={message}>已过滤：{message}</p>)}</Notice>}
         {removalWarning && changes.some((change) => !change.deploy) && <Notice tone="warn">{removalWarning}</Notice>}
         {report && report.errors.length > 0 && (
           <Notice tone="danger">

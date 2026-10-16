@@ -3,7 +3,7 @@
 //! 索引是**内存派生量**，不作为第二套中央库，也不落 SQLite；每次从库文件重建，
 //! 因此 GUI、CLI 与外部 Agent 的改动地位平等（FR-005、宪章 V）。
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -89,6 +89,36 @@ pub struct SkillEntry {
 }
 
 impl SkillEntry {
+    /// 展示新增部署限制，与部署执行使用同一准入规则；已有部署是否可撤销由入口单独表达。
+    pub fn deployment_blocks(&self) -> BTreeMap<String, String> {
+        use crate::deploy::{
+            current_os,
+            policy::{support_admission, Admission},
+            targets::AgentCatalog,
+        };
+        use crate::domain::Target;
+
+        let mut targets: Vec<_> = AgentCatalog::embedded().all().iter()
+            .filter(|agent| agent.reference_domain == self.domain)
+            .map(|agent| Target::Agent { key: agent.key.clone() })
+            .collect();
+        if self.domain == Domain::Code {
+            targets.push(Target::Shared);
+        } else {
+            targets.push(Target::HermesDefault);
+        }
+        targets.into_iter().filter_map(|target| {
+            let reason = if let Some(error) = &self.manager_error {
+                Some(error.clone())
+            } else {
+                match support_admission(self, &target, current_os()) {
+                    Admission::Allowed => None,
+                    Admission::Unsupported(reason) => Some(reason),
+                }
+            };
+            reason.map(|reason| (target.as_str(), reason))
+        }).collect()
+    }
     pub fn reference(&self) -> SkillRef {
         SkillRef {
             domain: self.domain,
@@ -141,6 +171,7 @@ impl SkillEntry {
     /// 稳定的对外表示（GUI 与 Agent 共用）。
     pub fn to_summary(&self) -> SkillSummary {
         SkillSummary {
+            deployment_blocks: self.deployment_blocks(),
             domain: self.domain.as_str(),
             name: self.name.clone(),
             category: self.category.clone(),
@@ -164,6 +195,7 @@ impl SkillEntry {
 /// 技能摘要（列表项）。
 #[derive(Clone, Debug, Serialize)]
 pub struct SkillSummary {
+    pub deployment_blocks: BTreeMap<String, String>,
     pub domain: &'static str,
     pub name: String,
     pub category: Option<String>,

@@ -114,9 +114,10 @@ export function SingleSkillUpdateDialog({
       } else {
         const item = await upstream.update(skill.skill, skill.remote_version);
         onChanged(
-          item.action === "removed"
-            ? `上游已删除 ${skill.skill}，已移除库内条目并清理受管部署（外改副本按暂停规则保留）。`
-            : `已更新 ${skill.skill} 到 ${shortOid(item.to_version)}，并同步本机已有部署。`,
+          (item.action === "unchanged" ? `${skill.skill}：该版本已采用，未重复应用。` : item.action === "removed"
+            ? `已移除库内条目 ${skill.skill}；清理副本 ${item.deployments.length} 项。`
+            : `已更新 ${skill.skill} 到 ${shortOid(item.to_version)}；刷新已有部署 ${item.deployments.length} 项。`) +
+          item.errors.map((error) => `未完成：${error.target ?? ""} ${error.path ?? ""} ${error.message}`).join("；"),
         );
       }
       onClose();
@@ -230,8 +231,9 @@ function SkippedVersionsDialog({
     setBusy(true);
     setError(null);
     try {
-      await upstream.update(entry.skill, entry.skipped_version);
-      onChanged(`已明确采用 ${entry.skill} 的版本 ${shortOid(entry.skipped_version)}。`);
+      const item = await upstream.update(entry.skill, entry.skipped_version);
+      onChanged(`已明确采用 ${entry.skill} 的版本 ${shortOid(entry.skipped_version)}。` +
+        item.errors.map((error) => `未完成：${error.target ?? ""} ${error.path ?? ""} ${error.message}`).join("；"));
       await reload();
     } catch (err) {
       setError(String(err));

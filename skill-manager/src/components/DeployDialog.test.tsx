@@ -3,15 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeployDialog } from "./DeployDialog";
 import { PresetDeployDialog } from "./PresetDeployDialog";
 import { QuickDeploy } from "./QuickDeploy";
-import { deployStatus, deployTo, deployUndo, type AgentView, type DeploymentStatusView } from "../services/client";
+import { deployStatus, deployTo, deployUndo, getSkill, type AgentView, type DeploymentStatusView } from "../services/client";
 
-vi.mock("../services/client", () => ({ deployStatus: vi.fn(), deployTo: vi.fn(), deployUndo: vi.fn() }));
+vi.mock("../services/client", () => ({ deployStatus: vi.fn(), deployTo: vi.fn(), deployUndo: vi.fn(), getSkill: vi.fn() }));
 const agent = (key: string, extra = {}): AgentView => ({ key, display_name: key, domain: "code", detected: true, enabled: true, order: 0, skills_dir: `/tmp/${key}/skills`, skills_dir_custom: false, skills_dir_default: `/tmp/${key}/skills`, project_rel_dir: null, project_rel_dir_default: null, instructions_target: "/tmp/AGENTS.md", icon: null, invert_in_dark: false, ...extra });
 const agents = [agent("codex"), agent("claude"), agent("disabled", { enabled: false }), agent("undetected", { detected: false })];
-const record = (skill: string, target: string): DeploymentStatusView => ({ skill, target: `agent:${target}`, target_path: `/tmp/${target}/${skill}`, status: "ok", source_hash: null, deployed_hash: null, synced_at: null, library_exists: true });
-const result = (target: string, refs: string[], action: string) => ({ items: refs.map((skill) => ({ skill, target: `agent:${target}`, path: `/tmp/${target}/${skill}`, action, status: "ok" as const })), errors: [] });
+const record = (skill: string, target: string): DeploymentStatusView => ({ deployment_blocks: {}, skill, target: `agent:${target}`, target_path: `/tmp/${target}/${skill}`, status: "ok", source_hash: null, deployed_hash: null, synced_at: null, library_exists: true });
+const result = (target: string, refs: string[], action: string) => ({ items: refs.map((skill) => ({ deployment_blocks: {}, skill, target: `agent:${target}`, path: `/tmp/${target}/${skill}`, action, status: "ok" as const })), errors: [] });
+
+const skillDetail = (reference: string, blocks: Record<string, string> = {}): Awaited<ReturnType<typeof getSkill>> => ({
+  skill: { domain: "code", name: reference.split('/')[1], deployment_blocks: blocks, category: null, comment: null, tags: [], description: null, agents: null, oses: null, has_translation: false, translation_stale: false, vault_rel_dir: reference, path: `/tmp/${reference}`, entry_file: 'SKILL.md', source: null, manager_error: null, presets: [] },
+  content: { original: '正文', translation: null, has_translation: false, translation_stale: false, default_lang: 'orig' },
+  vault_path: '/tmp', files: [], deployments: [], deployments_note: '',
+});
 
 beforeEach(() => {
+  vi.mocked(getSkill).mockImplementation(async (reference) => skillDetail(reference));
   vi.mocked(deployStatus).mockResolvedValue([record("code/alpha", "codex")]);
   vi.mocked(deployTo).mockImplementation(async (target, refs) => result(target, refs, "deployed"));
   vi.mocked(deployUndo).mockImplementation(async (target, refs) => result(target, refs, "removed"));
@@ -95,10 +102,23 @@ describe("部署选择与保存", () => {
   });
 });
 
+describe("支持声明", () => {
+  it("禁止新增不支持目标，但已有部署仍可撤销", async () => {
+    vi.mocked(getSkill).mockImplementation(async (reference) => skillDetail(reference, { 'agent:claude': '仅支持 codex', 'agent:codex': '已收窄' }));
+    await renderDialog();
+    expect(screen.getByRole('button', { name: 'claude' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'codex' })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'codex' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(deployUndo).toHaveBeenCalled());
+    expect(deployTo).not.toHaveBeenCalled();
+  });
+});
+
 describe("卡片快捷部署", () => {
   it("图标按记录亮显，点击立即撤销且不打开卡片", async () => {
     const change = vi.fn(), open = vi.fn();
-    render(<article onClick={open}><QuickDeploy reference="code/alpha" domain="code" agents={agents} records={[record("code/alpha", "codex")]} onChange={change} onError={vi.fn()} /></article>);
+    render(<article onClick={open}><QuickDeploy deploymentBlocks={{}} reference="code/alpha" domain="code" agents={agents} records={[record("code/alpha", "codex")]} onChange={change} onError={vi.fn()} /></article>);
     expect(screen.getByRole("button", { name: "撤销部署 codex" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "撤销部署 codex" }));
     await waitFor(() => expect(change).toHaveBeenCalled());
@@ -108,13 +128,13 @@ describe("卡片快捷部署", () => {
   it("灰暗图标点击部署，失败如实报告", async () => {
     const error = vi.fn();
     vi.mocked(deployTo).mockResolvedValue({ items: [], errors: [{ message: "权限不足" }] });
-    render(<QuickDeploy reference="code/alpha" domain="code" agents={agents} records={[]} onChange={vi.fn()} onError={error} />);
+    render(<QuickDeploy deploymentBlocks={{}} reference="code/alpha" domain="code" agents={agents} records={[]} onChange={vi.fn()} onError={error} />);
     fireEvent.click(screen.getByRole("button", { name: "部署到 claude" }));
     await waitFor(() => expect(error).toHaveBeenCalledWith("权限不足"));
     expect(deployTo).toHaveBeenCalledExactlyOnceWith("claude", ["code/alpha"]);
   });
   it("未受管卡片不能直接部署，需先纳入管理", () => {
-    render(<QuickDeploy domain="code" agents={agents} records={[]} onChange={vi.fn()} onError={vi.fn()} />);
+    render(<QuickDeploy deploymentBlocks={{}} domain="code" agents={agents} records={[]} onChange={vi.fn()} onError={vi.fn()} />);
     expect(screen.getByRole("button", { name: "codex · 先纳入管理" })).toBeDisabled();
   });
 });

@@ -22,6 +22,7 @@ pub const FETCH_PROGRESS_EVENT: &str = "skill-fetch-progress";
 
 /// 一次获取的进度事件负载。
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FetchProgress {
     pub job_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -33,6 +34,20 @@ pub struct FetchProgress {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total: Option<u64>,
     pub raw: String,
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::*;
+
+    #[test]
+    fn progress_event_matches_client_job_id() {
+        let event = FetchProgress { job_id: "preview-123".to_string(), stage: Some("Receiving objects".to_string()), percent: Some(42), done: Some(42), total: Some(100), raw: "Receiving objects: 42%".to_string() };
+        let value = serde_json::to_value(event).unwrap();
+        assert_eq!(value["jobId"], "preview-123");
+        assert!(value.get("job_id").is_none());
+        assert_eq!(value["percent"], 42);
+    }
 }
 
 /// 收编的逐技能资料输入（metadata 参数）。

@@ -22,12 +22,13 @@ export function AgentIcon({ option }: { option: TargetOption }) {
 }
 
 export function QuickDeploy({
-  reference, domain, agents, records, unsupportedReason, onChange, onError,
+  reference, domain, agents, records, deploymentBlocks, unsupportedReason, onChange, onError,
 }: {
   reference?: string | null;
   domain: Domain;
   agents: AgentView[];
   records: DeploymentStatusView[];
+  deploymentBlocks: Record<string, string>;
   unsupportedReason?: string | null;
   onChange: () => void | Promise<void>;
   onError: (message: string) => void;
@@ -46,7 +47,8 @@ export function QuickDeploy({
     try {
       const current = await deployStatus();
       const deployed = current.some((record) => record.skill === reference && normalizeTarget(record.target) === target);
-      if (!deployed && unsupportedReason) throw new Error(unsupportedReason);
+      const reason = deploymentBlocks[target.includes(":") || target === SHARED_TARGET ? target : `agent:${target}`] ?? unsupportedReason;
+      if (!deployed && reason) throw new Error(reason);
       const result = deployed ? await deployUndo(target, [reference]) : await deployTo(target, [reference]);
       await onChange();
       const messages = [...result.errors.map((item) => item.message), ...result.items.flatMap((item) => item.message ? [item.message] : [])];
@@ -61,10 +63,11 @@ export function QuickDeploy({
     <div className="ml-auto flex shrink-0 flex-wrap justify-end gap-0" onClick={(event) => event.stopPropagation()}>
       {options.map((option) => {
         const deployed = records.some((record) => record.skill === reference && normalizeTarget(record.target) === option.value);
-        const blocked = !reference || (!deployed && !!unsupportedReason);
+        const reason = deploymentBlocks[option.value.includes(":") || option.value === SHARED_TARGET ? option.value : `agent:${option.value}`] ?? unsupportedReason;
+        const blocked = !reference || (!deployed && !!reason);
         const label = !reference ? `${option.label} · 先纳入管理` : `${deployed ? "撤销部署" : "部署到"} ${option.label}`;
         return (
-          <FastTooltip key={option.value} label={option.label}>
+          <FastTooltip key={option.value} label={!deployed && reason ? `${option.label}：${reason}` : option.label}>
             <button
               type="button"
               aria-label={label}

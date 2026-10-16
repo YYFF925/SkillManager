@@ -96,10 +96,12 @@ preset reorder-members <domain> <id> --order <name,...>
 
 ```text
 hermes profiles | hermes list <profile>
+hermes read <profile> <name> [--file <path>]
 hermes enable <profile> <name>... | hermes disable <profile> <name>...
 ```
 
 只管理现有单根下的档案技能；default 部署与其他档案明确启用分开。启用沿用龙虾域/支持声明，新内容不重置已有选择。
+`read` 只读该档案的实际技能正文或目录内文件；不要求先收编，不改变库、部署或启用名单。
 
 ### tool — 工具中心
 
@@ -253,5 +255,5 @@ settings capacity
 3. **新增候选入库时的标签/注释**（M3 已记录）。`skill import` / `skill update-repo` 无 `tags`/`comment` 参数，故 GUI 与 CLI 一致地只能补充分类；标签/注释继承上游 `.manager`，入库后可用 `skill set` 补齐。这是契约层面的限制而非入口不对齐，**保持现状**：批量入库用 `--tags` 会把同一份资料套给全部技能，与"不把同一段注释擅自套给全部技能"冲突；若确需入库时逐项给资料，应复用 `skill adopt` 的 `--metadata-file` 形式，需用户裁决。
 4. **`skill task --requirement` 原契约写必填、实现为可选** → 已按最小改动**修订契约文字**为可选（`[--requirement <text>]`），与 `tool task` 一致；理由见 `skill task` 条目注。
 5. **契约文字与实现的细节修正**：`skill list --deployed-to` 已实现（按本机部署记录筛选），原实现内的帮助文字标注"尚未接入"属过时描述，已更正为"按本机部署记录"；行为本身无需改动。
-6. **Hermes 档案独有技能的只读查看**：GUI 与 CLI **都没有**读取某档案中未收编技能正文的入口（契约无此命令）。这是交互层未实现，不是双入口不对称；记录为待用户裁决的交互缺口（M2 已记录）。
+6. **Hermes 档案独有技能的只读查看**：2026-10-17 已由 T125 补齐 `hermes read`、Tauri 与 GUI 阅读入口；查看不收编、不改变启用名单，CLI 与组件测试已验证。
 

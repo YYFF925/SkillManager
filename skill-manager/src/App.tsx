@@ -16,6 +16,8 @@ import { useLibrarySaveFlow } from "./lib/librarySave";
 import {
   agentList,
   currentVault,
+  currentSchedule,
+  onScheduleFinished,
   environmentOs,
   isDesktop,
   onVaultChanged,
@@ -25,6 +27,7 @@ import {
   type Domain,
   type EnvironmentOs,
   type SettingsView,
+  type ScheduleReportView,
   type VaultInfo,
 } from "./services/client";
 
@@ -131,6 +134,24 @@ export function App() {
   const [instructionOpen, setInstructionOpen] = useState(false);
   /** 本机设置（主题/字号等）；由本页统一读取并应用到 `<html>`。 */
   const [settings, setSettings] = useState<SettingsView | null>(null);
+  const [schedule, setSchedule] = useState<ScheduleReportView | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let off: (() => void) | undefined;
+    const accept = (report: ScheduleReportView) => {
+      if (cancelled) return;
+      setSchedule(report);
+      setReloadToken((value) => value + 1);
+    };
+    void onScheduleFinished(accept).then(async (stop) => {
+      if (cancelled) { stop(); return; }
+      off = stop;
+      const report = await currentSchedule();
+      if (report) accept(report);
+    }).catch((err) => { if (!cancelled) setError(String(err)); });
+    return () => { cancelled = true; off?.(); };
+  }, []);
 
   // 主题与字号是本项目新增能力：默认跟随系统，不继承旧版 dark 默认。
   useAppearance(settings?.theme ?? null, settings?.font_scale ?? null);
@@ -336,15 +357,18 @@ export function App() {
       }
       vaultStatus={{ label: "SkillManagerVault", detail: vault.root, ok: true }}
     >
+      {error && <div className="mb-3"><Notice tone="danger">{error}</Notice></div>}
       {isLibrary ? (
         <LibraryPage
+          key={activeKey}
+          scheduledReport={schedule?.upstream_report}
           domain={activeKey === "library-code" ? "code" : "lobster"}
           os={os}
           agents={agents}
           reloadToken={reloadToken}
           onCount={setCount}
           onLibrarySaved={saveFlow.afterSave}
-          focusReference={activeKey === "library-lobster" ? libraryFocus : null}
+          focusReference={libraryFocus}
           onFocusConsumed={() => setLibraryFocus(null)}
         />
       ) : activeKey === "hermes" ? (
@@ -400,6 +424,7 @@ export function App() {
         />
       ) : activeKey === "settings" ? (
         <SettingsPage
+          schedule={schedule}
           vault={vault}
           uploadFailure={saveFlow.failure}
           onRetryUpload={saveFlow.retry}

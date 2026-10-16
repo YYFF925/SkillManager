@@ -107,7 +107,9 @@ vi.mock("../services/client", () => ({
       },
     ],
   })),
-  previewRepo: vi.fn(async () => ({})),
+  previewRepo: vi.fn(async () => ({ candidates: [{ name: "browser-use", subpath: "browser-use", description: "浏览器操作", comment: null, tags: [] }] })),
+  onFetchProgress: vi.fn(async () => () => {}),
+  cancelFetch: vi.fn(async () => {}),
   importSkills: vi.fn(async () => ({
     items: [{ subpath: "browser-use", skill: "code", name: "browser-use", category: null, version: "abc", path: "/tmp/x" }],
     errors: [],
@@ -151,8 +153,13 @@ describe("ToolCenterPage", () => {
 
     // 单候选也列出原名、来源与已选数量；未勾选任何候选时不能确认。
     await waitFor(() => expect(screen.getByText(/配套 Skill 入库 · browser-use/)).toBeTruthy());
-    expect(screen.getByText(/已选 1 \/ 1/)).toBeTruthy();
+    expect(screen.getByText(/已选 0 \/ 1/)).toBeTruthy();
     const confirm = screen.getByRole("button", { name: "确认入库" });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "预览来源资料" }));
+    await screen.findByText("浏览器操作");
+    expect(importSkills).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(confirm);
 
     // 复用 US2 预览 + 入库流程；不自动部署（本模块没有部署调用）。

@@ -54,6 +54,7 @@ impl DeployReport {
 /// `deploy status` 的一项。
 #[derive(Clone, Debug, Serialize)]
 pub struct DeploymentStatusView {
+    pub deployment_blocks: std::collections::BTreeMap<String, String>,
     pub skill: String,
     pub target: String,
     pub target_path: String,
@@ -111,7 +112,9 @@ impl<'a> DeploymentService<'a> {
     }
 
     pub(crate) fn index(&self) -> Result<SkillIndex> {
-        SkillIndex::build(&self.vault_root)
+        SkillIndex::build(&self.vault_root).inspect_err(|err| {
+            let _ = crate::diagnostics::record(self.state, "error", "deploy.index", &err.to_string());
+        })
     }
 
     pub(crate) fn os(&self) -> &'static str {
@@ -129,9 +132,10 @@ impl<'a> DeploymentService<'a> {
         let mut report = DeployReport::default();
         for reference in references {
             for target in &targets {
-                match self.deploy_pair(&index, reference, target)? {
-                    PairOutcome::Done(item) => report.push_item(item),
-                    PairOutcome::Failed(error) => report.push_failure(error),
+                match self.deploy_pair(&index, reference, target) {
+                    Ok(PairOutcome::Done(item)) => report.push_item(item),
+                    Ok(PairOutcome::Failed(error)) => report.push_failure(error),
+                    Err(err) => report.push_failure(ItemError::from_error(&err).skill(reference.to_string()).target(target.as_str())),
                 }
             }
         }
@@ -173,6 +177,7 @@ impl<'a> DeploymentService<'a> {
                 _ => None,
             };
             out.push(DeploymentStatusView {
+                deployment_blocks: entry.map(|entry| entry.deployment_blocks()).unwrap_or_default(),
                 skill: record.reference().to_string(),
                 target: record.target.clone(),
                 target_path: record.target_path.clone(),

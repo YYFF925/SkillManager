@@ -159,11 +159,13 @@ instruction set global|<key> (--file <path> | --stdin)
 ```text
 hermes profiles
 hermes list <profile> [--query <text>] [--category <c> | --uncategorized] [--tag <t>...] [--no-tag]
+hermes read <profile> <name> [--file <path>]
 hermes enable <profile> <name>...
 hermes disable <profile> <name>...
 ```
 
 `default` 档案即部署记录（`hermes:default`）；其他档案的启用是本机状态，内容更新不重置。
+`read` 读取档案内实际正文或文件，未入库技能也可先查看；阅读不收编，不改变库、部署或启用名单。
 
 ## tool — 工具中心
 

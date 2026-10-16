@@ -195,6 +195,35 @@ fn add_skill(vault: &Path, home: &Path, name: &str, body: &str, comment: Option<
     commit(vault, home, &format!("add {name}"));
 }
 
+#[test]
+fn pull_reports_deployment_and_instruction_failures_as_partial() {
+    let env = TwoMachines::new();
+    add_skill(&env.a.vault, &env.a.home, "alpha", "v1\n", None);
+    git_ok(&env.a.vault, &["push"], &env.a.home);
+    cli_json(&env.b, &["sync", "pull"]);
+    cli_json(&env.b, &["deploy", "to", "codex", "code/alpha"]);
+    write(&env.b.home, ".codex/skills/alpha/SKILL.md", "本地修改\n");
+    let blocker = env.b.home.join("blocked");
+    std::fs::write(&blocker, "不能作为目录").unwrap();
+    let instruction_target = blocker.join("AGENTS.md");
+    cli_json(&env.b, &["agent", "set-dir", "codex", "--instructions", instruction_target.to_str().unwrap()]);
+    cli_json(&env.b, &["agent", "enable", "codex"]);
+    write(&env.a.vault, "code/alpha/SKILL.md", "v2\n");
+    write(&env.a.vault, "instructions/global.md", "新指令\n");
+    commit(&env.a.vault, &env.a.home, "内容与指令变化");
+    git_ok(&env.a.vault, &["push"], &env.a.home);
+
+    let (code, result) = cli_json_raw(&env.b, &["sync", "pull"]);
+    assert_eq!(code, 2, "{result}");
+    assert_eq!(result["result"], "partial");
+    assert_eq!(result["data"]["outcome"], "pulled");
+    assert_eq!(result["errors"].as_array().unwrap().len(), 2);
+    assert!(result["errors"].as_array().unwrap().iter().all(|e| e["path"].is_string()));
+    assert_eq!(read(&env.b.vault, "code/alpha/SKILL.md").as_deref(), Some("v2\n"));
+    assert_eq!(read(&env.b.home, ".codex/skills/alpha/SKILL.md").as_deref(), Some("本地修改\n"));
+    assert!(result["data"]["message"].as_str().unwrap().contains("未完成"));
+}
+
 // ---------------------------------------------------------------------------
 // 无冲突拉取：刷新已有部署，新增不部署
 // ---------------------------------------------------------------------------

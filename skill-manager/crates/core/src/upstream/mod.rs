@@ -77,16 +77,20 @@ impl<'a> UpstreamService<'a> {
         on_progress: &mut dyn FnMut(&GitProgress),
         cancel: &AtomicBool,
     ) -> Result<PreviewReport> {
-        let fetched = fetch::fetch_repo(&self.state_dir(), repo, reference, on_progress, cancel)?;
-        let candidates = discover::scan_repo(&fetched.path)?;
-        let default_category = CategoryChoice::Default.resolve(repo, candidates.len())?;
-        Ok(PreviewReport {
-            repo: repo.to_string(),
-            reference: reference.map(str::to_string),
-            remote_version: fetched.oid,
-            skill_count: candidates.len(),
-            default_category,
-            candidates,
+        (|| {
+            let fetched = fetch::fetch_repo(&self.state_dir(), repo, reference, on_progress, cancel)?;
+            let candidates = discover::scan_repo(&fetched.path)?;
+            let default_category = CategoryChoice::Default.resolve(repo, candidates.len())?;
+            Ok(PreviewReport {
+                repo: repo.to_string(),
+                reference: reference.map(str::to_string),
+                remote_version: fetched.oid,
+                skill_count: candidates.len(),
+                default_category,
+                candidates,
+            })
+        })().inspect_err(|err: &CoreError| {
+            let _ = crate::diagnostics::record(self.state, "error", "acquire.preview", &format!("{repo}：{err}"));
         })
     }
 
@@ -101,22 +105,26 @@ impl<'a> UpstreamService<'a> {
         on_progress: &mut dyn FnMut(&GitProgress),
         cancel: &AtomicBool,
     ) -> Result<ImportOutcome> {
-        let fetched = fetch::fetch_repo(&self.state_dir(), repo, reference, on_progress, cancel)?;
-        let candidates = discover::scan_repo(&fetched.path)?;
-        let outcome = acquire::import_skills(
-            &self.vault_root,
-            domain,
-            repo,
-            reference,
-            &fetched.oid,
-            &fetched.path,
-            subpaths,
-            category,
-        )?;
-        // 首次观察建立基线：首次已存在的候选（含未被选中的 C）不随后被当作“后来新增”。
-        let observed: Vec<String> = candidates.iter().map(|c| c.subpath.clone()).collect();
-        decisions::seed_baseline(&self.vault_root, repo, domain, &observed)?;
-        Ok(outcome)
+        (|| {
+            let fetched = fetch::fetch_repo(&self.state_dir(), repo, reference, on_progress, cancel)?;
+            let candidates = discover::scan_repo(&fetched.path)?;
+            let outcome = acquire::import_skills(
+                &self.vault_root,
+                domain,
+                repo,
+                reference,
+                &fetched.oid,
+                &fetched.path,
+                subpaths,
+                category,
+            )?;
+            // 首次观察建立基线：首次已存在的候选（含未被选中的 C）不随后被当作“后来新增”。
+            let observed: Vec<String> = candidates.iter().map(|c| c.subpath.clone()).collect();
+            decisions::seed_baseline(&self.vault_root, repo, domain, &observed)?;
+            Ok(outcome)
+        })().inspect_err(|err: &CoreError| {
+            let _ = crate::diagnostics::record(self.state, "error", "acquire.import", &format!("{repo}：{err}"));
+        })
     }
 }
 

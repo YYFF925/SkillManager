@@ -65,8 +65,11 @@ export interface UpstreamController {
   unskip: (reference: string) => Promise<void>;
 }
 
-export function useUpstream(): UpstreamController {
+export function useUpstream(scheduledReport?: CheckReportView | null): UpstreamController {
   const [report, setReport] = useState<CheckReportView | null>(null);
+  useEffect(() => {
+    if (scheduledReport) setReport(scheduledReport);
+  }, [scheduledReport]);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<FetchProgress | null>(null);
   const [job, setJob] = useState<string | null>(null);

@@ -567,16 +567,22 @@ pub fn update(ctx: &AppContext, args: UpdateArgs) -> Result<(CliResult, String)>
     let data = serde_json::to_value(&item)
         .map_err(|err| CoreError::other(format!("序列化更新结果失败：{err}")))?;
     let human = match item.action.as_str() {
+        "unchanged" => format!("{}：该版本已采用，未重复应用", item.skill),
         "removed" => format!(
-            "{}：上游已删除该技能，已移除库内条目并清理受管部署",
-            item.skill
+            "{}：已移除库内条目；清理副本 {} 项，未完成 {} 项",
+            item.skill, item.deployments.len(), item.errors.len()
         ),
         _ => format!(
             "{}：已从 {} 更新到 {}",
             item.skill, item.from_version, item.to_version
         ),
     };
-    Ok((CliResult::from_data(&data), human))
+    let result = if item.errors.is_empty() {
+        CliResult::success(data)
+    } else {
+        CliResult::partial(data, item.errors)
+    };
+    Ok((result, human))
 }
 
 pub fn update_repo(ctx: &AppContext, args: UpdateRepoArgs) -> Result<(CliResult, String)> {

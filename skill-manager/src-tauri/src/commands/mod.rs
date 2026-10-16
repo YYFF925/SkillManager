@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 
 use skill_manager_core::AppContext;
 use skill_manager_core::vault::VaultWatcher;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 /// 库内变化的去抖窗口：GUI 自身一次写入会连续触发多个事件，
 /// 期间只通知前端一次；前端收到通知后重新读取库文件。
@@ -28,6 +28,7 @@ const CHANGE_DEBOUNCE: Duration = Duration::from_millis(250);
 
 /// 库内变化事件名。
 pub const VAULT_CHANGED_EVENT: &str = "vault-changed";
+pub const SCHEDULE_FINISHED_EVENT: &str = "schedule-finished";
 
 /// 桌面应用的共享上下文。
 pub struct AppState {
@@ -36,6 +37,7 @@ pub struct AppState {
     watcher: Mutex<Option<VaultWatcher>>,
     /// 进行中的仓库获取任务：jobId → 取消标记（GUI 取消本次获取）。
     fetch_jobs: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    pub schedule_report: Mutex<Option<skill_manager_core::ScheduleReport>>,
 }
 
 impl Default for AppState {
@@ -50,6 +52,7 @@ impl AppState {
             ctx: OnceLock::new(),
             watcher: Mutex::new(None),
             fetch_jobs: Mutex::new(HashMap::new()),
+            schedule_report: Mutex::new(None),
         }
     }
 
@@ -132,4 +135,17 @@ impl AppState {
         *guard = Some(watcher);
         Ok(())
     }
+}
+
+/// 各桌面触发入口共用；仅在内存保留最近一次实际执行报告，避免启动事件早于界面订阅而丢失。
+pub fn run_schedule<R: tauri::Runtime>(app: &tauri::AppHandle<R>, trigger: skill_manager_core::Trigger) -> Result<skill_manager_core::ScheduleReport, String> {
+    let state: tauri::State<'_, AppState> = app.state();
+    let ctx = state.get()?;
+    let report = skill_manager_core::scheduler::run(&ctx, trigger).map_err(|err| err.to_string())?;
+    drop(ctx);
+    if !report.skipped_by_interval && !report.not_due {
+        *state.schedule_report.lock().map_err(|_| "检查报告锁已损坏".to_string())? = Some(report.clone());
+        app.emit(SCHEDULE_FINISHED_EVENT, &report).map_err(|err| err.to_string())?;
+    }
+    Ok(report)
 }

@@ -71,6 +71,7 @@ fn pull(ctx: &AppContext) -> Result<(CliResult, String)> {
     let data = serde_json::to_value(&report).unwrap_or(serde_json::Value::Null);
 
     let result = match report.outcome.as_str() {
+        "pulled" | "up_to_date" if !report.errors.is_empty() => CliResult::partial(data, report.errors.clone()),
         "pulled" | "up_to_date" => CliResult::success(data),
         "conflict" => {
             let mut errors = vec![ItemError::new(&report.message)];

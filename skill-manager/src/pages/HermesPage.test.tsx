@@ -64,14 +64,27 @@ vi.mock("../services/client", () => ({
   hermesEnable: vi.fn(),
   hermesDisable: vi.fn(),
   hermesAdopt: vi.fn(),
+  hermesRead: vi.fn(async () => ({ name: "local-only", path: "/tmp/profile/skills/local-only", file: "SKILL.md", text: "# 独有正文", size: 20, files: ["SKILL.md"] })),
   deployStatus: vi.fn(async () => []),
 }));
 
+import { hermesList, hermesAdopt, hermesRead } from "../services/client";
+
 afterEach(() => {
   vi.clearAllMocks();
+
 });
 
 describe("HermesPage", () => {
+  it("独有技能可先只读查看，不触发收编", async () => {
+    const view = await hermesList("blank");
+    vi.mocked(hermesList).mockResolvedValueOnce({ ...view, skills: [{ ...view.skills[0], deployment_blocks: {}, name: "local-only", library_skill: undefined, in_library: false, needs_adoption: true, path: "/tmp/profile/skills/local-only" }] });
+    render(<HermesPage agents={[]} os="macos" reloadToken={0} onCount={vi.fn()} onOpenInLibrary={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "local-only" }));
+    expect(await screen.findByRole("heading", { name: "独有正文" })).toBeTruthy();
+    expect(hermesRead).toHaveBeenCalled();
+    expect(hermesAdopt).not.toHaveBeenCalled();
+  });
   it("renders discovered profiles and the profile skill list", async () => {
     render(
       <HermesPage

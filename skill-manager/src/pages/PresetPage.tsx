@@ -397,6 +397,7 @@ export function PresetPage({
       );
       setError(null);
       setVersion((value) => value + 1);
+      await onLibrarySaved?.();
     } catch (err) {
       setError(String(err));
     }
@@ -425,6 +426,7 @@ export function PresetPage({
       setPresets(updated);
       setNotice("已调整预设显示顺序（不改变成员集合或实际部署）。");
       setError(null);
+      await onLibrarySaved?.();
     } catch (err) {
       setError(String(err));
     }
@@ -453,6 +455,7 @@ export function PresetPage({
       setPresets((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
+      await onLibrarySaved?.();
     } catch (err) {
       setError(String(err));
     }
@@ -472,6 +475,7 @@ export function PresetPage({
         setSelectedId(null);
       }
       setVersion((value) => value + 1);
+      await onLibrarySaved?.();
     } catch (err) {
       setError(String(err));
     }
@@ -1028,7 +1032,7 @@ export function PresetPage({
                         </div>
                       </div>
                       <div className="mt-auto flex items-center border-t border-line-faint px-3.5 py-2">
-                        <QuickDeploy reference={reference} domain={domain} agents={agents} records={records}
+                        <QuickDeploy deploymentBlocks={skill.deployment_blocks} reference={reference} domain={domain} agents={agents} records={records}
                           onChange={async () => setRecords(await deployStatus())} onError={setError} />
                       </div>
                     </article>
@@ -1077,6 +1081,7 @@ export function PresetPage({
               }
               setSelectedId(created.id);
               setVersion((value) => value + 1);
+              await onLibrarySaved?.();
             } catch (err) {
               setError(String(err));
             }
@@ -1100,6 +1105,7 @@ export function PresetPage({
               setError(null);
               setEditOpen(false);
               setVersion((value) => value + 1);
+              await onLibrarySaved?.();
             } catch (err) {
               setError(String(err));
             }

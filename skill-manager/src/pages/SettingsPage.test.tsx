@@ -50,6 +50,12 @@ const hermes: AgentView = {
 };
 
 vi.mock("../services/client", () => ({
+  checkNow: vi.fn(async () => ({
+    trigger: "manual", interval_minutes: 60, timer_enabled: true, skipped_by_interval: false, not_due: false,
+    upstream: { executed: true, status: "ok", detail: "上游检查完成" },
+    pull: { executed: true, status: "ok", detail: "库同步完成" },
+    tool_check: { executed: true, status: "error", detail: "工具检查失败：fixture" }, upstream_report: null,
+  })),
   sharedDirGet: vi.fn(async () => "/tmp/home/.agents/skills"),
   setTheme: vi.fn(async () => settingsFixture),
   setFontScale: vi.fn(async () => settingsFixture),
@@ -118,7 +124,7 @@ vi.mock("../services/client", () => ({
   })),
 }));
 
-import { checkUpstream, sharedDirGet, syncPull } from "../services/client";
+import { checkNow, sharedDirGet } from "../services/client";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -128,6 +134,7 @@ afterEach(() => {
 function renderSettings() {
   return render(
     <SettingsPage
+      schedule={null}
       vault={vault}
       uploadFailure={null}
       onRetryUpload={async () => {}}
@@ -212,14 +219,12 @@ describe("SettingsPage · 只读展示行", () => {
 });
 
 describe("SettingsPage · 立即检查", () => {
-  it("复用上游检查与库同步两个既有函数，不引入组合命令", async () => {
+  it("统一检查展示上游、库同步与工具检查的独立结果", async () => {
     renderSettings();
     fireEvent.click(await screen.findByRole("button", { name: /立即检查/ }));
-
-    await waitFor(() => expect(syncPull).toHaveBeenCalledTimes(1));
-    // 上游检查仍是库页「检查全部」用的同一调用（全库登记来源，一次覆盖两库）。
-    expect(checkUpstream).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(checkUpstream).mock.calls[0][0]).toEqual({ all: true });
-    await waitFor(() => expect(screen.getByText(/已检查上游变化并同步自己的库/)).toBeTruthy());
+    await waitFor(() => expect(checkNow).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("上游检查完成")).toBeTruthy();
+    expect(screen.getByText("库同步完成")).toBeTruthy();
+    expect(screen.getByText("工具检查失败：fixture")).toBeTruthy();
   });
 });

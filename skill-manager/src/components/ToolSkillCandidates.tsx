@@ -5,17 +5,22 @@
  * 单候选也列出（原名、中文注释、用途、来源、勾选与已选数量）；必须由用户勾选；
  * 入库不自动部署；工具版本与各 Skill 来源版本分别展示；不复制技能正文进工具资料。
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Layers } from "lucide-react";
 
 import {
   importSkills,
+  onFetchProgress,
+  cancelFetch,
+  type PreviewReport,
+  type FetchProgress,
   previewRepo,
   setSkill,
   type Domain,
   type ToolSkillCandidate,
   type ToolSkillCandidates as ToolSkillCandidatesData,
 } from "../services/client";
+import { FetchProgressLine } from "./FetchProgress";
 import { TagChip } from "./TagChip";
 import { Badge, Button, Dialog, Field, Notice } from "./ui";
 
@@ -32,9 +37,53 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
     [data.candidates],
   );
 
-  const [selected, setSelected] = useState<string[]>(() =>
-    pendingCandidates.map((item) => item.name),
-  );
+  const [selected, setSelected] = useState<string[]>([]);
+  const [previews, setPreviews] = useState<Record<string, PreviewReport>>({});
+  const [previewErrors, setPreviewErrors] = useState<Record<string, string>>({});
+  const cancelledRef = useRef(false);
+  const [job, setJob] = useState<string | null>(null);
+  const [progress, setProgress] = useState<FetchProgress | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    let off: (() => void) | undefined;
+    void onFetchProgress((event) => { if (event.jobId === job) setProgress(event); }).then((stop) => { if (stopped) stop(); else off = stop; });
+    return () => { stopped = true; off?.(); };
+  }, [job]);
+
+  const upstreamCandidate = (item: ToolSkillCandidate) => item.repo
+    ? previews[item.repo]?.candidates.find((candidate) => item.subpath ? candidate.subpath === item.subpath : candidate.name === item.name)
+    : undefined;
+
+  async function previewSources() {
+    cancelledRef.current = false;
+    setBusy(true);
+    setError(null);
+    for (const repo of new Set(pendingCandidates.flatMap((item) => item.repo ? [item.repo] : []))) {
+      if (cancelledRef.current) break;
+      const id = `tool-preview-${Date.now()}`;
+      setJob(id);
+      setProgress(null);
+      try {
+        const view = await previewRepo(repo, undefined, id);
+        setPreviews((current) => ({ ...current, [repo]: view }));
+        setPreviewErrors((current) => { const next = { ...current }; delete next[repo]; return next; });
+      } catch (err) {
+        setPreviewErrors((current) => ({ ...current, [repo]: String(err) }));
+      }
+    }
+    setJob(null);
+    setProgress(null);
+    setBusy(false);
+  }
+
+  async function cancelCurrent() {
+    cancelledRef.current = true;
+    if (job) await cancelFetch(job);
+  }
+
+  async function close() {
+    try { await cancelCurrent(); onClose(); } catch (err) { setError(String(err)); }
+  }
   const [domain, setDomain] = useState<Domain>("lobster");
   const [category, setCategory] = useState("");
   const [comment, setComment] = useState("");
@@ -55,6 +104,7 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
       setError("请至少勾选一个候选技能；未选择不会入库。");
       return;
     }
+    cancelledRef.current = false;
     setBusy(true);
     setError(null);
     const notes: string[] = [];
@@ -81,10 +131,12 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
     }
 
     for (const [repo, items] of groups) {
+      if (cancelledRef.current) break;
       const jobId = `tool-skill-${data.slug}-${Date.now()}`;
+      setJob(jobId);
+      setProgress(null);
       try {
-        await previewRepo(repo, undefined, jobId);
-        const subpaths = items.map((item) => item.subpath ?? item.name);
+        const subpaths = items.map((item) => upstreamCandidate(item)!.subpath);
         const outcome = await importSkills(repo, domain, subpaths, {
           category: category.trim() ? category.trim() : undefined,
           uncategorized: category.trim() ? undefined : true,
@@ -104,6 +156,8 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
       }
     }
     setBusy(false);
+    setJob(null);
+    setProgress(null);
 
     const parts: string[] = [];
     if (notes.length > 0) {
@@ -119,7 +173,7 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
     <Dialog
       title={`配套 Skill 入库 · ${data.slug}`}
       width="w-[880px]"
-      onClose={onClose}
+      onClose={() => void close()}
       footer={
         <>
           <span className="text-[12px] text-faint">
@@ -128,10 +182,10 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
             （与下方 Skill 来源版本分别管理）
           </span>
           <div className="flex shrink-0 items-center gap-2.5">
-            <Button onClick={onClose}>关闭</Button>
+            <Button onClick={() => void close()}>关闭</Button>
             <Button
               kind="primary"
-              disabled={busy || chosen.length === 0}
+              disabled={busy || chosen.length === 0 || chosen.some((item) => !upstreamCandidate(item))}
               onClick={() => void confirm()}
             >
               {busy ? "正在入库…" : "确认入库"}
@@ -146,6 +200,11 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
         </div>
       )}
 
+      {busy && <FetchProgressLine progress={progress} />}
+      <div className="mb-3 flex gap-2">
+        <Button disabled={busy} onClick={() => void previewSources()}>预览来源资料</Button>
+        {job && <Button onClick={() => void cancelCurrent().catch((err) => setError(String(err)))}>取消获取</Button>}
+      </div>
       <div className="mb-3.5 rounded-[10px] border border-line p-3.5">
         <div className="mb-2.5 flex items-center gap-2.5">
           <Layers className="size-4 text-muted" strokeWidth={1.75} />
@@ -164,6 +223,11 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
           <div className="flex flex-col gap-2">
             {data.candidates.map((item) => {
               const checked = selected.includes(item.name);
+              const source = upstreamCandidate(item);
+              const comment = item.in_vault ? item.comment : source?.comment;
+              const description = item.in_vault ? item.description : source?.description;
+              const sourceTags = item.in_vault ? item.tags : (source?.tags ?? []);
+              const previewError = item.repo ? previewErrors[item.repo] : "未登记来源仓库";
               return (
                 <label
                   key={`${item.domain}/${item.name}`}
@@ -175,13 +239,13 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
                     type="checkbox"
                     className="selectbox mt-0.5"
                     checked={checked}
-                    disabled={item.in_vault || busy}
+                    disabled={item.in_vault || busy || !source}
                     onChange={() => toggle(item.name)}
                   />
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-semibold">{item.name}</span>
-                      {item.comment && <span className="text-[12px] text-faint">（{item.comment}）</span>}
+                      <span className="text-[13px] font-semibold">{source?.name ?? item.name}</span>
+                      {comment && <span className="text-[12px] text-faint">（{comment}）</span>}
                       {item.in_vault ? (
                         <Badge tone="green">已入库</Badge>
                       ) : (
@@ -197,7 +261,7 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
                       )}
                     </span>
                     <span className="mt-1 block text-[12px] leading-[18px] text-faint">
-                      {item.description ?? (item.in_vault ? "库内没有用途描述" : "未入库：暂无库内资料")}
+                      {description ?? (source ? "上游未提供用途描述" : item.in_vault ? "库内没有用途描述" : "请先预览来源资料")}
                     </span>
                     <span
                       className="mt-1 block truncate text-[12px] text-faint"
@@ -205,9 +269,11 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
                     >
                       来源：{item.repo ?? "未记录"}{item.subpath ? ` · ${item.subpath}` : ""}
                     </span>
-                    {item.tags.length > 0 && (
+                    {!item.in_vault && previewError && <span className="mt-1 block whitespace-pre-wrap text-[12px] text-red-600">来源获取失败：{previewError}</span>}
+                    {!item.in_vault && item.repo && previews[item.repo] && !source && <span className="mt-1 block text-[12px] text-red-600">来源中没有登记的候选技能。</span>}
+                    {sourceTags.length > 0 && (
                       <span className="mt-1.5 flex flex-wrap gap-1.5">
-                        {item.tags.map((tag) => (
+                        {sourceTags.map((tag) => (
                           <TagChip key={tag} tag={tag} />
                         ))}
                       </span>

@@ -387,6 +387,7 @@ export function SkillDetail({
           </Field>
 
           <DeploymentStatus
+            deploymentBlocks={detail.skill.deployment_blocks}
             skill={reference}
             domain={detail.skill.domain}
             records={records}

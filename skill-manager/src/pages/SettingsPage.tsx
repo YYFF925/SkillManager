@@ -15,13 +15,13 @@ import { SyncStatus } from "../components/SyncStatus";
 import { DiagnosticsPanel } from "../components/DiagnosticsPanel";
 import { CapacityReport } from "../components/CapacityReport";
 import { skillHasChange } from "../components/UpstreamDialog";
-import { useUpstream } from "../lib/upstream";
 import {
   setAutoCheckMinutes,
   setFontScale,
   setTheme,
   sharedDirGet,
-  syncPull,
+  checkNow as runCheck,
+  type ScheduleReportView,
   type AgentView,
   type FontScale,
   type SettingsView,
@@ -31,6 +31,7 @@ import {
 
 export interface SettingsPageProps {
   vault: VaultInfo;
+  schedule: ScheduleReportView | null;
   /** 最近一次上传失败的可读原因；无失败为 null。 */
   uploadFailure: string | null;
   /** 显式重试最近一次已同意的上传。 */
@@ -129,6 +130,7 @@ export function SettingsPage({
   onAgentsChanged,
   onOpenTarget,
   reloadToken,
+  schedule,
 }: SettingsPageProps) {
   const [sharedDir, setSharedDir] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -136,7 +138,9 @@ export function SettingsPage({
   const [notice, setNotice] = useState<string | null>(null);
   const [syncToken, setSyncToken] = useState(0);
   const [checking, setChecking] = useState(false);
-  const upstream = useUpstream();
+  const [manualSchedule, setManualSchedule] = useState<ScheduleReportView | null>(null);
+  const latestSchedule = manualSchedule ?? schedule;
+  useEffect(() => setManualSchedule(null), [schedule]);
 
   useEffect(() => {
     void sharedDirGet()
@@ -205,16 +209,16 @@ export function SettingsPage({
   );
 
   /**
-   * 立即检查：复用库页两条既有能力——上游检查（库页工具栏「检查全部」同一函数）与库同步
-   * （库页「同步」同一函数）。上游更新不自动应用，只展示变化。
+   * 立即检查与启动、定时、托盘共用 core 统一调度；分别展示三项结果。
    */
   async function checkNow() {
     setChecking(true);
     setError(null);
     try {
-      await upstream.checkAll();
-      const report = await syncPull();
-      setNotice(`已检查上游变化并同步自己的库；上游更新仍需你确认。${report.message}`);
+      const report = await runCheck();
+      setManualSchedule(report);
+      setSyncToken((value) => value + 1);
+      setNotice("检查已结束，三项结果如下。");
     } catch (err) {
       setError(String(err));
     } finally {
@@ -227,8 +231,8 @@ export function SettingsPage({
     setSyncToken((value) => value + 1);
   }
 
-  const upstreamChanged = (upstream.report?.skills ?? []).filter(skillHasChange).length;
-  const upstreamCandidates = upstream.report?.candidates.length ?? 0;
+  const upstreamChanged = (latestSchedule?.upstream_report?.skills ?? []).filter(skillHasChange).length;
+  const upstreamCandidates = latestSchedule?.upstream_report?.candidates.length ?? 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -344,7 +348,7 @@ export function SettingsPage({
         <div className="flex flex-col">
           <SettingRow
             label="检查频率"
-            description="后台检查自己的库和上游仓库；上游更新仍由你确认（默认 1 小时）。"
+            description="后台检查自己的库、上游仓库和工具版本；上游更新仍由你确认（默认 1 小时）。"
           >
             <Segmented
               options={FREQUENCY_OPTIONS}
@@ -356,9 +360,9 @@ export function SettingsPage({
 
           <SettingRow
             label="立即检查"
-            description="检查上游变化并同步自己的库，不自动应用上游更新。"
+            description="检查上游变化、同步自己的库并检查工具版本；上游更新仍需确认。"
           >
-            <Button compact disabled={checking || upstream.busy} onClick={() => void checkNow()}>
+            <Button compact disabled={checking || checking} onClick={() => void checkNow()}>
               <RefreshCw className="size-3.5" strokeWidth={1.75} />
               {checking ? "正在检查…" : "立即检查"}
             </Button>
@@ -370,7 +374,14 @@ export function SettingsPage({
             ? "当前已关闭定时检查；仍可用「立即检查」。"
             : "定时检查已开启。"}
         </p>
-        {upstream.report && (
+        {latestSchedule && <div className="mt-3 space-y-2">
+          {([['上游检查', latestSchedule.upstream], ['库同步', latestSchedule.pull], ['工具检查', latestSchedule.tool_check]] as const).map(([label, result]) => (
+            <Notice key={label} tone={result.status === 'error' ? 'danger' : 'info'}>
+              <span className="font-medium">{label}：</span><span className="whitespace-pre-wrap">{result.detail ?? '尚无结果'}</span>
+            </Notice>
+          ))}
+        </div>}
+        {latestSchedule?.upstream_report && (
           <p className="mt-1 text-[12px] text-faint">
             上次上游检查：{upstreamChanged} 个技能有变化，{upstreamCandidates} 个新增候选（只展示，未应用）。
           </p>

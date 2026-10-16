@@ -25,6 +25,7 @@ import {
   hermesEnable,
   hermesList,
   hermesProfiles,
+  hermesRead,
   deployStatus,
   type AgentView,
   type DeploymentStatusView,
@@ -35,6 +36,7 @@ import {
 } from "../services/client";
 import { osLabel, unsupportedOs } from "../lib/support";
 import { TagChip } from "../components/TagChip";
+import { LocalSkillDetail } from "../components/LocalSkillDetail";
 import { HermesSkillDetail } from "../components/HermesSkillDetail";
 import { QuickDeploy } from "../components/QuickDeploy";
 import { Badge, Button, ConfirmDialog, Notice, Segmented } from "../components/ui";
@@ -130,6 +132,7 @@ export function HermesPage({
   const [notice, setNotice] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [detail, setDetail] = useState<string | null>(null);
+  const [localDetail, setLocalDetail] = useState<HermesSkillView | null>(null);
   const [adoptTarget, setAdoptTarget] = useState<HermesSkillView | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
@@ -306,7 +309,7 @@ export function HermesPage({
     if (skill.library_skill) {
       setDetail(skill.library_skill);
     } else {
-      setAdoptTarget(skill);
+      setLocalDetail(skill);
     }
   }
 
@@ -781,7 +784,7 @@ export function HermesPage({
                   <span className="ml-auto text-[12px] text-muted">
                     {skill.enabled ? "已启用" : "未启用"}
                   </span>
-                  <QuickDeploy reference={skill.in_library ? skill.library_skill : null} domain="lobster"
+                  <QuickDeploy deploymentBlocks={skill.deployment_blocks} reference={skill.in_library ? skill.library_skill : null} domain="lobster"
                     agents={agents} records={records} unsupportedReason={unsupported ? osReason(skill, os) : null}
                     onChange={async () => { setRecords(await deployStatus()); setVersion((value) => value + 1); }} onError={setError} />
                 </div>
@@ -814,6 +817,16 @@ export function HermesPage({
             setDetail(null);
             onOpenInLibrary(reference);
           }}
+        />
+      )}
+
+      {localDetail && active && (
+        <LocalSkillDetail
+          readFile={(file) => hermesRead(active, localDetail.name, file)}
+          skill={{ name: localDetail.name, path: localDetail.path ?? '', target: `hermes:${active}`, managed: false, status: 'local', library_exists: false, deployment_blocks: localDetail.deployment_blocks }}
+          onClose={() => setLocalDetail(null)}
+          onAdopt={() => { setAdoptTarget(localDetail); setLocalDetail(null); }}
+          onOpenInLibrary={onOpenInLibrary}
         />
       )}
 

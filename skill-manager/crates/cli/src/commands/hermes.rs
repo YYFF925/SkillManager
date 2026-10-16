@@ -20,12 +20,22 @@ pub struct HermesCommand {
 pub enum HermesAction {
     /// 列出本机现有档案（default 与具名档案）。
     Profiles,
+    /// 只读查看档案实际技能正文或文件，不收编。
+    Read(ReadArgs),
     /// 列出某档案的技能（组合筛选）。
     List(ListArgs),
     /// 为某具名档案明确启用技能（可多个）。
     Enable(NamesArgs),
     /// 为某具名档案禁用技能（可多个）。
     Disable(NamesArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct ReadArgs {
+    pub profile: String,
+    pub name: String,
+    #[arg(long)]
+    pub file: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -75,6 +85,11 @@ pub fn run(
 fn dispatch(action: HermesAction, ctx: &AppContext) -> Result<(CliResult, String)> {
     match action {
         HermesAction::Profiles => profiles(ctx),
+        HermesAction::Read(args) => {
+            let view = with_service(ctx, |service| service.read(&args.profile, &args.name, args.file.as_deref()))?;
+            let human = view.text.clone().unwrap_or_else(|| format!("该文件不是 UTF-8 文本（{} 字节）", view.size));
+            Ok((CliResult::from_data(&view), human))
+        },
         HermesAction::List(args) => list(ctx, args),
         HermesAction::Enable(args) => set_enabled(ctx, args, true),
         HermesAction::Disable(args) => set_enabled(ctx, args, false),

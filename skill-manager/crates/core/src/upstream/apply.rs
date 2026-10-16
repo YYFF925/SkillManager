@@ -12,7 +12,7 @@ use std::sync::atomic::AtomicBool;
 
 use serde::Serialize;
 
-use crate::deploy::DeploymentService;
+use crate::deploy::{DeployItemView, DeployReport, DeploymentService};
 use crate::domain::{Domain, SkillRef};
 use crate::error::{CoreError, Result};
 use crate::manager;
@@ -35,6 +35,8 @@ pub struct UpdateItem {
     pub to_version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub changes: Option<ChangeView>,
+    pub deployments: Vec<DeployItemView>,
+    pub errors: Vec<ItemError>,
 }
 
 /// 仓库批量更新结果。
@@ -78,6 +80,14 @@ impl UpstreamService<'_> {
                 })?,
         };
 
+        if to == source.version {
+            return Ok(UpdateItem {
+                skill: reference.to_string(), repo: source.repo,
+                action: "unchanged".to_string(), from_version: source.version,
+                to_version: to, changes: None, deployments: Vec::new(), errors: Vec::new(),
+            });
+        }
+
         let mut cache = FetchCache::new();
         let fetched = cache.fetch_at(
             &self.state_dir(),
@@ -112,6 +122,8 @@ impl UpstreamService<'_> {
                 from_version: source.version.clone(),
                 to_version: to,
                 changes: None,
+                deployments: outcome.removed,
+                errors: outcome.paused,
             });
         }
 
@@ -127,18 +139,6 @@ impl UpstreamService<'_> {
             deleted: report.base.deleted,
             manager: manager_items,
         });
-        if !deployments.failures.is_empty() {
-            let reason = deployments
-                .failures
-                .iter()
-                .map(|item| item.message.clone())
-                .collect::<Vec<_>>()
-                .join("；");
-            return Err(CoreError::other(format!(
-                "技能内容已更新到 {to}，但本机已有部署同步未完成：{reason}"
-            )));
-        }
-
         Ok(UpdateItem {
             skill: reference.to_string(),
             repo: source.repo.clone(),
@@ -146,6 +146,8 @@ impl UpstreamService<'_> {
             from_version: source.version.clone(),
             to_version: to,
             changes,
+            deployments: deployments.items,
+            errors: deployments.failures,
         })
     }
 
@@ -226,6 +228,13 @@ impl UpstreamService<'_> {
                             .push(ItemError::from_error(&err).skill(reference.to_string()));
                         continue;
                     }
+                    let deployments = DeploymentService::new(self.vault_root.clone(), self.resolver, self.state)
+                        .sync(Some(&reference), None, false)
+                        .unwrap_or_else(|err| DeployReport {
+                            items: Vec::new(),
+                            failures: vec![ItemError::from_error(&err).skill(reference.to_string())],
+                        });
+                    outcome.errors.extend(deployments.failures.clone());
                     outcome.items.push(UpdateItem {
                         skill: reference.to_string(),
                         repo: source.repo.clone(),
@@ -241,6 +250,8 @@ impl UpstreamService<'_> {
                                 manager,
                             }
                         }),
+                        deployments: deployments.items,
+                        errors: deployments.failures,
                     });
                 }
                 Err(err) => outcome

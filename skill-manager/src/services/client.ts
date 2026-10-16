@@ -48,6 +48,7 @@ export type AgentDirKind = "skills" | "project-rel" | "instructions";
 
 /** Agent 技能目录下的一项本地技能。 */
 export interface LocalSkillView {
+  deployment_blocks: Record<string, string>;
   name: string;
   path: string;
   /** 受管：该 Agent 目标下存在指向此路径的本机部署记录。 */
@@ -104,6 +105,7 @@ export interface PresetRef {
 
 /** 技能摘要（列表项）。 */
 export interface SkillSummary {
+  deployment_blocks: Record<string, string>;
   domain: Domain;
   name: string;
   category: string | null;
@@ -239,6 +241,8 @@ export interface SkillListQuery {
   tags?: string[];
   agent?: string;
   noTag?: boolean;
+  /** 按本机实际部署目标筛选（与 agent 支持声明筛选不同）。 */
+  deployedTo?: string;
   /** 预设筛选；须同时给 domain，避免跨域同 id 歧义。 */
   preset?: string;
 }
@@ -582,6 +586,7 @@ export interface DeployReportView {
 
 /** `deploy status` 的一项。 */
 export interface DeploymentStatusView {
+  deployment_blocks: Record<string, string>;
   skill: string;
   target: string;
   target_path: string;
@@ -682,6 +687,7 @@ export interface HermesProfilesView {
 
 /** 档案技能列表项。 */
 export interface HermesSkillView {
+  deployment_blocks: Record<string, string>;
   name: string;
   domain: Domain;
   /** 库内引用（`lobster/<名>`）；不在库内为 undefined。 */
@@ -706,6 +712,11 @@ export interface HermesSkillView {
   /** 禁止新增启用的原因。 */
   blocked?: string;
   manager_error?: string;
+}
+
+export async function hermesRead(profile: string, name: string, file?: string): Promise<LocalSkillReadView> {
+  requireDesktop();
+  return invoke("hermes_read", { profile, name, file });
 }
 
 export interface HermesSkillsView {
@@ -811,6 +822,8 @@ export interface RepoCandidate {
   subpath: string;
   name: string;
   description: string | null;
+  comment: string | null;
+  tags: string[];
 }
 
 /** `skill preview` 结果。 */
@@ -918,6 +931,8 @@ export interface UpdateItemView {
   from_version: string;
   to_version: string;
   changes?: ChangeView;
+  deployments: DeployItemView[];
+  errors: ItemErrorView[];
 }
 
 export interface UpdateRepoView {
@@ -1228,6 +1243,7 @@ export interface SyncStatusView {
 
 /** 拉取结果。 */
 export interface PullReportView {
+  errors: ItemErrorView[];
   outcome:
     | "up_to_date"
     | "pulled"
@@ -1248,6 +1264,33 @@ export interface PullReportView {
   instruction_targets: InstructionTargetResult[];
   connection_error?: string | null;
   message: string;
+}
+
+export interface ScheduleReportView {
+  trigger: string;
+  interval_minutes: number;
+  timer_enabled: boolean;
+  skipped_by_interval: boolean;
+  not_due: boolean;
+  upstream: { executed: boolean; status: string; detail?: string };
+  pull: { executed: boolean; status: string; detail?: string };
+  tool_check: { executed: boolean; status: string; detail?: string };
+  upstream_report: CheckReportView | null;
+}
+
+export async function checkNow(): Promise<ScheduleReportView> {
+  requireDesktop();
+  return invoke("environment_check");
+}
+
+export async function currentSchedule(): Promise<ScheduleReportView | null> {
+  requireDesktop();
+  return invoke("environment_schedule_current");
+}
+
+export async function onScheduleFinished(handler: (report: ScheduleReportView) => void): Promise<() => void> {
+  requireDesktop();
+  return listen<ScheduleReportView>("schedule-finished", (event) => handler(event.payload));
 }
 
 /** 上传结果。 */

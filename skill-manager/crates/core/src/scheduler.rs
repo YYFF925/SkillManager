@@ -2,7 +2,7 @@
 //!
 //! 触发方式：启动（`Startup`）、手动（`Manual`）与定时（`Timer`）。启动与手动总是执行；
 //! 定时仅在频率不为“关闭”（0）时到达后执行，关闭定时不禁用手动操作。三类结果分别表达，
-//! 不合并成单一“同步成功”。工具版本检查由 US9（T077）补齐，本期只登记入口，不冒充已执行。
+//! 不合并成单一“同步成功”。工具版本检查只执行已登记命令，不安装、不更新。
 
 use std::sync::atomic::AtomicBool;
 
@@ -97,6 +97,7 @@ pub struct ScheduleReport {
     pub upstream: TaskOutcome,
     pub pull: TaskOutcome,
     pub tool_check: TaskOutcome,
+    pub upstream_report: Option<crate::upstream::CheckReport>,
 }
 
 /// 统一调度未执行时的报告（定时关闭或未到周期）。
@@ -116,6 +117,7 @@ fn skipped_report(
         upstream: TaskOutcome::skipped(note),
         pull: TaskOutcome::skipped(note),
         tool_check: TaskOutcome::skipped(note),
+        upstream_report: None,
     }
 }
 
@@ -167,22 +169,28 @@ pub fn run(ctx: &AppContext, trigger: Trigger) -> Result<ScheduleReport> {
             upstream: TaskOutcome::skipped(note),
             pull: TaskOutcome::skipped(note),
             tool_check: TaskOutcome::skipped(note),
+            upstream_report: None,
         });
     };
 
     let resolver = ctx.target_resolver()?;
 
     // 1) 上游检查（只展示，不应用）。
+    let mut upstream_report = None;
     let upstream = {
         let cancel = AtomicBool::new(false);
         let service = UpstreamService::from_context(ctx, &resolver)?;
         match service.check(&CheckScope::All, &mut |_progress| {}, &cancel) {
-            Ok(report) => TaskOutcome::ok(format!(
-                "检查 {} 个来源仓库、{} 个技能，发现 {} 个新增候选",
-                report.repos.len(),
-                report.skills.len(),
-                report.candidates.len()
-            )),
+            Ok(report) => {
+                let failures: Vec<_> = report.repos.iter().filter(|repo| !repo.ok).collect();
+                let mut detail = format!("检查 {} 个来源仓库、{} 个技能，发现 {} 个新增候选", report.repos.len(), report.skills.len(), report.candidates.len());
+                for failed in &failures {
+                    detail.push_str(&format!("\n{}：{}", failed.repo, failed.error.as_deref().unwrap_or("检查失败")));
+                }
+                let outcome = if failures.is_empty() { TaskOutcome::ok(detail) } else { TaskOutcome::error(detail) };
+                upstream_report = Some(report);
+                outcome
+            },
             Err(err) => {
                 let _ = crate::diagnostics::record(
                     ctx.state(),
@@ -201,7 +209,7 @@ pub fn run(ctx: &AppContext, trigger: Trigger) -> Result<ScheduleReport> {
         let service = SyncService::new(vault, home, ctx.catalog(), ctx.state(), &resolver);
         match service.pull() {
             Ok(report) => {
-                if report.outcome == "pulled" || report.outcome == "up_to_date" {
+                if (report.outcome == "pulled" || report.outcome == "up_to_date") && report.errors.is_empty() {
                     TaskOutcome::ok(report.message)
                 } else {
                     // 未连接/冲突/无上游都如实表达为未成功，不冒充成功。
@@ -236,13 +244,17 @@ pub fn run(ctx: &AppContext, trigger: Trigger) -> Result<ScheduleReport> {
                     .filter(|outcome| outcome.status == status)
                     .count()
             };
-            TaskOutcome::ok(format!(
+            let mut detail = format!(
                 "检查 {} 个工具：成功 {}，失败 {}，未登记命令 {}",
                 outcomes.len(),
                 count("checked"),
                 count("failed"),
                 count("no_command")
-            ))
+            );
+            for failed in outcomes.iter().filter(|outcome| outcome.status == "failed") {
+                detail.push_str(&format!("\n{}：{}", failed.slug, failed.output.as_deref().unwrap_or("检查失败")));
+            }
+            if count("failed") > 0 { TaskOutcome::error(detail) } else { TaskOutcome::ok(detail) }
         }
         Err(err) => {
             let _ = crate::diagnostics::record(
@@ -280,6 +292,7 @@ pub fn run(ctx: &AppContext, trigger: Trigger) -> Result<ScheduleReport> {
         upstream,
         pull,
         tool_check,
+        upstream_report,
     })
 }
 

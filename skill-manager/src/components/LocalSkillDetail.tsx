@@ -1,11 +1,12 @@
 /** 本机技能的只读详情：始终读取所选目标中的实际副本。 */
 import { useCallback, useEffect, useState } from "react";
 
-import { agentReadLocal, type LocalSkillReadView, type LocalSkillView } from "../services/client";
+import { type LocalSkillReadView, type LocalSkillView } from "../services/client";
+import { MarkdownView } from "./MarkdownView";
 import { Badge, Button, Dialog, Notice, Segmented } from "./ui";
 
-export function LocalSkillDetail({ target, skill, onClose, onAdopt, onOpenInLibrary }: {
-  target: string;
+export function LocalSkillDetail({ readFile, skill, onClose, onAdopt, onOpenInLibrary }: {
+  readFile: (file?: string) => Promise<LocalSkillReadView>;
   skill: LocalSkillView;
   onClose: () => void;
   onAdopt: () => void;
@@ -17,12 +18,12 @@ export function LocalSkillDetail({ target, skill, onClose, onAdopt, onOpenInLibr
 
   const load = useCallback(async (file?: string) => {
     try {
-      setDetail(await agentReadLocal(target, skill.name, file));
+      setDetail(await readFile(file));
       setError(null);
     } catch (err) {
       setError(String(err));
     }
-  }, [target, skill.name]);
+  }, [readFile]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -64,7 +65,7 @@ export function LocalSkillDetail({ target, skill, onClose, onAdopt, onOpenInLibr
           <p className="mb-2.5 font-mono text-[12px] text-muted">{detail.file}</p>
           {detail.text === null
             ? <Notice>该文件不是 UTF-8 文本（{detail.size} 字节），无法作为文本阅读。</Notice>
-            : <pre className="read-text">{detail.text}</pre>}
+            : detail.file.toLowerCase().endsWith(".md") ? <MarkdownView text={detail.text} /> : <pre className="read-text">{detail.text}</pre>}
         </div>
       )}
     </Dialog>

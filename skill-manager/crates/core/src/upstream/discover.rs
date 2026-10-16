@@ -28,6 +28,8 @@ pub struct Candidate {
     pub name: String,
     /// 入口文件 frontmatter 的 description（仅展示）。
     pub description: Option<String>,
+    pub comment: Option<String>,
+    pub tags: Vec<String>,
 }
 
 impl Candidate {
@@ -97,10 +99,13 @@ fn make(dir: &Path, subpath: &str) -> Result<Candidate> {
         subpath.rsplit('/').next().unwrap_or(subpath).to_string()
     };
     let description = scan::read_frontmatter(dir).description;
+    let meta = crate::manager::MetaFile::load(dir)?.meta()?;
     Ok(Candidate {
         subpath: subpath.to_string(),
         name,
         description,
+        comment: meta.comment,
+        tags: meta.tags,
     })
 }
 

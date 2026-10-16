@@ -12,6 +12,7 @@ import type { AgentView, DeploymentStatusView, LocalSkillView } from "../service
 
 /** 受管（已同步）。 */
 const managed: LocalSkillView = {
+  deployment_blocks: {},
   name: "agent-skill-deployment",
   path: "/tmp/home/.agents/skills/agent-skill-deployment",
   managed: true,
@@ -24,6 +25,7 @@ const managed: LocalSkillView = {
 
 /** 受管但本地有变更：按撤销与暂停规则处理。 */
 const paused: LocalSkillView = {
+  deployment_blocks: {},
   name: "spec-kit-cli",
   path: "/tmp/home/.agents/skills/spec-kit-cli",
   managed: true,
@@ -35,6 +37,7 @@ const paused: LocalSkillView = {
 
 /** 未受管：直接删除实际文件。 */
 const localOnly: LocalSkillView = {
+  deployment_blocks: {},
   name: "local-only",
   path: "/tmp/home/.agents/skills/local-only",
   managed: false,
@@ -77,6 +80,7 @@ const deployRecords: DeploymentStatusView[] = [
     target: "agent:codex",
     target_path: "/tmp/codex/skills/agent-skill-deployment",
     status: "ok",
+    deployment_blocks: {},
     source_hash: "a",
     deployed_hash: "a",
     synced_at: null,
@@ -87,6 +91,7 @@ const deployRecords: DeploymentStatusView[] = [
     target: "shared",
     target_path: "/tmp/home/.agents/skills/agent-skill-deployment",
     status: "paused_local_change",
+    deployment_blocks: {},
     source_hash: "a",
     deployed_hash: "b",
     synced_at: null,

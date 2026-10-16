@@ -88,6 +88,7 @@ pub struct ProfileView {
 /// 档案技能列表项。
 #[derive(Clone, Debug, Serialize)]
 pub struct ProfileSkillView {
+    pub deployment_blocks: std::collections::BTreeMap<String, String>,
     pub name: String,
     pub domain: Domain,
     /// 库内引用（`lobster/<名>`）；不在库内为 None。
@@ -158,6 +159,14 @@ pub struct HermesService<'a> {
 }
 
 impl<'a> HermesService<'a> {
+    pub fn read(&self, profile: &str, name: &str, file: Option<&str>) -> Result<crate::deploy::local_skills::LocalSkillRead> {
+        validate_skill_name(name)?;
+        let info = resolve_profile(self.root(), profile)?;
+        let path = scan_skill_dirs(&info.skills_dir).into_iter().find(|(found, _)| names_equal(found, name))
+            .map(|(_, path)| path).ok_or_else(|| CoreError::other(format!("档案中没有该技能：{profile}/{name}")))?;
+        crate::deploy::local_skills::read_skill_dir(&path, file)
+    }
+
     pub fn new(
         root: PathBuf,
         vault_root: Option<PathBuf>,
@@ -569,6 +578,7 @@ fn base_view(
 ) -> ProfileSkillView {
     match entry {
         Some(entry) => ProfileSkillView {
+            deployment_blocks: entry.deployment_blocks(),
             name,
             domain,
             library_skill: Some(entry.reference().to_string()),
@@ -590,6 +600,7 @@ fn base_view(
             manager_error: entry.manager_error.clone(),
         },
         None => ProfileSkillView {
+            deployment_blocks: Default::default(),
             name,
             domain,
             library_skill: None,
@@ -780,6 +791,7 @@ mod tests {
     #[test]
     fn query_matching_and_tag_linkage() {
         let view = ProfileSkillView {
+            deployment_blocks: Default::default(),
             name: "alpha".to_string(),
             domain: Domain::Lobster,
             library_skill: Some("lobster/alpha".to_string()),
@@ -833,6 +845,7 @@ mod tests {
     fn view_serializes_empty_tags_as_array() {
         // 客户端按数组处理 tags；空集合也必须出现，不能因缺字段崩溃（真实 webview 曾因此空白）。
         let view = ProfileSkillView {
+            deployment_blocks: Default::default(),
             name: "alpha".to_string(),
             domain: Domain::Lobster,
             library_skill: None,

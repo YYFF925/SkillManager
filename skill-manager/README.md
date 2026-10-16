@@ -117,7 +117,7 @@ skill-manager agent read-local shared <name>
 
 1. **新增候选入库**（`skill import` / `skill update-repo`）无 `tags`/`comment` 参数，
    GUI 与 CLI 一致地只能补充分类，标签/注释继承上游 `.manager`；入库后可用 `skill set` 补充。
-2. **Hermes 档案独有技能**没有只读查看正文的入口（无对应命令）。
+2. **Hermes 档案独有技能**已可在 GUI 或 `hermes read <profile> <name> [--file <path>]` 只读查看正文与文件；阅读不收编，不改变启用名单。
 3. **平台兼容**：本机仅在 macOS（arm64）实际运行验证；其他平台未验证，不声明兼容。
    Hermes 启用用符号链接实现，Windows 下的链接行为未验证。
 4. **未取得人工界面证据的交互**：卡片三点菜单/多选批量栏/入库与部署弹窗的部分点按流程、

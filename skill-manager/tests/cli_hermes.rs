@@ -45,6 +45,23 @@ fn hermes_env() -> TestEnv {
 }
 
 #[test]
+fn read_profile_local_skill_does_not_adopt_or_change_enable_state() {
+    let env = hermes_env();
+    let dir = env.hermes_profile_skill("blank", "local-only", "# 档案独有正文\n");
+    std::fs::create_dir_all(dir.join("references")).unwrap();
+    std::fs::write(dir.join("references/guide.md"), "独有文件").unwrap();
+    let before = env.cli_json(&["hermes", "list", "blank"]);
+    let body = env.cli_json(&["hermes", "read", "blank", "local-only"]);
+    assert_eq!(body["text"], "# 档案独有正文\n");
+    let file = env.cli_json(&["hermes", "read", "blank", "local-only", "--file", "references/guide.md"]);
+    assert_eq!(file["text"], "独有文件");
+    assert_ne!(env.cli_json_raw(&["hermes", "read", "blank", "local-only", "--file", "../../config.yaml"]).0, 0);
+    assert!(!env.path("lobster/local-only").exists());
+    assert!(!env.hermes_root().join("skills/local-only").exists());
+    assert_eq!(env.cli_json(&["hermes", "list", "blank"]), before);
+}
+
+#[test]
 fn profiles_lists_default_and_identity_profiles_only() {
     let env = hermes_env();
     // 无身份标记的副作用目录与已删除（有墓碑）的目录都不应被认作档案。

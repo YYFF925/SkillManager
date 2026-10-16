@@ -17,6 +17,7 @@ import {
   type SkillDetail as SkillDetailData,
   type SkillFileView,
 } from "../services/client";
+import { MarkdownView } from "./MarkdownView";
 import { osLabel } from "../lib/support";
 import { Badge, Button, Dialog, Field, Notice, Segmented } from "./ui";
 
@@ -170,11 +171,10 @@ export function HermesSkillDetail({
         </div>
       )}
 
-      <Segmented options={TABS} value={tab} onChange={setTab} className="mb-4 w-max max-w-full" />
-
-      {tab === "read" && detail && content && (
-        <div>
-          <div className="flex items-center justify-between gap-4">
+      <div className="sticky -top-5 z-20 -mx-6 -mt-5 mb-4 border-b border-line-soft bg-panel px-6 pt-5 pb-3">
+        <Segmented options={TABS} value={tab} onChange={setTab} className="w-max max-w-full" />
+        {tab === "read" && content && (
+          <div className="mt-3 flex items-center justify-between gap-4">
             <Badge
               tone={
                 content.translation_stale ? "amber" : content.has_translation ? "green" : "gray"
@@ -195,9 +195,9 @@ export function HermesSkillDetail({
               onChange={setLang}
             />
           </div>
-          <pre className="read-text mt-3">{readText}</pre>
-        </div>
-      )}
+        )}
+      </div>
+      {tab === "read" && detail && content && <MarkdownView text={readText} />}
 
       {tab === "manager" && detail && (
         <div className="grid grid-cols-2 gap-3.5">

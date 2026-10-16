@@ -3,6 +3,28 @@
 
 mod common;
 
+#[test]
+fn batch_deployment_continues_after_target_write_error() {
+    let env = common::TestEnv::new();
+    env.write_skill("code", None, "alpha", "alpha\n");
+    let blocked = env.root.path().join("blocked");
+    std::fs::write(&blocked, "不是目录").unwrap();
+    let good = env.root.path().join("good");
+    env.cli_json(&["agent", "set-dir", "codex", "--skills", blocked.to_str().unwrap()]);
+    env.cli_json(&["agent", "set-dir", "zcode", "--skills", good.to_str().unwrap()]);
+    let (code, result) = env.cli_json_raw(&["deploy", "to", "codex", "code/alpha", "--also-target", "zcode"]);
+    assert_eq!(code, 2, "{result}");
+    assert_eq!(result["data"]["items"][0]["target"], "agent:zcode");
+    assert_eq!(result["errors"][0]["target"], "agent:codex");
+    assert!(good.join("alpha/SKILL.md").exists());
+    let diagnostics = env.cli_json(&["settings", "diagnostics"]);
+    let logs = diagnostics["recent_logs"].as_array().unwrap();
+    let failure = logs.iter().find(|entry| entry["action"] == "deploy").unwrap();
+    let message = failure["message"].as_str().unwrap();
+    assert!(message.contains("blocked") && message.contains("agent:codex"), "{failure}");
+    assert!(!failure["at"].as_str().unwrap().is_empty());
+}
+
 use common::TestEnv;
 use serde_json::Value;
 

@@ -33,9 +33,11 @@ import {
   deploySync,
   detachSkillTags,
   listSkills,
+  listPresets,
   moveSkill,
   skillTask,
   syncPull,
+  type CheckReportView,
   type AgentView,
   type DeploymentStatusView,
   type Domain,
@@ -43,9 +45,11 @@ import {
   type SkillCheckView,
   type SkillListResult,
   type SkillSummary,
+  type PresetView,
 } from "../services/client";
 import { osLabel, unsupportedDeployReason, unsupportedOs } from "../lib/support";
 import { useUpstream } from "../lib/upstream";
+import { targetLabel } from "../lib/targets";
 import { QuickDeploy } from "../components/QuickDeploy";
 import { TagChip } from "../components/TagChip";
 import { SkillDetail } from "../components/SkillDetail";
@@ -99,6 +103,7 @@ function osReason(skill: SkillSummary, os: EnvironmentOs | null): string {
 
 export interface LibraryPageProps {
   domain: Domain;
+  scheduledReport?: CheckReportView | null;
   os: EnvironmentOs | null;
   agents: AgentView[];
   reloadToken: number;
@@ -114,6 +119,7 @@ export interface LibraryPageProps {
 
 export function LibraryPage({
   domain,
+  scheduledReport,
   os,
   agents,
   reloadToken,
@@ -146,6 +152,9 @@ export function LibraryPage({
   const [deleteTarget, setDeleteTarget] = useState<string[] | null>(null);
   const [records, setRecords] = useState<DeploymentStatusView[]>([]);
   const [deployFilter, setDeployFilter] = useState<DeployFilter>("all");
+  const [deployedTo, setDeployedTo] = useState("");
+  const [preset, setPreset] = useState("");
+  const [presets, setPresets] = useState<PresetView[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [upstreamOpen, setUpstreamOpen] = useState(false);
   const [copyTarget, setCopyTarget] = useState<SkillSummary | null>(null);
@@ -153,7 +162,7 @@ export function LibraryPage({
   const [syncing, setSyncing] = useState(false);
   /** 生成维护任务的目标技能（单项或多选）。 */
   const [taskTargets, setTaskTargets] = useState<string[] | null>(null);
-  const upstream = useUpstream();
+  const upstream = useUpstream(scheduledReport);
 
   // 搜索输入去抖：core 每次查询都会重扫库文件。
   useEffect(() => {
@@ -166,12 +175,12 @@ export function LibraryPage({
     (async () => {
       setLoading(true);
       try {
-        const base = await listSkills({ domain });
+        const [base, presetList] = await Promise.all([listSkills({ domain }), listPresets(domain)]);
         if (cancelled) {
           return;
         }
         const hasFilter =
-          debouncedQuery.trim().length > 0 || category !== null || tag !== null;
+          debouncedQuery.trim().length > 0 || category !== null || tag !== null || !!deployedTo || !!preset;
         const result = hasFilter
           ? await listSkills({
               domain,
@@ -180,12 +189,15 @@ export function LibraryPage({
               uncategorized: category === UNCATEGORIZED || undefined,
               tags: tag !== null && tag !== NO_TAG ? [tag] : undefined,
               noTag: tag === NO_TAG || undefined,
+              deployedTo: deployedTo || undefined,
+              preset: preset || undefined,
             })
           : base;
         if (cancelled) {
           return;
         }
         setAll(base);
+        setPresets(presetList);
         setFiltered(result);
         setError(null);
         onCount(base.total);
@@ -202,12 +214,12 @@ export function LibraryPage({
     return () => {
       cancelled = true;
     };
-  }, [domain, debouncedQuery, category, tag, reloadToken, version, onCount]);
+  }, [domain, debouncedQuery, category, tag, deployedTo, preset, reloadToken, version, onCount]);
 
   // 筛选或搜索变化时清空批量选择（与原型一致，避免作用于不可见条目）。
   useEffect(() => {
     setSelected([]);
-  }, [domain, debouncedQuery, category, tag]);
+  }, [domain, debouncedQuery, category, tag, deployedTo, preset, deployFilter]);
 
   // 从其他页面（Hermes 详情“前往技能库编辑”）跳转进来：直接打开目标技能详情。
   useEffect(() => {
@@ -279,6 +291,9 @@ export function LibraryPage({
       return deployFilter === "deployed" ? deployed : !deployed;
     });
   }, [filtered, deployFilter, deployedTargets]);
+  const deployedOptions = useMemo(() => [...new Set(records
+    .filter((record) => record.skill.startsWith(`${domain}/`))
+    .map((record) => record.target))], [records, domain]);
   const tagCandidates = useMemo(() => filtered?.tag_candidates ?? [], [filtered]);
 
   // 上游状态：仅展示 core 检查报告，卡片与工具栏据此表达“有更新/新增”。
@@ -379,7 +394,7 @@ export function LibraryPage({
   }
 
   const filterActive =
-    debouncedQuery.trim().length > 0 || category !== null || tag !== null || deployFilter !== "all";
+    debouncedQuery.trim().length > 0 || category !== null || tag !== null || deployFilter !== "all" || !!deployedTo || !!preset;
 
   function clearFilters() {
     setQuery("");
@@ -387,6 +402,8 @@ export function LibraryPage({
     setCategory(null);
     setTag(null);
     setDeployFilter("all");
+    setDeployedTo("");
+    setPreset("");
   }
 
   const selectedSkills = skills.filter((skill) => selected.includes(referenceOf(skill)));
@@ -515,6 +532,18 @@ export function LibraryPage({
             value={deployFilter}
             onChange={(value) => setDeployFilter(value as DeployFilter)}
           />
+          <select aria-label="指定部署目标" value={deployedTo}
+            onChange={(event) => setDeployedTo(event.target.value)}
+            className="h-10 rounded-lg border border-line bg-panel px-3 text-[13px] text-ink-3">
+            <option value="">全部部署目标</option>
+            {deployedOptions.map((target) => <option key={target} value={target}>{targetLabel(target, agents)}</option>)}
+          </select>
+          <select aria-label="所属预设" value={preset}
+            onChange={(event) => setPreset(event.target.value)}
+            className="h-10 rounded-lg border border-line bg-panel px-3 text-[13px] text-ink-3">
+            <option value="">全部预设</option>
+            {presets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2.5">
           <Button compact disabled={upstream.busy} onClick={() => void upstream.checkAll()}>
@@ -889,7 +918,7 @@ export function LibraryPage({
                       {preset.name}
                     </span>
                   ))}
-                  <QuickDeploy reference={reference} domain={domain} agents={agents} records={records}
+                  <QuickDeploy deploymentBlocks={skill.deployment_blocks} reference={reference} domain={domain} agents={agents} records={records}
                     unsupportedReason={unsupported ? osReason(skill, os) : null}
                     onChange={refreshRecords} onError={setError} />
                 </div>
