@@ -112,12 +112,17 @@
    - 产品规格 `specs/002-skill-management/spec.md` 未接手：FR-041/FR-042（`:347-348`）只覆盖本机 Agent，
      `:386` 明写"共享目录为特殊部署目标"，没有任何 FR/SC 覆盖共享目录的浏览；
    - `plan.md` 的 M2/M3 范围表与 `tasks.md` 均无对应条目，也未登记为"暂缓"；
-   - 实现因此既无页面与入口（`AppShell`/`AgentPage`/`App` 无 `共享`/`shared`），后端也无"扫描共享目录并判定受管/仅本地"的能力
-     （`LocalSkillService::list` 只接受内置 Agent key，`Target::Shared` 无 agent key）。
+   - 实现因此既无页面与入口（`AppShell`/`AgentPage`/`App` 无 `共享`/`shared`）。**后端能解析共享目录路径**
+     （`TargetResolver::resolve_with_override` 的 `Target::Shared` 分支，`deploy/targets.rs:219-232`），
+     「扫描目录 + 按部署记录判定受管/仅本地」的逻辑也已存在（`LocalSkillService::list`，`deploy/local_skills.rs:76`），
+     但该服务的入口只按 **agent key** 工作：`skills_dir(key)` → `agent_skills_dir(key)` 查内置 Agent 名单，
+     查不到即报「{key} 不在内置 Agent 名单中」（`targets.rs:178-187`、`:201-205`），而 `shared` 是特殊部署目标、没有 key
+     （`Target::Shared` 的 `agent_key` 为 `None`；前端 `lib/targets.ts:36` 标 `isAgent:false`），
+     契约中 `agent local-skills <key>` 因此无法指向共享目录。
+   **待用户裁决**：是否补该能力。补法不是从零造：现有 `LocalSkillService` 已具备扫描与受管判定，只需把入口从
+   "agent key"扩到"目标"（复用 `Target::Shared` 的路径解析），再补契约命令与 GUI 入口/页面。
    交付前的 M2 验收曾把 `renders/03` 记为"通过"，经复核证据图为技能库页＋Agent 管理页＋Codex 页，**属误标**，
    已在 `m2-report.md` 第二节更正。
-   **待用户裁决**：是否补该能力。若要补，需 core 侧新增共享目录扫描与受管判定及对应契约命令
-   （现契约中 `agent local-skills <key>` 不接受 `shared`），并在 GUI 增加导航入口与页面。
 
 ## 七、自动化验证（最终）
 
