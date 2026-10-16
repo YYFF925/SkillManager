@@ -27,7 +27,8 @@
 
 | 原型页面/状态 | 实际截图 | 结论与差异 |
 |---|---|---|
-| 共享 Agent / Codex 页（`renders/03`、`04`） | `/tmp/m2-gui/01-library.png`、`08-agent-manage.png`、`09-agent-local.png` | 通过：Agent 分组（已检测/其他支持项）、启停开关、拖动排序柄、技能目录行内铅笔与恢复默认、本地技能列表"已同步·受管 / 本地有变更·受管 / 仅本地"三态与筛选。侧栏随启用状态与顺序变化 |
+| Codex 页与 Agent 管理页（`renders/04`） | `/tmp/m2-gui/01-library.png`、`08-agent-manage.png`、`09-agent-local.png` | 通过：Agent 分组（已检测/其他支持项）、启停开关、拖动排序柄、技能目录行内铅笔与恢复默认、本地技能列表"已同步·受管 / 本地有变更·受管 / 仅本地"三态与筛选。侧栏随启用状态与顺序变化 |
+| 共享 Agent 页（`renders/03`） | 无 | **未验收（2026-10-16 更正）**：本行原与上行合并写作"共享 Agent / Codex 页（`renders/03`、`04`）→ 通过"，但三条证据图经复核分别为技能库页、编码 Agent 管理页与 Codex 页，**不含共享目录技能清单**，故 `renders/03` 当时并未取证。源码核实：实现没有该页面与入口，后端也没有扫描共享目录的能力。该需求在哪一层丢失见 m5-report 第六节第 9 条 |
 | 部署目标亮暗（`renders/26`） | `02-detail.png`、`10-paused.png` | 通过：已部署目标亮显（含部署目标 chips）、未部署灰暗、暂停项提示与"复制定位信息给 Agent" |
 | 已有部署不适用警告（`renders/28`） | `03-deploy-tab.png` | 通过：不适用目标带叹号 + 警告明细行 + 图例 |
 | 部署字符（无直接原型页） | `04-deploy-dialog.png`、`05-shared-path.png`、`07-deploy-targets-selected.png` | 部分通过：目标分组（已检测 4 / 其他支持 44）、多技能×多目标选择、共享目录路径设置与未设置时如实提示；**结果面板（过滤/暂停分组）未取到截图**（弹窗 footer 按钮未暴露给 macOS Accessibility，自动点击无法触发） |

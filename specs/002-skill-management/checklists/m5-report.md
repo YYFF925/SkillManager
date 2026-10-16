@@ -102,6 +102,22 @@
 6. **平台兼容未声明**：仅 macOS arm64 实测；Hermes 启用所用符号链接在 Windows 的行为未知。
 7. **未安装 rustfmt**，`cargo fmt --check` 未执行；代码按现有风格手写。
 8. **托盘长时运行**仅有会话内证据（关窗隐藏 + 隐藏期间调度日志 + 托盘检查/重开/退出）。
+9. **「共享目录技能清单」能力缺失——需求链在原型规格层断裂（2026-10-16 追查结论）**：原型的「共享 Agent」页
+   （`ui-prototype/index.html:537` 的 `sideRow('共享 Agent','shared',…)`，效果图 `renders/03`）与旧版 `GlobalAgentView`
+   都提供"查看共享目录里的技能、区分受管/仅本地、撤销与删除"，但这条**页面需求在正式链条里从未成立**：
+   - 需求记录只把共享目录裁决为**部署目标**（`docs/requirements.md:198`：「共享目录是部署目标，不是第二个管理库」），
+     全篇没有任何一条要求"页面／入口查看共享目录技能"；
+   - 原型规格 `specs/001-skill-management-prototype/spec.md` 的体验范围表（`:209-220`）只列"本机 Agent 技能"，
+     **漏列该页——断裂发生在此处**（原型的 README 登记了该页，但规格没立条目）；
+   - 产品规格 `specs/002-skill-management/spec.md` 未接手：FR-041/FR-042（`:347-348`）只覆盖本机 Agent，
+     `:386` 明写"共享目录为特殊部署目标"，没有任何 FR/SC 覆盖共享目录的浏览；
+   - `plan.md` 的 M2/M3 范围表与 `tasks.md` 均无对应条目，也未登记为"暂缓"；
+   - 实现因此既无页面与入口（`AppShell`/`AgentPage`/`App` 无 `共享`/`shared`），后端也无"扫描共享目录并判定受管/仅本地"的能力
+     （`LocalSkillService::list` 只接受内置 Agent key，`Target::Shared` 无 agent key）。
+   交付前的 M2 验收曾把 `renders/03` 记为"通过"，经复核证据图为技能库页＋Agent 管理页＋Codex 页，**属误标**，
+   已在 `m2-report.md` 第二节更正。
+   **待用户裁决**：是否补该能力。若要补，需 core 侧新增共享目录扫描与受管判定及对应契约命令
+   （现契约中 `agent local-skills <key>` 不接受 `shared`），并在 GUI 增加导航入口与页面。
 
 ## 七、自动化验证（最终）
 
