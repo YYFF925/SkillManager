@@ -77,7 +77,7 @@ function NavRow({
       type="button"
       disabled={item.disabled}
       onClick={() => onSelect(item.key)}
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
+      className={`flex h-[35px] w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[14px] transition-colors ${
         active
           ? "bg-selected font-medium text-ink"
           : "text-ink-2 hover:bg-hover"
@@ -86,7 +86,7 @@ function NavRow({
       <BrandIcon item={item} />
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {item.badge !== undefined && (
-        <span className="shrink-0 text-[11px] text-faint tabular-nums">
+        <span className="shrink-0 text-[12px] text-faint tabular-nums">
           {item.badge}
         </span>
       )}
@@ -116,21 +116,21 @@ export function AppShell({
     <div className="flex h-full bg-app text-ink">
       <aside className="flex w-[220px] shrink-0 flex-col border-r border-line-soft bg-subtle">
         <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-          <img src={appLogo} alt="" className="size-5 shrink-0" />
-          <span className="text-[14px] font-semibold">Skill Manager</span>
+          <img src={appLogo} alt="" className="size-[25px] shrink-0" />
+          <span className="text-[16px] font-semibold">Skill Manager</span>
         </div>
 
-        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
+        <nav className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto px-2 pb-2">
           {groups.map((group, index) => (
             <div key={group.title ?? `group-${index}`} className="flex flex-col">
               {group.title !== undefined ? (
                 <div className="mt-3 flex items-center gap-1.5 px-2 pb-1">
                   <ChevronDown className="size-3 text-faint" strokeWidth={2} />
-                  <span className="text-[11px] font-medium text-muted">
+                  <span className="text-[12px] font-medium text-muted">
                     {group.title}
                   </span>
                   {group.meta !== undefined && (
-                    <span className="text-[11px] text-faint">{group.meta}</span>
+                    <span className="text-[12px] text-faint">{group.meta}</span>
                   )}
                 </div>
               ) : (
@@ -198,7 +198,7 @@ export function AppShell({
 
       <main className="flex min-w-0 flex-1 flex-col">
         {/* 内容宽度按视觉基线限制在约 1200px，保持工具型界面的信息密度。 */}
-        <div className="shrink-0 px-6 pt-5">
+        <div className="shrink-0 px-5 pt-4">
           <header className="mx-auto flex w-full max-w-[1200px] items-start justify-between gap-4 border-b border-line pb-3.5">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -218,7 +218,7 @@ export function AppShell({
             )}
           </header>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-6 pb-6">
           <div className="mx-auto w-full max-w-[1200px]">{children}</div>
         </div>
       </main>

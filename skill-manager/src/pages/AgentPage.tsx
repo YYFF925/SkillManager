@@ -359,7 +359,7 @@ export function AgentPage({
             本机尚未检测到 Agent；可在安装 Agent 后重新检测。
           </p>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             {detected.map((agent) => (
               <AgentCard
                 key={agent.key}
@@ -394,7 +394,7 @@ export function AgentPage({
           其他支持的 Agent（{others.length}）
         </button>
         {othersOpen && (
-          <div className="mt-2 grid grid-cols-3 gap-3">
+          <div className="mt-2 grid grid-cols-3 gap-2">
             {others.map((agent) => (
               <AgentCard
                 key={agent.key}
@@ -453,7 +453,7 @@ function AgentCard({
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className={`rounded-xl border border-line bg-panel p-3.5 shadow-card ${
+      className={`min-h-[94px] rounded-xl border border-line bg-panel px-3.5 py-3 shadow-card ${
         dragging ? "opacity-60" : ""
       }`}
     >

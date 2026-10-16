@@ -185,12 +185,12 @@ export function ToolCenterPage({
         ).map(([label, value, accent]) => (
           <div
             key={label}
-            className={`rounded-xl border p-3.5 ${
+            className={`rounded-xl border px-[17px] py-[15px] ${
               accent ? "border-accent-line bg-accent-soft" : "border-line bg-panel"
             }`}
           >
             <div className="text-[12px] text-muted">{label}</div>
-            <div className={`mt-1 text-[24px] leading-8 font-semibold ${accent ? "text-accent" : ""}`}>
+            <div className={`mt-1 text-[23px] leading-8 font-semibold ${accent ? "text-accent" : ""}`}>
               {value}
             </div>
           </div>

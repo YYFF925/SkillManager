@@ -69,7 +69,7 @@ function PresetIconPicker({
   onChange: (key: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-8 gap-1.5">
+    <div className="grid max-w-[350px] grid-cols-8 gap-1.5">
       {PRESET_ICON_OPTIONS.map((option) => {
         const Icon = option.icon;
         const active = option.key === value;
@@ -80,14 +80,17 @@ function PresetIconPicker({
             title={`${option.label}（${option.key}）`}
             aria-label={option.label}
             onClick={() => onChange(option.key)}
-            className={`flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[10px] transition-colors ${
+            className={`flex h-9 items-center justify-center rounded-lg border transition-colors ${
               active
-                ? "border-accent-line bg-accent-soft font-medium text-accent"
+                ? "border-accent-line bg-accent-soft text-accent"
                 : "border-line bg-panel text-muted hover:bg-hover"
             }`}
           >
-            <Icon className="size-4" strokeWidth={1.75} style={{ color: option.color }} />
-            <span className="truncate">{option.label}</span>
+            <Icon
+              className="size-[15px]"
+              strokeWidth={1.75}
+              style={{ color: option.color }}
+            />
           </button>
         );
       })}

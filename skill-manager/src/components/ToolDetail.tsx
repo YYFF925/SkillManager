@@ -328,7 +328,7 @@ export function ToolDetail({
               </Button>
             </div>
             {entry.guide ? (
-              <pre className="overflow-auto rounded-lg bg-subtle p-3.5 text-[12.5px] leading-[21px] whitespace-pre-wrap text-ink-3">
+              <pre className="overflow-auto rounded-lg bg-subtle p-3.5 text-[12px] leading-[21px] whitespace-pre-wrap text-ink-3">
                 {entry.guide}
               </pre>
             ) : (
