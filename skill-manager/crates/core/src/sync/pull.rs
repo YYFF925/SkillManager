@@ -1,4 +1,4 @@
-//! SkillVault 拉取（T051，FR-037）。
+//! SkillManagerVault 拉取（T051，FR-037）。
 //!
 //! 无冲突时静默应用库文件，随后刷新**已有**部署（不新增目标、不首次部署），并在指令源
 //! 变化时刷新本机**已有启用**指令目标；冲突暂停本次同步并保留 Git 冲突现场，交 Agent
@@ -65,7 +65,7 @@ impl PullReport {
 }
 
 impl SyncService<'_> {
-    /// 拉取同一 SkillVault；`sync pull` 的核心入口。
+    /// 拉取同一 SkillManagerVault；`sync pull` 的核心入口。
     pub fn pull(&self) -> Result<PullReport> {
         let git = self.vault.git();
         let root = self.vault_root();
@@ -120,7 +120,7 @@ impl SyncService<'_> {
                 return Ok(self.conflict_report(remote, branch, upstream, behind, conflicts));
             }
             // 上一次冲突已由用户/Agent 在 Git 层处理完毕，完成合并后继续刷新。
-            git.ok(&["commit", "--no-edit", "-m", "合并远端 SkillVault 变更"])?;
+            git.ok(&["commit", "--no-edit", "-m", "合并远端 SkillManagerVault 变更"])?;
         } else {
             let Some(upstream_ref) = upstream.clone() else {
                 return Ok(PullReport {

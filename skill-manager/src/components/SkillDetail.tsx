@@ -21,6 +21,7 @@ import {
 } from "../services/client";
 import { osLabel, unsupportedOs } from "../lib/support";
 import { DeploymentStatus } from "./DeploymentStatus";
+import { MarkdownView } from "./MarkdownView";
 import { ManagerEditor, OverlayEditor } from "./ManagerEditor";
 import { Badge, Button, Dialog, Field, Notice, Segmented } from "./ui";
 
@@ -102,6 +103,8 @@ export interface SkillDetailProps {
   onDelete: (reference: string) => void;
   /** 保存影响合成结果的资料后，刷新本机已有部署（复用 deploy sync 语义）。 */
   onSyncDeployments: () => void;
+  /** 「文件与部署」中直接切换部署后刷新父页面记录。 */
+  onDeploymentsChanged?: () => void | Promise<void>;
 }
 
 export function SkillDetail({
@@ -117,6 +120,7 @@ export function SkillDetail({
   onDeploy,
   onDelete,
   onSyncDeployments,
+  onDeploymentsChanged,
 }: SkillDetailProps) {
   const [detail, setDetail] = useState<SkillDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -177,8 +181,8 @@ export function SkillDetail({
       }
       subtitle={
         skill?.source
-          ? `技能原名保持不变 · 来源：${skill.source.repo}`
-          : "技能原名保持不变 · 自建技能（无外部来源）"
+          ? skill.source.repo
+          : "自建"
       }
       onClose={onClose}
       footer={
@@ -196,20 +200,22 @@ export function SkillDetail({
               <Trash2 className="size-3.5" strokeWidth={1.75} />
               删除技能
             </Button>
-            <Button
-              kind="primary"
-              disabled={unsupported}
-              title={
-                unsupported
-                  ? `${declaredOsText(skill?.oses ?? null)}当前系统 ${
-                      os === null ? "未知" : osLabel(os)
-                    }，不能部署；撤销不受影响。`
-                  : undefined
-              }
-              onClick={() => onDeploy(reference)}
-            >
-              部署
-            </Button>
+            {tab !== "files" && (
+              <Button
+                kind="primary"
+                disabled={unsupported}
+                title={
+                  unsupported
+                    ? `${declaredOsText(skill?.oses ?? null)}当前系统 ${
+                        os === null ? "未知" : osLabel(os)
+                      }，不能部署；撤销不受影响。`
+                    : undefined
+                }
+                onClick={() => onDeploy(reference)}
+              >
+                部署
+              </Button>
+            )}
           </div>
         </>
       }
@@ -237,11 +243,10 @@ export function SkillDetail({
         </div>
       )}
 
-      <Segmented options={TABS} value={tab} onChange={setTab} className="mb-4 w-max max-w-full" />
-
-      {tab === "read" && detail && content && (
-        <div>
-          <div className="flex items-center justify-between gap-4">
+      <div className="sticky -top-5 z-20 -mx-6 -mt-5 mb-4 border-b border-line-soft bg-panel px-6 pt-5 pb-3">
+        <Segmented options={TABS} value={tab} onChange={setTab} className="w-max max-w-full" />
+        {tab === "read" && content && (
+          <div className="mt-3 flex items-center justify-between gap-4">
             <Badge tone={content.translation_stale ? "amber" : content.has_translation ? "green" : "gray"}>
               {content.translation_stale
                 ? "译文待更新"
@@ -258,6 +263,11 @@ export function SkillDetail({
               onChange={setLang}
             />
           </div>
+        )}
+      </div>
+
+      {tab === "read" && detail && content && (
+        <div>
           {content.translation_stale && (
             <div className="mt-3">
               <Notice tone="warn">
@@ -265,7 +275,7 @@ export function SkillDetail({
               </Notice>
             </div>
           )}
-          <pre className="read-text mt-3">{readText}</pre>
+          <MarkdownView text={readText} className="mt-3" />
         </div>
       )}
 
@@ -301,7 +311,7 @@ export function SkillDetail({
         <div className="grid grid-cols-2 gap-3.5">
           <Field label="来源地址">
             <p className="break-words text-[13px] text-ink-3">
-              {detail.skill.source?.repo ?? "自建技能：内容在本机 SkillVault 内维护，无外部来源。"}
+              {detail.skill.source?.repo ?? "自建技能：内容在本机 SkillManagerVault 内维护，无外部来源。"}
             </p>
           </Field>
           <Field label="所选分支 / 引用">
@@ -329,12 +339,6 @@ export function SkillDetail({
               <p className="text-[13px] text-ink-3">{detail.skill.source.registered_at}</p>
             </Field>
           )}
-          <Field label="库内位置" className="col-span-2">
-            <p className="break-words font-mono text-[12px] text-ink-3">
-              {detail.vault_path}/{detail.skill.vault_rel_dir}
-            </p>
-            <p className="mt-1.5 text-[13px] text-muted">分类变更会移动实际目录。</p>
-          </Field>
         </div>
       )}
 
@@ -371,7 +375,7 @@ export function SkillDetail({
               </>
             ) : detail.files.length > 0 ? (
               <div className="file-tree">
-                {/* `.manager` 单独在“管理专用目录”说明，不重复出现在原始文件树中。 */}
+                {/* 管理资料不进入原始文件树。 */}
                 <TreeList
                   nodes={detail.files.filter((node) => node.name !== ".manager")}
                   onOpenFile={openFile}
@@ -382,22 +386,14 @@ export function SkillDetail({
             )}
           </Field>
 
-          <Field label="管理专用目录">
-            <p className="text-[13px] text-ink-3">
-              .manager/ · 标签、译文、注释、支持声明、覆盖层
-            </p>
-            <p className="mt-1.5 text-[13px] text-muted">目录本身不带入正式部署。</p>
-          </Field>
-
-          <Field label="本机已有部署">
-            <DeploymentStatus
-              skill={reference}
-              domain={detail.skill.domain}
-              records={records}
-              agents={agents}
-              onNotice={onNotice}
-            />
-          </Field>
+          <DeploymentStatus
+            skill={reference}
+            domain={detail.skill.domain}
+            records={records}
+            agents={agents}
+            onNotice={onNotice}
+            onChanged={onDeploymentsChanged}
+          />
         </div>
       )}
     </Dialog>

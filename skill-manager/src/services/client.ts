@@ -268,13 +268,13 @@ function requireDesktop(): void {
   }
 }
 
-/** 接入用户选择的本地 SkillVault。 */
+/** 接入用户选择的本地 SkillManagerVault。 */
 export async function openVault(path: string): Promise<VaultInfo> {
   requireDesktop();
   return invoke<VaultInfo>("vault_open", { path });
 }
 
-/** 当前已接入的 SkillVault；尚未接入时为 null。 */
+/** 当前已接入的 SkillManagerVault；尚未接入时为 null。 */
 export async function currentVault(): Promise<VaultInfo | null> {
   if (!isDesktop()) {
     return null;
@@ -510,18 +510,25 @@ export async function agentDeleteLocal(
   return invoke<LocalDeleteOutcome>("agent_delete_local", { target, names });
 }
 
-/** 共享部署目录设置；null 表示尚未设置。 */
-export async function sharedDirGet(): Promise<string | null> {
-  if (!isDesktop()) {
-    return null;
-  }
-  return invoke<string | null>("shared_dir_get");
+export interface LocalSkillReadView {
+  name: string;
+  path: string;
+  file: string;
+  text: string | null;
+  size: number;
+  files: string[];
 }
 
-/** 设置或清除共享部署目录；传 null/空串表示清除。 */
-export async function sharedDirSet(path: string | null): Promise<string | null> {
+/** 阅读本机技能的实际副本；省略文件时返回正文。 */
+export async function agentReadLocal(target: string, name: string, file?: string): Promise<LocalSkillReadView> {
   requireDesktop();
-  return invoke<string | null>("shared_dir_set", { path });
+  return invoke<LocalSkillReadView>("agent_read_local", { target, name, file });
+}
+
+/** 共享部署路径，按当前系统用户主目录自动定位。 */
+export async function sharedDirGet(): Promise<string> {
+  requireDesktop();
+  return invoke<string>("shared_dir_get");
 }
 
 /**
@@ -551,7 +558,7 @@ export type DeploymentStatus = "ok" | "paused_local_change";
 export interface DeployItemView {
   skill: string;
   target: string;
-  /** `deployed` / `updated` / `unchanged` / `removed` / `would_*`。 */
+  /** `deployed` / `updated` / `unchanged` / `removed`。 */
   action: string;
   path: string;
   status: DeploymentStatus;
@@ -571,7 +578,6 @@ export interface ItemErrorView {
 export interface DeployReportView {
   items: DeployItemView[];
   errors: ItemErrorView[];
-  dry_run: boolean;
 }
 
 /** `deploy status` 的一项。 */
@@ -595,19 +601,17 @@ export interface SkillDeleteView {
   errors: ItemErrorView[];
 }
 
-/** 部署技能到目标（可多技能 × 多目标）；预演只报告不改文件与记录。 */
+/** 部署技能到目标（可多技能 × 多目标）。 */
 export async function deployTo(
   target: DeployTarget,
   references: string[],
   alsoTargets: DeployTarget[] = [],
-  dryRun = false,
 ): Promise<DeployReportView> {
   requireDesktop();
   return invoke<DeployReportView>("deploy_to", {
     target,
     references,
     alsoTargets,
-    dryRun,
   });
 }
 
@@ -616,7 +620,6 @@ export async function deployUndo(
   target: DeployTarget,
   references: string[],
   alsoTargets: DeployTarget[] = [],
-  dryRun = false,
   discardLocalChanges = false,
 ): Promise<DeployReportView> {
   requireDesktop();
@@ -624,7 +627,6 @@ export async function deployUndo(
     target,
     references,
     alsoTargets,
-    dryRun,
     discardLocalChanges,
   });
 }
@@ -665,6 +667,8 @@ export async function deleteSkills(references: string[]): Promise<SkillDeleteVie
 /** 本机现有 Hermes 档案。 */
 export interface HermesProfileView {
   name: string;
+  /** Hermes 面板显示名称；null 时回退目录名。 */
+  display_name: string | null;
   kind: "default" | "named";
   path: string;
   skills_dir: string;
@@ -981,7 +985,7 @@ export async function importSkills(
   });
 }
 
-/** 收编本机 Agent 未受管技能（metadata 为逐技能资料）。 */
+/** 收编本机 Agent 或共享目录的未受管技能（metadata 为逐技能资料）。 */
 export async function adoptSkills(
   agent: string,
   names: string[],
@@ -1201,7 +1205,7 @@ export async function setGitAutoPush(enabled: boolean): Promise<SettingsView> {
 }
 
 // ---------------------------------------------------------------------------
-// SkillVault 跨机同步（US5 / M4）
+// SkillManagerVault 跨机同步（US5 / M4）
 // ---------------------------------------------------------------------------
 
 /** 同步状态（只读事实）。 */
@@ -1265,7 +1269,7 @@ export interface ConflictView {
   message: string;
 }
 
-/** 拉取同一 SkillVault；无冲突静默应用并刷新已有部署/指令目标。 */
+/** 拉取同一 SkillManagerVault；无冲突静默应用并刷新已有部署/指令目标。 */
 export async function syncPull(): Promise<PullReportView> {
   requireDesktop();
   return invoke<PullReportView>("sync_pull");
@@ -1397,13 +1401,12 @@ export async function reorderPresetMembers(
   return invoke<PresetView>("preset_reorder_members", { domain, id, order });
 }
 
-/** 按预设成员叠加部署到目标（可多目标）；预演只报告不改文件与记录。 */
+/** 按预设成员叠加部署到目标（可多目标）。 */
 export async function deployPreset(
   domain: Domain,
   presetId: string,
   target: DeployTarget,
   alsoTargets: DeployTarget[] = [],
-  dryRun = false,
 ): Promise<DeployReportView> {
   requireDesktop();
   return invoke<DeployReportView>("deploy_preset", {
@@ -1411,7 +1414,6 @@ export async function deployPreset(
     presetId,
     target,
     alsoTargets,
-    dryRun,
   });
 }
 
@@ -1421,7 +1423,6 @@ export async function deployUndoPreset(
   presetId: string,
   target: DeployTarget,
   alsoTargets: DeployTarget[] = [],
-  dryRun = false,
 ): Promise<DeployReportView> {
   requireDesktop();
   return invoke<DeployReportView>("deploy_undo_preset", {
@@ -1429,7 +1430,6 @@ export async function deployUndoPreset(
     presetId,
     target,
     alsoTargets,
-    dryRun,
   });
 }
 

@@ -28,7 +28,6 @@ pub mod setting_key {
     pub const THEME: &str = "theme";
     pub const FONT_SCALE: &str = "font_scale";
     pub const AUTO_CHECK_MINUTES: &str = "auto_check_minutes";
-    pub const SHARED_DIR: &str = "shared_dir";
     pub const LAST_SYNC_AT: &str = "last_sync_at";
     pub const LAST_CHECK_AT: &str = "last_check_at";
     pub const VAULT_PATH: &str = "vault_path";
@@ -146,7 +145,7 @@ impl StateStore {
             .unwrap_or_else(|| FONT_SCALE_DEFAULT.to_string()))
     }
 
-    /// 已接入的 SkillVault 路径（本机记住，便于下次直接进入技能库）。
+    /// 已接入的 SkillManagerVault 路径（本机记住，便于下次直接进入技能库）。
     pub fn vault_path(&self) -> Result<Option<PathBuf>> {
         Ok(self
             .setting(setting_key::VAULT_PATH)?

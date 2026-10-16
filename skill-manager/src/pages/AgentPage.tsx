@@ -7,7 +7,18 @@
  * 共享目录是本机部署目标，不是可登记的 Agent 或第二个管理库。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, Plus, RefreshCw, Search, Trash2, Upload } from "lucide-react";
+import {
+  CheckSquare,
+  Copy,
+  LayoutGrid,
+  List,
+  Plus,
+  RefreshCw,
+  Search,
+  Square,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import {
   agentDeleteLocal,
@@ -15,8 +26,6 @@ import {
   copySkill,
   deployStatus,
   listSkills,
-  sharedDirGet,
-  sharedDirSet,
   type AgentView,
   type DeploymentStatusView,
   type Domain,
@@ -24,8 +33,10 @@ import {
   type SkillSummary,
 } from "../services/client";
 import { AdoptDialog } from "../components/AdoptDialog";
+import { LocalSkillDetail } from "../components/LocalSkillDetail";
 import { CopyToDomainDialog } from "../components/SkillDialogs";
 import { DeployDialog } from "../components/DeployDialog";
+import { QuickDeploy } from "../components/QuickDeploy";
 // 部署记录的目标展示名（`agent:<key>`/`shared`/`hermes:default`）复用库内既有映射。
 import { targetLabel as deploymentTargetName } from "../lib/targets";
 import { Badge, Button, ConfirmDialog, Dialog, Notice, Segmented } from "../components/ui";
@@ -49,10 +60,10 @@ export interface AgentPageProps {
   /** 选中的单个目标（内置 Agent key 或共享目录 `shared`）；为 null 时显示该管理域的跨目标部署清单。 */
   selectedTarget: string | null;
   agents: AgentView[];
-  onSelectTarget: (target: string | null) => void;
+  /** 页头元信息：当前列表计数与路径副标题。 */
+  onMeta: (meta: { count: number; subtitle: string }) => void;
   onNotice: (message: string) => void;
-  /** 前往设置页（共享目录未设置时提供入口，不代为猜测路径）。 */
-  onOpenSettings: () => void;
+  onOpenInLibrary: (reference: string) => void;
   /** 保存库内修改后的统一流程（先刷新已有部署，再按已确认策略上传）。 */
   onLibrarySaved?: () => Promise<void>;
 }
@@ -61,9 +72,9 @@ export function AgentPage({
   domain,
   selectedTarget,
   agents,
-  onSelectTarget,
+  onMeta,
   onNotice,
-  onOpenSettings,
+  onOpenInLibrary,
   onLibrarySaved,
 }: AgentPageProps) {
   if (selectedTarget !== null) {
@@ -73,16 +84,16 @@ export function AgentPage({
         target={selectedTarget}
         agent={agent}
         agents={agents}
-        onBack={() => onSelectTarget(null)}
-        onOpenSettings={onOpenSettings}
+        onMeta={onMeta}
         onNotice={onNotice}
+        onOpenInLibrary={onOpenInLibrary}
         onLibrarySaved={onLibrarySaved}
       />
     );
   }
 
   return (
-    <DeploymentList domain={domain} agents={agents} onNotice={onNotice} />
+    <DeploymentList domain={domain} agents={agents} onMeta={onMeta} onNotice={onNotice} />
   );
 }
 
@@ -91,56 +102,51 @@ function LocalSkillsView({
   target,
   agent,
   agents,
-  onBack,
-  onOpenSettings,
+  onMeta,
   onNotice,
+  onOpenInLibrary,
   onLibrarySaved,
 }: {
   target: string;
   agent: AgentView | undefined;
   agents: AgentView[];
-  onBack: () => void;
-  onOpenSettings: () => void;
+  onMeta: (meta: { count: number; subtitle: string }) => void;
   onNotice: (message: string) => void;
+  onOpenInLibrary: (reference: string) => void;
   onLibrarySaved?: () => Promise<void>;
 }) {
   const [skills, setSkills] = useState<LocalSkillView[]>([]);
+  const [records, setRecords] = useState<DeploymentStatusView[]>([]);
   const [skillsDir, setSkillsDir] = useState("");
-  const [dirUnset, setDirUnset] = useState(false);
   const [filter, setFilter] = useState<"all" | "managed" | "local" | "changed">("all");
+  const [query, setQuery] = useState("");
+  const [layout, setLayout] = useState<"grid" | "list">("grid");
+  const [multi, setMulti] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string[] | null>(null);
   const [adoptTargets, setAdoptTargets] = useState<LocalSkillView[] | null>(null);
   const [copySource, setCopySource] = useState<LocalSkillView | null>(null);
+  const [detailSkill, setDetailSkill] = useState<LocalSkillView | null>(null);
   const [localBusy, setLocalBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const [picking, setPicking] = useState(false);
+  const [deployTargets, setDeployTargets] = useState<string[] | null>(null);
 
-  /** 共享目录是编码 Agent 的部署目标，不提供收编（它是部署产物，不是来源）。 */
-  const isShared = target === SHARED_TARGET;
-  const canAdopt = !isShared;
   const label = targetLabel(target, agent);
   const agentDomain: Domain = agent?.domain ?? "code";
 
   const reload = useCallback(async () => {
     try {
-      // 未设置共享目录路径时如实提示：不猜默认路径，也不显示成“没有技能”。
-      if (isShared && (await sharedDirGet()) === null) {
-        setSkills([]);
-        setSkillsDir("");
-        setDirUnset(true);
-        setError(null);
-        return;
-      }
-      setDirUnset(false);
-      const view = await agentLocalSkills(target);
+      const [view, deployments] = await Promise.all([agentLocalSkills(target), deployStatus()]);
       setSkills(view.skills);
+      setRecords(deployments);
       setSkillsDir(view.skills_dir);
       setError(null);
     } catch (err) {
       setError(String(err));
     }
-  }, [target, isShared]);
+  }, [target]);
 
   useEffect(() => {
     void reload();
@@ -148,9 +154,19 @@ function LocalSkillsView({
 
   useEffect(() => {
     setSelected([]);
-  }, [target, filter]);
+  }, [target, filter, query, multi]);
 
   const visible = skills.filter((skill) => {
+    const q = query.trim().toLowerCase();
+    if (
+      q !== "" &&
+      ![skill.name, skill.comment ?? "", skill.library_skill ?? "", skill.path]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    ) {
+      return false;
+    }
     if (filter === "all") return true;
     if (filter === "managed") return skill.managed;
     if (filter === "local") return !skill.managed;
@@ -158,6 +174,19 @@ function LocalSkillsView({
   });
   const managedCount = skills.filter((skill) => skill.managed).length;
   const unmanagedSelected = skills.filter((skill) => !skill.managed && selected.includes(skill.name));
+
+  useEffect(() => {
+    onMeta({
+      count: visible.length,
+      subtitle: `${skillsDir || "读取中…"} · ${managedCount} 个受管理`,
+    });
+  }, [managedCount, onMeta, skillsDir, visible.length]);
+
+  function toggleSelect(name: string) {
+    setSelected((current) =>
+      current.includes(name) ? current.filter((item) => item !== name) : [...current, name],
+    );
+  }
 
   async function copyToLibrary(skill: LocalSkillView, to: Domain, category?: string) {
     if (!skill.library_skill) {
@@ -211,21 +240,16 @@ function LocalSkillsView({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-[13px] text-accent hover:underline"
-          >
-            全部 Agents
-          </button>
-          <span className="text-faint">/</span>
-          <span className="text-[14px] font-semibold">{label}</span>
-          <span className="text-[12px] text-faint">
-            {dirUnset ? "未设置" : `${skillsDir || "未设置"} · ${managedCount} 个受管理`}
-          </span>
-        </div>
-        {!dirUnset && (
+        <div className="flex flex-wrap items-center gap-2.5">
+          <label className="flex h-10 w-[240px] items-center gap-2.5 rounded-lg border border-line bg-panel px-3 text-faint">
+            <Search className="size-4 shrink-0" strokeWidth={1.75} />
+            <input
+              value={query}
+              placeholder="搜索名称、注释或路径"
+              onChange={(event) => setQuery(event.target.value)}
+              className="w-full border-0 bg-transparent text-[13px] text-ink-3 outline-0 placeholder:text-faint"
+            />
+          </label>
           <Segmented
             options={[
               { value: "all", label: "全部" },
@@ -236,32 +260,76 @@ function LocalSkillsView({
             value={filter}
             onChange={(value) => setFilter(value)}
           />
-        )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button compact onClick={() => setVersion((value) => value + 1)}>
+            <RefreshCw className="size-3.5" strokeWidth={1.75} />
+            刷新
+          </Button>
+          <div className="flex h-10 items-center rounded-lg border border-line bg-panel p-[3px]">
+            {(
+              [
+                ["grid", "网格", LayoutGrid],
+                ["list", "列表", List],
+              ] as const
+            ).map(([value, label, Icon]) => (
+              <button
+                key={value}
+                type="button"
+                title={label}
+                aria-label={label}
+                onClick={() => setLayout(value)}
+                className={`grid h-8 w-[30px] place-items-center rounded-[5px] ${
+                  layout === value ? "bg-selected text-ink-3" : "text-muted"
+                }`}
+              >
+                <Icon className="size-4" strokeWidth={1.75} />
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setMulti((current) => !current);
+                setSelected([]);
+              }}
+              className={`ml-1.5 flex h-8 items-center gap-1.5 rounded-[5px] border-l border-line px-2.5 text-[13px] ${
+                multi ? "bg-selected text-ink-2" : "text-muted"
+              }`}
+            >
+              {multi ? (
+                <CheckSquare className="size-4" strokeWidth={1.75} />
+              ) : (
+                <Square className="size-4" strokeWidth={1.75} />
+              )}
+              {multi ? "取消多选" : "多选"}
+            </button>
+          </div>
+          {target !== SHARED_TARGET && (
+            <Button kind="primary" compact onClick={() => setPicking(true)}>
+              <Plus className="size-3.5" strokeWidth={1.75} />
+              从库部署
+            </Button>
+          )}
+        </div>
       </div>
 
       {error && <Notice tone="danger">{error}</Notice>}
 
-      {!dirUnset && selected.length > 0 && (
+      {multi && selected.length > 0 && (
         <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
           <span className="text-[13px] text-muted">已选择 {selected.length}</span>
           <Button compact onClick={() => setSelected([])}>
             取消选择
           </Button>
-          {canAdopt && (
-            <Button
-              compact
-              disabled={unmanagedSelected.length === 0}
-              title={
-                unmanagedSelected.length === 0
-                  ? "收编只针对未受管的“仅本地”技能"
-                  : undefined
-              }
-              onClick={() => setAdoptTargets(unmanagedSelected)}
-            >
-              <Upload className="size-3.5" strokeWidth={1.75} />
-              收编仅本地{unmanagedSelected.length > 0 ? `（${unmanagedSelected.length}）` : ""}
-            </Button>
-          )}
+          <Button
+            compact
+            disabled={unmanagedSelected.length === 0}
+            title={`纳入管理 ${unmanagedSelected.length} 个技能`}
+            aria-label={`纳入管理 ${unmanagedSelected.length} 个技能`}
+            onClick={() => setAdoptTargets(unmanagedSelected)}
+          >
+            <Upload className="size-3.5" strokeWidth={1.75} />
+          </Button>
           <Button compact disabled={localBusy} onClick={() => setDeleteTarget(selected)}>
             <Trash2 className="size-3.5" strokeWidth={1.75} />
             删除本机副本
@@ -269,29 +337,8 @@ function LocalSkillsView({
         </div>
       )}
 
-      {dirUnset ? (
-        <div className="rounded-lg border border-line-soft bg-panel p-4 text-[13px] text-muted">
-          <p>
-            尚未设置共享目录路径（共享目录是编码 Agent 的部署目标），因此无法列出技能。
-          </p>
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="mt-2 text-accent hover:underline"
-          >
-            前往设置
-          </button>
-        </div>
-      ) : visible.length === 0 ? (
-        <p className="rounded-lg border border-line-soft bg-panel p-4 text-[13px] text-muted">
-          {skills.length === 0
-            ? isShared
-              ? "共享技能目录下没有技能（尚未部署）。"
-              : "该 Agent 技能目录下没有技能（未安装或尚未部署）。"
-            : "没有符合筛选条件的技能。"}
-        </p>
-      ) : (
-        <div className="grid grid-cols-3 gap-3">
+      {visible.length > 0 && (
+        <div className={layout === "grid" ? "grid grid-cols-3 gap-3" : "grid grid-cols-1 gap-3"}>
           {visible.map((skill) => {
             const isSelected = selected.includes(skill.name);
             const statusText =
@@ -309,43 +356,45 @@ function LocalSkillsView({
             return (
               <article
                 key={skill.name}
-                className={`rounded-xl border border-line bg-panel p-3.5 shadow-card ${
+                onClick={() => (multi ? toggleSelect(skill.name) : setDetailSkill(skill))}
+                className={`cursor-pointer rounded-xl border border-line bg-panel p-3.5 shadow-card hover:shadow-card-hover ${
                   isSelected ? "border-accent" : ""
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <input
-                    type="checkbox"
-                    className="selectbox shrink-0"
-                    checked={isSelected}
-                    onChange={() =>
-                      setSelected((current) =>
-                        current.includes(skill.name)
-                          ? current.filter((item) => item !== skill.name)
-                          : [...current, skill.name],
-                      )
-                    }
-                  />
-                  <span
-                    className={`size-2 shrink-0 rounded-full ${
-                      skill.managed ? "bg-accent-light" : "bg-faint"
-                    }`}
-                  />
+                  {multi ? (
+                    <input
+                      type="checkbox"
+                      className="selectbox shrink-0"
+                      checked={isSelected}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={() => toggleSelect(skill.name)}
+                    />
+                  ) : (
+                    <span
+                      className={`size-2 shrink-0 rounded-full ${
+                        skill.managed ? "bg-accent-light" : "bg-faint"
+                      }`}
+                    />
+                  )}
                   <h3 className="min-w-0 flex-1 truncate text-[14px] font-semibold" title={skill.name}>
-                    {skill.name}
+                    <button type="button" className="max-w-full truncate text-left" onClick={() => setDetailSkill(skill)}>
+                      {skill.name}
+                    </button>
                     {skill.comment && (
                       <span className="ml-1 text-[11px] font-normal text-faint">
                         （{skill.comment}）
                       </span>
                     )}
                   </h3>
-                  {!skill.managed && canAdopt && (
+                  {!skill.managed && (
                     <button
                       type="button"
                       title={`收编 ${skill.name} 到技能库并接管原部署`}
+                      aria-label={`纳入管理 ${skill.name}`}
                       disabled={localBusy}
-                      onClick={() => setAdoptTargets([skill])}
-                      className="grid size-6 shrink-0 place-items-center rounded-[5px] text-faint hover:bg-hover hover:text-accent disabled:opacity-40"
+                      onClick={(event) => { event.stopPropagation(); setAdoptTargets([skill]); }}
+                      className="grid size-6 shrink-0 place-items-center rounded-[5px] text-accent hover:bg-hover disabled:opacity-40"
                     >
                       <Upload className="size-3.5" strokeWidth={1.75} />
                     </button>
@@ -355,7 +404,7 @@ function LocalSkillsView({
                       type="button"
                       title={`复制 ${skill.library_skill} 到另一库`}
                       disabled={localBusy}
-                      onClick={() => setCopySource(skill)}
+                      onClick={(event) => { event.stopPropagation(); setCopySource(skill); }}
                       className="grid size-6 shrink-0 place-items-center rounded-[5px] text-faint hover:bg-hover hover:text-accent disabled:opacity-40"
                     >
                       <Copy className="size-3.5" strokeWidth={1.75} />
@@ -365,7 +414,7 @@ function LocalSkillsView({
                     type="button"
                     title={`删除本机副本 ${skill.name}`}
                     disabled={localBusy}
-                    onClick={() => setDeleteTarget([skill.name])}
+                    onClick={(event) => { event.stopPropagation(); setDeleteTarget([skill.name]); }}
                     className="grid size-6 shrink-0 place-items-center rounded-[5px] text-faint hover:bg-hover hover:text-danger disabled:opacity-40"
                   >
                     <Trash2 className="size-3.5" strokeWidth={1.75} />
@@ -383,22 +432,30 @@ function LocalSkillsView({
                 <p className="mt-2 truncate font-mono text-[11px] text-faint" title={skill.path}>
                   {skill.path}
                 </p>
+                <div className="mt-2 flex">
+                  <QuickDeploy reference={skill.library_exists ? skill.library_skill : null} domain={agentDomain}
+                    agents={agents} records={records} onChange={reload} onError={setError} />
+                </div>
               </article>
             );
           })}
         </div>
       )}
 
-      {!dirUnset && (
-        <p className="text-[12px] text-faint">
-          仅本地：直接删除实际文件，不改 SkillVault；受管理：按撤销部署规则处理，删除本机副本不会删库。
-        </p>
+      {detailSkill && (
+        <LocalSkillDetail
+          target={target}
+          skill={detailSkill}
+          onClose={() => setDetailSkill(null)}
+          onAdopt={() => { setAdoptTargets([detailSkill]); setDetailSkill(null); }}
+          onOpenInLibrary={(reference) => { setDetailSkill(null); onOpenInLibrary(reference); }}
+        />
       )}
 
       {deleteTarget && (
         <ConfirmDialog
           title="删除本机技能副本"
-          subtitle="只影响该技能目录，不改变 SkillVault 中的技能。"
+          subtitle="只影响该技能目录，不改变 SkillManagerVault 中的技能。"
           message={`将删除 ${deleteTarget.length} 项：${deleteTarget.join("、")}。受管理项按撤销规则处理；有本地变更的副本会暂停并保留。`}
           confirmLabel="删除"
           danger
@@ -433,6 +490,35 @@ function LocalSkillsView({
           onConfirm={(to, category) => void copyToLibrary(copySource, to, category)}
         />
       )}
+
+      {picking && (
+        <SkillPickerDialog
+          domain={agentDomain}
+          onCancel={() => setPicking(false)}
+          onConfirm={(references) => {
+            setPicking(false);
+            setDeployTargets(references);
+          }}
+        />
+      )}
+
+      {deployTargets && (
+        <DeployDialog
+          domain={agentDomain}
+          references={deployTargets}
+          agents={agents}
+          onClose={() => {
+            setDeployTargets(null);
+            setVersion((value) => value + 1);
+          }}
+          onDone={(message) => {
+            setDeployTargets(null);
+            onNotice(message);
+            setError(null);
+            setVersion((value) => value + 1);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -450,10 +536,12 @@ type DeploymentFilter = "all" | "deployed" | "changed";
 function DeploymentList({
   domain,
   agents,
+  onMeta,
   onNotice,
 }: {
   domain: Domain;
   agents: AgentView[];
+  onMeta: (meta: { count: number; subtitle: string }) => void;
   onNotice: (message: string) => void;
 }) {
   const [records, setRecords] = useState<DeploymentStatusView[]>([]);
@@ -461,7 +549,6 @@ function DeploymentList({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<DeploymentFilter>("all");
-  const [sharedDir, setSharedDir] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [picking, setPicking] = useState(false);
   const [deployTargets, setDeployTargets] = useState<string[] | null>(null);
@@ -490,11 +577,6 @@ function DeploymentList({
     };
   }, [version]);
 
-  useEffect(() => {
-    void sharedDirGet()
-      .then(setSharedDir)
-      .catch(() => setSharedDir(null));
-  }, [version]);
 
   const mine = useMemo(
     () => records.filter((record) => record.skill.startsWith(`${domain}/`)),
@@ -525,15 +607,12 @@ function DeploymentList({
     });
   }, [mine, filter, query, agents]);
 
-  async function changeSharedDir(path: string | null) {
-    try {
-      const saved = await sharedDirSet(path);
-      setSharedDir(saved);
-      setError(null);
-    } catch (err) {
-      setError(String(err));
-    }
-  }
+  useEffect(() => {
+    onMeta({
+      count: visible.length,
+      subtitle: "本机部署清单 · 同一个技能可部署到多个目标",
+    });
+  }, [onMeta, visible.length]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -623,15 +702,15 @@ function DeploymentList({
                 >
                   {record.target_path}
                 </p>
+                <div className="mt-2 flex">
+                  <QuickDeploy reference={record.library_exists ? record.skill : null} domain={domain}
+                    agents={agents} records={records} onChange={async () => setRecords(await deployStatus())} onError={setError} />
+                </div>
               </article>
             );
           })}
         </div>
       )}
-
-      <p className="text-[12px] text-faint">
-        同一个技能可部署到多个目标；本清单只列本机受管部署记录（未受管的「仅本地」技能需在对应目标页查看）。
-      </p>
 
       {picking && (
         <SkillPickerDialog
@@ -649,9 +728,7 @@ function DeploymentList({
           domain={domain}
           references={deployTargets}
           agents={agents}
-          sharedDir={sharedDir}
-          onSharedDirChange={changeSharedDir}
-          onClose={() => setDeployTargets(null)}
+          onClose={() => { setDeployTargets(null); setVersion((value) => value + 1); }}
           onDone={(message) => {
             setDeployTargets(null);
             onNotice(message);
@@ -709,7 +786,6 @@ function SkillPickerDialog({
   return (
     <Dialog
       title={`从库部署 · 选择技能（${domain === "code" ? "编码库" : "龙虾库"}）`}
-      subtitle="选择库内技能后，在部署弹窗里选择目标；部署生成合成副本，不改动库内技能。"
       width="w-[640px]"
       onClose={onCancel}
       footer={

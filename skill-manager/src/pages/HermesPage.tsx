@@ -25,6 +25,9 @@ import {
   hermesEnable,
   hermesList,
   hermesProfiles,
+  deployStatus,
+  type AgentView,
+  type DeploymentStatusView,
   type EnvironmentOs,
   type HermesProfileView,
   type HermesSkillView,
@@ -33,6 +36,7 @@ import {
 import { osLabel, unsupportedOs } from "../lib/support";
 import { TagChip } from "../components/TagChip";
 import { HermesSkillDetail } from "../components/HermesSkillDetail";
+import { QuickDeploy } from "../components/QuickDeploy";
 import { Badge, Button, ConfirmDialog, Notice, Segmented } from "../components/ui";
 
 const UNCATEGORIZED = "__none";
@@ -42,8 +46,11 @@ type Layout = "grid" | "list";
 type EnabledFilter = "all" | "enabled" | "disabled";
 
 export interface HermesPageProps {
+  agents: AgentView[];
   os: EnvironmentOs | null;
   reloadToken: number;
+  /** 上报当前档案技能数量，用于页头计数。 */
+  onCount: (count: number) => void;
   /** 前往技能库编辑统一内容（切换侧栏页面并打开详情）。 */
   onOpenInLibrary: (reference: string) => void;
   /** 保存库内修改后的统一流程（先刷新已有部署，再按已确认策略上传）。 */
@@ -95,7 +102,15 @@ function Toggle({
   );
 }
 
-export function HermesPage({ os, reloadToken, onOpenInLibrary, onLibrarySaved }: HermesPageProps) {
+export function HermesPage({
+  os,
+  agents,
+  reloadToken,
+  onCount,
+  onOpenInLibrary,
+  onLibrarySaved,
+}: HermesPageProps) {
+  const [records, setRecords] = useState<DeploymentStatusView[]>([]);
   const [profiles, setProfiles] = useState<HermesProfileView[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [root, setRoot] = useState<string>("");
@@ -117,6 +132,17 @@ export function HermesPage({ os, reloadToken, onOpenInLibrary, onLibrarySaved }:
   const [detail, setDetail] = useState<string | null>(null);
   const [adoptTarget, setAdoptTarget] = useState<HermesSkillView | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    onCount(base?.total ?? 0);
+  }, [base?.total, onCount]);
+
+  useEffect(() => {
+    let cancelled = false;
+    deployStatus().then((value) => { if (!cancelled) setRecords(value); })
+      .catch((err) => { if (!cancelled) setError(String(err)); });
+    return () => { cancelled = true; };
+  }, [reloadToken, version]);
 
   // 档案发现：只读本机事实。
   useEffect(() => {
@@ -251,6 +277,9 @@ export function HermesPage({ os, reloadToken, onOpenInLibrary, onLibrarySaved }:
 
   const activeProfile = profiles.find((profile) => profile.name === active) ?? null;
   const isDefault = activeProfile?.kind === "default";
+  const profileLabel = (profile: HermesProfileView) =>
+    profile.display_name ?? profile.name;
+  const activeLabel = activeProfile ? profileLabel(activeProfile) : "选择档案";
 
   const filterActive =
     debouncedQuery.trim().length > 0 || category !== null || tag !== null || enabledFilter !== "all";
@@ -363,10 +392,10 @@ export function HermesPage({ os, reloadToken, onOpenInLibrary, onLibrarySaved }:
               className="flex h-10 w-[228px] items-center gap-2.5 rounded-lg border border-line bg-panel px-3 text-[13px] text-ink-2"
             >
               <span className="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-accent-strong text-[10px] font-semibold text-white">
-                {(activeProfile?.name ?? "?").slice(0, 1).toUpperCase()}
+                {activeLabel.slice(0, 1).toUpperCase()}
               </span>
               <span className="min-w-0 flex-1 truncate text-left">
-                {activeProfile?.name ?? "选择档案"}
+                {activeLabel}
               </span>
               <ChevronDown className="size-4 shrink-0 text-faint" strokeWidth={1.75} />
             </button>
@@ -385,10 +414,12 @@ export function HermesPage({ os, reloadToken, onOpenInLibrary, onLibrarySaved }:
                     }`}
                   >
                     <span className="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-accent-strong text-[10px] font-semibold text-white">
-                      {profile.name.slice(0, 1).toUpperCase()}
+                      {profileLabel(profile).slice(0, 1).toUpperCase()}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] text-ink-2">{profile.name}</span>
+                      <span className="block truncate text-[13px] text-ink-2" title={profile.name}>
+                        {profileLabel(profile)}
+                      </span>
                       <span className="block truncate text-[11px] text-faint" title={profile.path}>
                         {profile.path}
                       </span>
@@ -401,9 +432,6 @@ export function HermesPage({ os, reloadToken, onOpenInLibrary, onLibrarySaved }:
                     )}
                   </button>
                 ))}
-                <p className="px-2.5 py-1.5 text-[11px] text-faint">
-                  本机已发现的档案，不管理档案生命周期。
-                </p>
               </div>
             )}
           </div>
@@ -574,8 +602,8 @@ export function HermesPage({ os, reloadToken, onOpenInLibrary, onLibrarySaved }:
         </div>
       )}
 
-      <div className="flex items-start gap-5">
-        <aside className="w-[152px] shrink-0">
+      <div className="flex items-start gap-4">
+        <aside className="w-[132px] shrink-0">
           <button
             type="button"
             onClick={() => setCategory(null)}
@@ -753,6 +781,9 @@ export function HermesPage({ os, reloadToken, onOpenInLibrary, onLibrarySaved }:
                   <span className="ml-auto text-[12px] text-muted">
                     {skill.enabled ? "已启用" : "未启用"}
                   </span>
+                  <QuickDeploy reference={skill.in_library ? skill.library_skill : null} domain="lobster"
+                    agents={agents} records={records} unsupportedReason={unsupported ? osReason(skill, os) : null}
+                    onChange={async () => { setRecords(await deployStatus()); setVersion((value) => value + 1); }} onError={setError} />
                 </div>
               </article>
             );

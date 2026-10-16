@@ -172,7 +172,7 @@ export function ManagerEditor({
 
   return (
     <div className="grid grid-cols-2 gap-3.5">
-      <Field label="中文注释（通常不超过 20 字）">
+      <Field label="中文注释">
         <input
           className="field-input"
           value={comment}
@@ -181,7 +181,7 @@ export function ManagerEditor({
         />
       </Field>
 
-      <Field label="标签（可选已有标签，也可输入新标签）">
+      <Field label="标签">
         <div className="flex flex-wrap items-center gap-1.5">
           {tags.map((tag) => (
             <span key={tag} className="inline-flex items-center gap-1">
@@ -206,9 +206,9 @@ export function ManagerEditor({
       </Field>
 
       <div className="flex flex-col gap-3.5">
-        <Field label="分类目录（最多一级，不改部署名）">
+        <Field label="分类目录">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[13px] text-ink-3">{skill.category ?? "未分类（位于管理域根下）"}</p>
+            <p className="text-[13px] text-ink-3">{skill.category ?? "未分类"}</p>
             <Button compact onClick={() => onOpenMove(skill)}>
               移动到分类…
             </Button>
@@ -285,9 +285,6 @@ export function ManagerEditor({
         {error && <Notice tone="danger">{error}</Notice>}
         {notice && <Notice>{notice}</Notice>}
         <div className="flex items-center justify-end gap-2.5">
-          <span className="mr-auto text-[12px] text-faint">
-            分类变更请用“移动到分类”；保存不会清除本机未显示的已声明 Agent。
-          </span>
           <Button
             disabled={busy}
             onClick={() => {
@@ -442,8 +439,7 @@ export function OverlayEditor({
   return (
     <div className="flex flex-col gap-3.5">
       <p className="text-[13px] text-muted">
-        overlay（覆盖层）随管理资料保存；部署时按 Agent 和系统添加或替换同名文件，整份
-        SKILL.md 也可替换。
+        同名文件将在部署时替换原文件。
       </p>
 
       {error && <Notice tone="danger">{error}</Notice>}

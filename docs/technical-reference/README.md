@@ -19,8 +19,8 @@
 | 获取与仓库发现 | [获取与发现参考](git-and-discovery.md) | 进度／取消链路、仓库扫描、多技能预览、小范围可复用点 |
 | 预设 | [预设与库浏览](presets-hermes-and-browsing.md) | 组合定义与本机部署分开、成员排序与图标、增量部署语义 |
 | 库浏览与详情 | [预设与库浏览](presets-hermes-and-browsing.md) | 搜索筛选、列表/网格、标签治理、分类与标签联动、文件清单、差异查看 |
-| SkillVault 跨电脑同步 | [库同步与 Git 运维](vault-git-sync.md) | 同步/上传边界、部署刷新核查、本机并发与容量扫描 |
-| CLI 与 Agent 入口 | [CLI 能力地图](cli-capability-map.md) | 按新需求映射能力、机器可读结果、可选预演与 Agent 调用入口 |
+| SkillManagerVault 跨电脑同步 | [库同步与 Git 运维](vault-git-sync.md) | 同步/上传边界、部署刷新核查、本机并发与容量扫描 |
+| CLI 与 Agent 入口 | [CLI 能力地图](cli-capability-map.md) | 按新需求映射能力、机器可读结果与 Agent 调用入口（部署预演已取消） |
 | 工具中心 | [工具中心数据模型](tool-center-data-model.md) | 简介与维护指南、版本检查缺口、配套技能关联与业务核心边界 |
 | 诊断与资料阅读 | [诊断与阅读参考](diagnostics-and-documents.md) | 结构化结果、日志脱敏、Markdown 与文件访问边界 |
 | 平台工程 | [平台工程参考](desktop-cli.md) | CLI 可发现性、平台现象、按需验证要点 |
@@ -35,9 +35,9 @@
 
 - 产品规则以[项目原则](../../.specify/memory/constitution.md)、[正式产品规格](../../specs/002-skill-management/spec.md)
   和[需求记录](../requirements.md)为准。
-- 旧源码中名为“SkillVault 来源”“只读管理层”的角色属于旧模型，不等于本项目直接维护的唯一 SkillVault；先按 [术语表](../../GLOSSARY.md) 与正式规格“业务关系与阅读示例”辨认角色，再评估旧代码片段。原型资料用于交互参考，不替代正式业务边界。
+- 旧源码中名为“SkillManagerVault 来源”“只读管理层”的角色属于旧模型，不等于本项目直接维护的唯一 SkillManagerVault；先按 [术语表](../../GLOSSARY.md) 与正式规格“业务关系与阅读示例”辨认角色，再评估旧代码片段。原型资料用于交互参考，不替代正式业务边界。
 - 第三方协议与目录属于**有版本的历史观察**：实施接入时核对当前安装或官方实现；不伪装成已验证的当前兼容承诺。
-- 不保留旧数据库表、旧 SkillVault 格式、旧路由／IPC、旧业务裁决、兼容迁移和完整旧测试门禁。
+- 不保留旧数据库表、旧 SkillManagerVault 格式、旧路由／IPC、旧业务裁决、兼容迁移和完整旧测试门禁。
   各页说明有用的小实现点及不能带入的旧行为；旧源码定位仅用于按需核查。
 - 这些资料提供数据、经验和可评估的小实现点，不要求采用旧代码结构，也不代表已经实现正式软件。
 

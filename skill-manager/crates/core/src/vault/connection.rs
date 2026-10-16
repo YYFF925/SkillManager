@@ -1,4 +1,4 @@
-//! SkillVault 接入：选择已有本地库、确认 Git 仓库与远端。
+//! SkillManagerVault 接入：选择已有本地库、确认 Git 仓库与远端。
 //!
 //! 不提供克隆或创建向导（FR-002）；首次接入直接选择已有仓库。
 
@@ -8,7 +8,7 @@ use crate::domain::Domain;
 use crate::error::{CoreError, Result};
 use crate::sync::Git;
 
-/// 已接入的 SkillVault。
+/// 已接入的 SkillManagerVault。
 #[derive(Clone, Debug)]
 pub struct VaultConnection {
     root: PathBuf,
@@ -24,7 +24,7 @@ pub struct VaultInfo {
 }
 
 impl VaultConnection {
-    /// 打开已有本地 SkillVault。要求目录存在且是 Git 仓库；远端单独核对。
+    /// 打开已有本地 SkillManagerVault。要求目录存在且是 Git 仓库；远端单独核对。
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let requested = path.as_ref();
         if !requested.exists() {

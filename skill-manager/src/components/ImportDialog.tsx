@@ -6,7 +6,7 @@
  * 获取显示真实进度并可取消；取消/失败如实显示且不显示为已入库。
  */
 import { useEffect, useRef, useState } from "react";
-import { GitBranch, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, GitBranch, RefreshCw } from "lucide-react";
 
 import {
   cancelFetch,
@@ -53,6 +53,8 @@ export function ImportDialog({ domain, onClose, onDone }: ImportDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const cancelledRef = useRef(false);
+  const domainRef = useRef<HTMLDivElement | null>(null);
+  const [domainOpen, setDomainOpen] = useState(false);
 
   useEffect(() => {
     if (job === null) {
@@ -76,6 +78,28 @@ export function ImportDialog({ domain, onClose, onDone }: ImportDialogProps) {
       off?.();
     };
   }, [job]);
+
+  useEffect(() => {
+    if (!domainOpen) {
+      return;
+    }
+    const close = (event: MouseEvent) => {
+      if (domainRef.current && !domainRef.current.contains(event.target as Node)) {
+        setDomainOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDomainOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [domainOpen]);
 
   const trimmedRepo = repo.trim();
   const matches =
@@ -185,14 +209,10 @@ export function ImportDialog({ domain, onClose, onDone }: ImportDialogProps) {
   return (
     <Dialog
       title="从来源仓库入库"
-      subtitle="填写来源、预览和选择技能都在当前页面完成。"
       onClose={onClose}
       footer={
         <>
-          <span className="text-[12px] text-faint">
-            只列出来源仓库的真实候选；未勾选的技能不会入库，也不会被当作拒绝。
-          </span>
-          <div className="flex gap-2.5">
+          <div className="ml-auto flex gap-2.5">
             {busy ? (
               <Button onClick={() => void cancel()}>取消获取</Button>
             ) : (
@@ -226,17 +246,46 @@ export function ImportDialog({ domain, onClose, onDone }: ImportDialogProps) {
 
       <div className="mt-3.5 grid grid-cols-2 gap-3.5">
         <Field label="入库管理域">
-          <select
-            className="field-input"
-            value={targetDomain}
-            onChange={(event) => setTargetDomain(event.target.value as Domain)}
-          >
-            {DOMAIN_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className="relative" ref={domainRef}>
+            <button
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={domainOpen}
+              onClick={() => setDomainOpen((open) => !open)}
+              className="field-input flex items-center justify-between text-left"
+            >
+              <span>{DOMAIN_OPTIONS.find((option) => option.value === targetDomain)?.label}</span>
+              <ChevronDown className="size-4 shrink-0 text-faint" strokeWidth={1.75} />
+            </button>
+            {domainOpen && (
+              <div
+                role="listbox"
+                className="absolute top-[44px] left-0 z-50 w-full rounded-lg border border-line-soft bg-panel p-1.5 shadow-card-hover"
+              >
+                {DOMAIN_OPTIONS.map((option) => {
+                  const active = option.value === targetDomain;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onClick={() => {
+                        setTargetDomain(option.value);
+                        setDomainOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] ${
+                        active ? "bg-selected text-ink" : "text-ink-2 hover:bg-hover"
+                      }`}
+                    >
+                      {option.label}
+                      {active && <Check className="size-3.5 text-accent" strokeWidth={2} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </Field>
         <Field label="分类目录（最多一级）">
           <input

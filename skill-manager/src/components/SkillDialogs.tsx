@@ -110,8 +110,8 @@ export function TagPickerDialog({
       {allowNew && (
         <div className="mt-4">
           <Field label={newLabel}>
-            <input
-              className="field-input"
+            <textarea
+              className="field-input !h-[64px] resize-none py-2"
               value={newTags}
               placeholder={newPlaceholder}
               onChange={(event) => setNewTags(event.target.value)}

@@ -1,10 +1,10 @@
-//! Agent 命令：本机 Agent 配置、本地技能列表与删除，以及共享部署目录设置。
+//! Agent 命令：本机 Agent 配置、本地技能列表、阅读与删除，以及共享目录自动定位。
 //!
 //! 薄封装 core：检测只读事实；启停/顺序/目录只写本机状态；删除受管项走 US3 撤销与暂停规则。
 
 use serde::Serialize;
 use skill_manager_core::deploy::{
-    AgentConfigService, AgentView, DirKind, LocalDeleteOutcome, LocalSkillService,
+    AgentConfigService, AgentView, DirKind, LocalDeleteOutcome, LocalSkillRead, LocalSkillService,
     LocalSkillView, TargetResolver, parse_target_arg,
 };
 use skill_manager_core::vault::{
@@ -140,6 +140,22 @@ pub fn agent_local_skills(
     })
 }
 
+/// 只读本机技能正文或目录内文件。
+#[tauri::command]
+pub fn agent_read_local(
+    state: tauri::State<'_, AppState>,
+    target: String,
+    name: String,
+    file: Option<String>,
+) -> Result<LocalSkillRead, String> {
+    let ctx = state.get()?;
+    let target = parse_target_arg(&target).map_err(|err| err.to_string())?;
+    let resolver = ctx.target_resolver().map_err(|err| err.to_string())?;
+    LocalSkillService::new(&resolver, ctx.state(), ctx.vault_opt().map(|vault| vault.root().to_path_buf()))
+        .read(&target, &name, file.as_deref())
+        .map_err(|err| err.to_string())
+}
+
 /// 删除该目标本机技能副本；未受管直接删文件且不改库，受管走撤销与暂停规则。
 #[tauri::command]
 pub fn agent_delete_local(
@@ -160,40 +176,11 @@ pub fn agent_delete_local(
         .map_err(|err| err.to_string())
 }
 
-/// 读取共享部署目录设置；未设置时为 null。
+/// 读取按当前系统用户主目录自动定位的共享部署路径。
 #[tauri::command]
-pub fn shared_dir_get(state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
+pub fn shared_dir_get(state: tauri::State<'_, AppState>) -> Result<String, String> {
     let ctx = state.get()?;
-    Ok(ctx
-        .state()
-        .shared_dir()
-        .map_err(|err| err.to_string())?
-        .map(|path| path.display().to_string()))
-}
-
-/// 设置或清除共享部署目录；传空字符串表示清除。
-#[tauri::command]
-pub fn shared_dir_set(
-    state: tauri::State<'_, AppState>,
-    path: Option<String>,
-) -> Result<Option<String>, String> {
-    let ctx = state.get()?;
-    let value = path.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
-    match &value {
-        Some(value) => ctx
-            .state()
-            .set_shared_dir(value)
-            .map_err(|err| err.to_string())?,
-        None => ctx
-            .state()
-            .clear_shared_dir()
-            .map_err(|err| err.to_string())?,
-    }
-    Ok(ctx
-        .state()
-        .shared_dir()
-        .map_err(|err| err.to_string())?
-        .map(|path| path.display().to_string()))
+    Ok(ctx.shared_dir().map_err(|err| err.to_string())?.display().to_string())
 }
 
 fn instructions_service<'a>(

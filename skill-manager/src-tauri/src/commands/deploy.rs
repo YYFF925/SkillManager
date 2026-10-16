@@ -17,7 +17,6 @@ use super::AppState;
 pub struct DeployReportView {
     pub items: Vec<DeployItemView>,
     pub errors: Vec<ItemError>,
-    pub dry_run: bool,
 }
 
 /// 删库清理结果。
@@ -59,14 +58,13 @@ fn parse_targets(primary: &str, also: Option<Vec<String>>) -> Result<Vec<Target>
     Ok(targets)
 }
 
-/// 部署技能到目标（可多技能 × 多目标）；预演只报告不改文件与记录。
+/// 部署技能到目标（可多技能 × 多目标）。
 #[tauri::command]
 pub fn deploy_to(
     state: tauri::State<'_, AppState>,
     target: String,
     references: Vec<String>,
     also_targets: Option<Vec<String>>,
-    dry_run: Option<bool>,
 ) -> Result<DeployReportView, String> {
     let ctx = state.get()?;
     let root = ctx.vault().map_err(|err| err.to_string())?.root().to_path_buf();
@@ -75,15 +73,13 @@ pub fn deploy_to(
 
     let references = parse_refs(&references)?;
     let targets = parse_targets(&target, also_targets)?;
-    let dry_run = dry_run.unwrap_or(false);
     let report = service
-        .deploy_to(&references, &targets, dry_run)
+        .deploy_to(&references, &targets)
         .map_err(|err| err.to_string())?;
     log_failures(&ctx, "deploy", &report);
     Ok(DeployReportView {
         items: report.items,
         errors: report.failures,
-        dry_run,
     })
 }
 
@@ -94,7 +90,6 @@ pub fn deploy_undo(
     target: String,
     references: Vec<String>,
     also_targets: Option<Vec<String>>,
-    dry_run: Option<bool>,
     discard_local_changes: Option<bool>,
 ) -> Result<DeployReportView, String> {
     let ctx = state.get()?;
@@ -104,12 +99,10 @@ pub fn deploy_undo(
 
     let references = parse_refs(&references)?;
     let targets = parse_targets(&target, also_targets)?;
-    let dry_run = dry_run.unwrap_or(false);
     let report = service
         .undo(
             &references,
             &targets,
-            dry_run,
             discard_local_changes.unwrap_or(false),
         )
         .map_err(|err| err.to_string())?;
@@ -117,7 +110,6 @@ pub fn deploy_undo(
     Ok(DeployReportView {
         items: report.items,
         errors: report.failures,
-        dry_run,
     })
 }
 
@@ -149,7 +141,6 @@ pub fn deploy_sync(
     Ok(DeployReportView {
         items: report.items,
         errors: report.failures,
-        dry_run: false,
     })
 }
 

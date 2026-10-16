@@ -21,7 +21,6 @@ impl DeploymentService<'_> {
         &self,
         references: &[SkillRef],
         targets: &[crate::domain::Target],
-        dry_run: bool,
         discard_local_changes: bool,
     ) -> Result<DeployReport> {
         let targets = dedup_targets(targets);
@@ -54,19 +53,17 @@ impl DeploymentService<'_> {
                     continue;
                 }
 
-                if !dry_run {
-                    remove_path(&path)?;
-                    self.state.delete_deployment(
-                        reference.domain,
-                        &reference.name,
-                        &target_str,
-                    )?;
-                }
+                remove_path(&path)?;
+                self.state.delete_deployment(
+                    reference.domain,
+                    &reference.name,
+                    &target_str,
+                )?;
                 report.push_item(DeployItemView {
                     skill: reference.to_string(),
                     target: target_str,
                     path: record.target_path.clone(),
-                    action: if dry_run { "would_remove" } else { "removed" }.to_string(),
+                    action: "removed".to_string(),
                     status: DeploymentStatus::Ok.as_str().to_string(),
                     applied_overlays: Vec::new(),
                     message: None,

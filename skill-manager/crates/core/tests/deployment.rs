@@ -26,12 +26,11 @@ impl Env {
         let vault = root.path().join("vault");
         let state_dir = root.path().join("state");
         let home = root.path().join("home");
-        let shared = root.path().join("shared");
-        for dir in [&vault, &state_dir, &home, &shared] {
+        for dir in [&vault, &state_dir, &home] {
             std::fs::create_dir_all(dir).unwrap();
         }
         let state = StateStore::open(&state_dir).unwrap();
-        let resolver = TargetResolver::new(&home, AgentCatalog::embedded(), Some(shared));
+        let resolver = TargetResolver::new(&home, AgentCatalog::embedded());
         Self {
             _root: root,
             vault,
@@ -237,7 +236,7 @@ fn domain_boundary_blocks_cross_domain_deploy() {
     env.skill("lobster", None, "beta", "龙虾技能\n");
     let report = env
         .service()
-        .deploy_to(&[lobster_ref("beta")], &[agent("codex")], false)
+        .deploy_to(&[lobster_ref("beta")], &[agent("codex")])
         .unwrap();
     assert!(report.items.is_empty());
     assert_eq!(report.failures.len(), 1);
@@ -251,7 +250,7 @@ fn domain_boundary_blocks_cross_domain_deploy() {
     env.skill("lobster", None, "gamma", "龙虾技能\n");
     let ok = env
         .service()
-        .deploy_to(&[lobster_ref("gamma")], &[Target::HermesDefault], false)
+        .deploy_to(&[lobster_ref("gamma")], &[Target::HermesDefault])
         .unwrap();
     assert_eq!(ok.failures.len(), 0, "{:?}", ok.failures);
     assert_eq!(ok.items.len(), 1);
@@ -265,7 +264,7 @@ fn support_declaration_blocks_new_deploy_to_unsupported_agent() {
 
     let blocked = env
         .service()
-        .deploy_to(&[code_ref("alpha")], &[agent("codex")], false)
+        .deploy_to(&[code_ref("alpha")], &[agent("codex")])
         .unwrap();
     assert_eq!(blocked.failures.len(), 1);
     assert!(
@@ -277,7 +276,7 @@ fn support_declaration_blocks_new_deploy_to_unsupported_agent() {
 
     let allowed = env
         .service()
-        .deploy_to(&[code_ref("alpha")], &[agent("zcode")], false)
+        .deploy_to(&[code_ref("alpha")], &[agent("zcode")])
         .unwrap();
     assert_eq!(allowed.failures.len(), 0, "{:?}", allowed.failures);
     assert!(env.target_path(&agent("zcode"), "alpha").exists());
@@ -291,7 +290,7 @@ fn explicit_empty_support_has_no_target_at_all() {
 
     let report = env
         .service()
-        .deploy_to(&[code_ref("alpha")], &[agent("codex")], false)
+        .deploy_to(&[code_ref("alpha")], &[agent("codex")])
         .unwrap();
     assert_eq!(report.failures.len(), 1);
     assert!(
@@ -308,7 +307,7 @@ fn narrowed_support_keeps_existing_deployment_and_warns() {
     env.manager("code", None, "alpha", "meta.yaml", "agents: [zcode]\n");
     let first = env
         .service()
-        .deploy_to(&[code_ref("alpha")], &[agent("zcode")], false)
+        .deploy_to(&[code_ref("alpha")], &[agent("zcode")])
         .unwrap();
     assert_eq!(first.failures.len(), 0, "{:?}", first.failures);
 
@@ -316,7 +315,7 @@ fn narrowed_support_keeps_existing_deployment_and_warns() {
     env.manager("code", None, "alpha", "meta.yaml", "agents: [some-other-agent]\n");
     let again = env
         .service()
-        .deploy_to(&[code_ref("alpha")], &[agent("zcode")], false)
+        .deploy_to(&[code_ref("alpha")], &[agent("zcode")])
         .unwrap();
     assert_eq!(again.failures.len(), 0, "已有部署应保留而不是失败：{:?}", again.failures);
     assert_eq!(again.items.len(), 1);
@@ -333,7 +332,7 @@ fn narrowed_support_keeps_existing_deployment_and_warns() {
     // 新目标仍被禁止。
     let new_target = env
         .service()
-        .deploy_to(&[code_ref("alpha")], &[agent("codex")], false)
+        .deploy_to(&[code_ref("alpha")], &[agent("codex")])
         .unwrap();
     assert_eq!(new_target.failures.len(), 1);
 }
@@ -357,7 +356,7 @@ fn shared_gets_generic_content_and_is_not_rejected_for_having_overlays() {
 
     let report = env
         .service()
-        .deploy_to(&[code_ref("alpha")], &[Target::Shared], false)
+        .deploy_to(&[code_ref("alpha")], &[Target::Shared])
         .unwrap();
     assert_eq!(report.failures.len(), 0, "{:?}", report.failures);
 
@@ -379,7 +378,7 @@ fn shared_requires_all_consumers_supported() {
 
     let report = env
         .service()
-        .deploy_to(&[code_ref("alpha")], &[Target::Shared], false)
+        .deploy_to(&[code_ref("alpha")], &[Target::Shared])
         .unwrap();
     assert_eq!(report.failures.len(), 1);
     assert!(

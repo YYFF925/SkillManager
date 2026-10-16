@@ -1,6 +1,6 @@
-//! SkillVault 上传（T052，FR-038）。
+//! SkillManagerVault 上传（T052，FR-038）。
 //!
-//! 上传工作区**全部**改动（含非软件产生的修改），提交并推送自己的 SkillVault；
+//! 上传工作区**全部**改动（含非软件产生的修改），提交并推送自己的 SkillManagerVault；
 //! **不向任何来源仓库提交**。仅两条路径可达：GUI 保存按已确认策略调用、Agent 获明确同意后
 //! 显式 `sync push`。失败保留可读原因并支持用户主动重试；后台不提交、不重试推送。
 
@@ -29,7 +29,7 @@ pub struct PushReport {
 }
 
 impl SyncService<'_> {
-    /// 提交并推送本机 SkillVault。`message` 为提交信息；缺省使用固定说明。
+    /// 提交并推送本机 SkillManagerVault。`message` 为提交信息；缺省使用固定说明。
     pub fn push(&self, message: Option<&str>) -> Result<PushReport> {
         let git = self.vault.git();
         let root = self.vault_root();
@@ -62,7 +62,7 @@ impl SyncService<'_> {
             let text = message
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
-                .unwrap_or("更新 SkillVault（Skill Manager 上传）");
+                .unwrap_or("更新 SkillManagerVault（Skill Manager 上传）");
             git.ok(&["commit", "-m", text])?;
             committed = true;
             commit = Some(git.rev_parse("HEAD")?);

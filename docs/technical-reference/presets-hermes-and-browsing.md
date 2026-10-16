@@ -17,7 +17,7 @@
 
 | 需求单元 | 本项目需求位置 | 旧能力编号 |
 |---|---|---|
-| 预设：两库各自维护、组合随 SkillVault 同步 | 需求「预设」 | E01 |
+| 预设：两库各自维护、组合随 SkillManagerVault 同步 | 需求「预设」 | E01 |
 | 预设成员与排序、图标 | 需求「预设」；「旧界面交互细节的沿用」 | E02/E03/B11 |
 | 按组增加部署 / 按成员撤销 | 需求「预设」 | E05 |
 | 不引入唯一当前预设槽 | 需求「预设」 | E04 |
@@ -37,7 +37,7 @@
 
 1. 旧预设的真值是 **SQLite**（`scenarios` + `scenario_skills` 表），不是库内文件；
    `<CodeRoot>/.skills-manager/scenarios/*.json` 只是**派生镜像与跨机传输载荷**。
-2. 「组合定义随 SkillVault 同步」在旧实现里**只是部分成立**：预设 sidecar 挂在 **Code 根的 sidecar**
+2. 「组合定义随 SkillManagerVault 同步」在旧实现里**只是部分成立**：预设 sidecar 挂在 **Code 根的 sidecar**
    之下，而旧的 git 备份仓库根恰好也是 Code 根（`skills_dir()`），因此预设**确实随 Code 根的 git 备份走**；
    但龙虾根不在同一备份里，`lobster` 预设存的是同一份 Code 根 sidecar（不是各根各一份）。
 3. 旧名要求**跨域唯一**（`scenarios.name UNIQUE`），与新需求「两库各自维护」冲突，必须剥离。
@@ -51,7 +51,7 @@
 证据：`sync_metadata.rs:165/623/643`、`git_backup.rs:282-303`。
 
 这里可借鉴的是“组合定义与本机部署分开”，不是旧 DB 主、Code 根镜像的格式。
-本项目已确认预设定义在 SkillVault 中共享，本机部署记录不随库走；
+本项目已确认预设定义在 SkillManagerVault 中共享，本机部署记录不随库走；
 具体文件路径与格式留到设计，不重新提出 DB 主与库文件真值二选一。
 旧表结构、逐级迁移和完整镜像结构不在此展开。
 
@@ -140,7 +140,7 @@ domain / created_at / updated_at`。`icon` 是可空字符串键。
 | `active_scenario` 互斥当前槽 + apply/deactivate | `presets.rs:470/688`、`scenario_service.rs:916`、CLI `:3715/3736` | 需求「预设」不引入唯一当前预设槽 |
 | 创建预设即自动激活并 unsync 旧槽 | `presets.rs:253` | 同上 |
 | 删除当前预设的同域回退激活 | `presets.rs:410` | 同上 |
-| DB 主 + Code 根 sidecar 镜像的存储 | `sync_metadata.rs:643` | 本项目预设应是库内文件，随 SkillVault 统一 Git |
+| DB 主 + Code 根 sidecar 镜像的存储 | `sync_metadata.rs:643` | 本项目预设应是库内文件，随 SkillManagerVault 统一 Git |
 | 托盘预设入口 | 见 `legacy-skill-capabilities.md` E05 裁决 | 需求明确不放托盘 |
 | 依赖互斥槽的“当前预设”界面绑定 | `active_scenario` 的界面消费者 | 不带入唯一当前预设；`PresetBar` 的叠加/部分部署状态可独立参考，不等同互斥槽 |
 
@@ -248,7 +248,7 @@ missing = !Path::new(&target_path).exists();            // 部署记录在、文
 grep `adopt` 在 `src/` 只命中 `AppContext.tsx` / `installFilter.ts` / `error.ts` / `fixture-design/data.ts`，
 均为通用未受管技能收编，**不含 Hermes 档案语义**。
 
-> **结论（有效结论）**：需求「Hermes 档案」的"档案独有技能显示 + 收编入 SkillVault 并同时部署
+> **结论（有效结论）**：需求「Hermes 档案」的"档案独有技能显示 + 收编入 SkillManagerVault 并同时部署
 > default、原档案启用状态保持"是**本项目新增能力，旧版无实现**。可借鉴的只是收编通用形态
 > （见 [manager-layer-data-model.md](manager-layer-data-model.md) 与需求「技能获取与收编」B08），方向由本项目定。
 

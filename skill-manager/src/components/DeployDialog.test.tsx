@@ -1,179 +1,120 @@
-/**
- * 部署弹窗“不受支持时阻止新增部署”的行为：
- * DeployDialog（技能多选）与 PresetDeployDialog（预设组合）。
- *
- * 只渲染弹窗本身，`../services/client` 全部 mock 且不应被调用；目标选项由
- * `../lib/targets` 的纯函数与传入的本机 Agent 视图决定，不依赖真实 HOME。
- */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeployDialog } from "./DeployDialog";
 import { PresetDeployDialog } from "./PresetDeployDialog";
-import {
-  deployPreset,
-  deployTo,
-  deployUndo,
-  deployUndoPreset,
-  type AgentView,
-  type PresetView,
-} from "../services/client";
+import { QuickDeploy } from "./QuickDeploy";
+import { deployStatus, deployTo, deployUndo, type AgentView, type DeploymentStatusView } from "../services/client";
 
-vi.mock("../services/client", () => ({
-  deployTo: vi.fn(),
-  deployUndo: vi.fn(),
-  deployPreset: vi.fn(),
-  deployUndoPreset: vi.fn(),
-}));
+vi.mock("../services/client", () => ({ deployStatus: vi.fn(), deployTo: vi.fn(), deployUndo: vi.fn() }));
+const agent = (key: string, extra = {}): AgentView => ({ key, display_name: key, domain: "code", detected: true, enabled: true, order: 0, skills_dir: `/tmp/${key}/skills`, skills_dir_custom: false, skills_dir_default: `/tmp/${key}/skills`, project_rel_dir: null, project_rel_dir_default: null, instructions_target: "/tmp/AGENTS.md", icon: null, invert_in_dark: false, ...extra });
+const agents = [agent("codex"), agent("claude"), agent("disabled", { enabled: false }), agent("undetected", { detected: false })];
+const record = (skill: string, target: string): DeploymentStatusView => ({ skill, target: `agent:${target}`, target_path: `/tmp/${target}/${skill}`, status: "ok", source_hash: null, deployed_hash: null, synced_at: null, library_exists: true });
+const result = (target: string, refs: string[], action: string) => ({ items: refs.map((skill) => ({ skill, target: `agent:${target}`, path: `/tmp/${target}/${skill}`, action, status: "ok" as const })), errors: [] });
 
-afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
+beforeEach(() => {
+  vi.mocked(deployStatus).mockResolvedValue([record("code/alpha", "codex")]);
+  vi.mocked(deployTo).mockImplementation(async (target, refs) => result(target, refs, "deployed"));
+  vi.mocked(deployUndo).mockImplementation(async (target, refs) => result(target, refs, "removed"));
 });
-
-const REASON = "该技能的支持声明不含当前系统（macos），无法新增部署。";
-
-const agents: AgentView[] = [
-  {
-    key: "claude",
-    display_name: "Claude Code",
-    domain: "code",
-    detected: true,
-    enabled: true,
-    order: 0,
-    skills_dir: "/tmp/home/.claude/skills",
-    skills_dir_custom: false,
-    skills_dir_default: "/tmp/home/.claude/skills",
-    project_rel_dir: null,
-    project_rel_dir_default: null,
-    instructions_target: "/tmp/home/.claude/CLAUDE.md",
-    icon: null,
-    invert_in_dark: false,
-  },
-];
-
-const preset: PresetView = {
-  domain: "code",
-  id: "alpha-pack",
-  name: "Alpha 组合",
-  icon: null,
-  order: 0,
-  members: [
-    { name: "alpha", missing: false },
-    { name: "beta", missing: false },
-  ],
-  missing_members: [],
-};
-
-/**
- * 页脚主操作按钮。
- *
- * 不能按 `getByRole("button", { name: "部署" })` 定位：分段控件的「部署」选项与主按钮同名，
- * 会同时命中两个元素；这里由与主按钮同级的「关闭」按钮取下一个兄弟元素。
- */
-function primaryButton(): HTMLButtonElement {
-  const close = screen.getByText("关闭").closest("button");
-  const primary = close?.nextElementSibling;
-  if (!(primary instanceof HTMLButtonElement)) {
-    throw new Error("未找到页脚主操作按钮");
-  }
-  return primary;
+afterEach(() => { cleanup(); vi.resetAllMocks(); });
+async function renderDialog(props = {}) {
+  render(<DeployDialog domain="code" references={["code/alpha"]} agents={agents} onClose={() => { }} onDone={() => { }} {...props} />);
+  await waitFor(() => expect(screen.queryByText("正在读取部署状态…")).toBeNull());
 }
 
-function renderDeployDialog(unsupportedReason?: string | null) {
-  return render(
-    <DeployDialog
-      domain="code"
-      references={["code/alpha"]}
-      agents={agents}
-      sharedDir="/tmp/shared-skills"
-      unsupportedReason={unsupportedReason}
-      onSharedDirChange={async () => {}}
-      onClose={() => {}}
-      onDone={() => {}}
-    />,
-  );
-}
-
-describe("DeployDialog", () => {
-  it("部署模式下选中项全部不受支持：展示原因并禁用部署按钮", () => {
-    renderDeployDialog(REASON);
-    // 已选目标，使禁用只可能来自“不支持声明”，而不是 targets.length === 0。
-    fireEvent.click(screen.getByRole("button", { name: "共享目录" }));
-
-    expect(screen.getByText(REASON)).toBeTruthy();
-    expect(primaryButton()).toBeDisabled();
-    expect(primaryButton()).toHaveAttribute("title", REASON);
+describe("部署选择与保存", () => {
+  it("载入实际状态，只列检测且启用的 Agent，取消预演与模式切换", async () => {
+    await renderDialog();
+    expect(screen.getByRole("button", { name: "codex" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "claude" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByText("disabled")).toBeNull();
+    expect(screen.queryByText("undetected")).toBeNull();
+    expect(screen.queryByText(/预演|其他支持项|按管理域|撤销保留/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "撤销" })).toBeNull();
+    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
+  });
+  it("保存前无副作用，保存一次同时部署与撤销，只处理变化项", async () => {
+    const done = vi.fn();
+    await renderDialog({ onDone: done });
+    fireEvent.click(screen.getByRole("button", { name: "codex" }));
+    fireEvent.click(screen.getByRole("button", { name: "claude" }));
     expect(deployTo).not.toHaveBeenCalled();
     expect(deployUndo).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(done).toHaveBeenCalled());
+    expect(deployTo).toHaveBeenCalledExactlyOnceWith("claude", ["code/alpha"]);
+    expect(deployUndo).toHaveBeenCalledExactlyOnceWith("codex", ["code/alpha"]);
   });
-
-  it("切到撤销模式：提示消失且部署按钮恢复可用", () => {
-    renderDeployDialog(REASON);
-    // 已选目标，排除 targets.length === 0 的禁用，只让“不支持声明”决定按钮状态。
-    fireEvent.click(screen.getByRole("button", { name: "共享目录" }));
-    expect(primaryButton()).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "撤销" }));
-
-    expect(screen.queryByText(REASON)).toBeNull();
-    expect(primaryButton()).not.toBeDisabled();
+  it("多技能部分部署保持原状态，选择补齐时只新增缺失技能", async () => {
+    await renderDialog({ references: ["code/alpha", "code/beta"] });
+    expect(screen.getByRole("button", { name: "codex 1/2" })).toHaveAttribute("aria-pressed", "mixed");
+    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "codex 1/2" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(deployTo).toHaveBeenCalledExactlyOnceWith("codex", ["code/beta"]));
+    expect(deployUndo).not.toHaveBeenCalled();
   });
-
-  it("未给不支持原因且已选中目标时按钮可点", () => {
-    renderDeployDialog(null);
-
-    fireEvent.click(screen.getByRole("button", { name: "共享目录" }));
-
-    expect(primaryButton()).not.toBeDisabled();
+  it("不受支持时阻止新增但允许撤销已有部署", async () => {
+    await renderDialog({ unsupportedReason: "不支持当前系统" });
+    fireEvent.click(screen.getByRole("button", { name: "claude" }));
+    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "claude" }));
+    fireEvent.click(screen.getByRole("button", { name: "codex" }));
+    expect(screen.getByRole("button", { name: "保存" })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(deployUndo).toHaveBeenCalled());
+    expect(deployTo).not.toHaveBeenCalled();
+  });
+  it("部分失败留在弹窗显示原因，重试不重复已成功项", async () => {
+    const done = vi.fn();
+    vi.mocked(deployTo).mockResolvedValueOnce({ items: [], errors: [{ skill: "code/alpha", target: "agent:claude", message: "部署暂停" }] });
+    await renderDialog({ onDone: done });
+    fireEvent.click(screen.getByRole("button", { name: "codex" }));
+    fireEvent.click(screen.getByRole("button", { name: "claude" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await screen.findByText(/部署暂停/);
+    expect(done).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(done).toHaveBeenCalled());
+    expect(deployUndo).toHaveBeenCalledTimes(1);
+    expect(deployTo).toHaveBeenCalledTimes(2);
+  });
+  it("部署记录读取失败时禁止保存", async () => {
+    vi.mocked(deployStatus).mockRejectedValue(new Error("读取失败"));
+    await renderDialog();
+    expect(screen.getByText(/读取失败/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
+  });
+  it("预设使用同一保存交互，撤销时保留跨预设影响提示", async () => {
+    render(<PresetDeployDialog domain="code" preset={{ domain: "code", id: "pack", name: "组合", icon: null, order: 0, members: [{ name: "alpha", missing: false }], missing_members: [] }} agents={agents} sharedMembers={["alpha"]} onClose={() => { }} onDone={() => { }} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "codex" })).toHaveAttribute("aria-pressed", "true"));
+    fireEvent.click(screen.getByRole("button", { name: "codex" }));
+    expect(screen.getByText(/其他预设成员/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(deployUndo).toHaveBeenCalledExactlyOnceWith("codex", ["code/alpha"]));
   });
 });
 
-describe("PresetDeployDialog", () => {
-  function renderDialog(unsupportedReason?: string | null) {
-    return render(
-      <PresetDeployDialog
-        domain="code"
-        preset={preset}
-        agents={agents}
-        sharedMembers={[]}
-        unsupportedReason={unsupportedReason}
-        onClose={() => {}}
-        onDone={() => {}}
-      />,
-    );
-  }
-
-  it("部署模式下成员全部不受支持：展示原因并禁用叠加部署按钮", () => {
-    renderDialog(REASON);
-    // 已选目标，使禁用只可能来自“不支持声明”，而不是 targets.length === 0。
-    fireEvent.click(screen.getByRole("button", { name: "共享目录" }));
-
-    expect(screen.getByText(REASON)).toBeTruthy();
-    const primary = screen.getByRole("button", { name: "叠加部署" });
-    expect(primary).toBeDisabled();
-    expect(primary).toHaveAttribute("title", REASON);
-    expect(deployPreset).not.toHaveBeenCalled();
-    expect(deployUndoPreset).not.toHaveBeenCalled();
+describe("卡片快捷部署", () => {
+  it("图标按记录亮显，点击立即撤销且不打开卡片", async () => {
+    const change = vi.fn(), open = vi.fn();
+    render(<article onClick={open}><QuickDeploy reference="code/alpha" domain="code" agents={agents} records={[record("code/alpha", "codex")]} onChange={change} onError={vi.fn()} /></article>);
+    expect(screen.getByRole("button", { name: "撤销部署 codex" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "撤销部署 codex" }));
+    await waitFor(() => expect(change).toHaveBeenCalled());
+    expect(deployUndo).toHaveBeenCalledExactlyOnceWith("codex", ["code/alpha"]);
+    expect(open).not.toHaveBeenCalled();
   });
-
-  it("切到撤销模式：提示消失且叠加部署按钮恢复可用", () => {
-    renderDialog(REASON);
-    // 已选目标，排除 targets.length === 0 的禁用，只让“不支持声明”决定按钮状态。
-    fireEvent.click(screen.getByRole("button", { name: "共享目录" }));
-    expect(primaryButton()).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "撤销" }));
-
-    expect(screen.queryByText(REASON)).toBeNull();
-    expect(primaryButton()).not.toBeDisabled();
+  it("灰暗图标点击部署，失败如实报告", async () => {
+    const error = vi.fn();
+    vi.mocked(deployTo).mockResolvedValue({ items: [], errors: [{ message: "权限不足" }] });
+    render(<QuickDeploy reference="code/alpha" domain="code" agents={agents} records={[]} onChange={vi.fn()} onError={error} />);
+    fireEvent.click(screen.getByRole("button", { name: "部署到 claude" }));
+    await waitFor(() => expect(error).toHaveBeenCalledWith("权限不足"));
+    expect(deployTo).toHaveBeenCalledExactlyOnceWith("claude", ["code/alpha"]);
   });
-
-  it("未给不支持原因且已选中目标时按钮可点", () => {
-    renderDialog(null);
-
-    fireEvent.click(screen.getByRole("button", { name: "共享目录" }));
-
-    expect(primaryButton()).not.toBeDisabled();
+  it("未受管卡片不能直接部署，需先纳入管理", () => {
+    render(<QuickDeploy domain="code" agents={agents} records={[]} onChange={vi.fn()} onError={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "codex · 先纳入管理" })).toBeDisabled();
   });
 });

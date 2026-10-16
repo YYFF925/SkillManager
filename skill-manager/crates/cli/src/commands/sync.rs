@@ -1,4 +1,4 @@
-//! `sync` 子命令：SkillVault 跨机拉取、上传、状态与冲突（T054）。
+//! `sync` 子命令：SkillManagerVault 跨机拉取、上传、状态与冲突（T054）。
 //!
 //! 参数与输出遵循 `specs/002-skill-management/contracts/cli.md`；业务规则全部在 core。
 //! CLI 写库/部署同步不构成上传授权：`sync push` 是 Agent 获得明确同意后的显式调用入口。
@@ -16,7 +16,7 @@ pub struct SyncCommand {
 
 #[derive(Subcommand, Debug)]
 pub enum SyncAction {
-    /// 拉取同一 SkillVault；无冲突静默应用并刷新已有部署/指令目标。
+    /// 拉取同一 SkillManagerVault；无冲突静默应用并刷新已有部署/指令目标。
     Pull,
     /// 获明确同意后显式上传工作区全部改动（提交并推送自己的库）。
     Push(PushArgs),

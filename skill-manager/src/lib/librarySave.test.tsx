@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useLibrarySaveFlow } from "./librarySave";
 
 vi.mock("../services/client", () => ({
-  deploySync: vi.fn(async () => ({ items: [], errors: [], dry_run: false })),
+  deploySync: vi.fn(async () => ({ items: [], errors: [] })),
   settingsGet: vi.fn(async () => ({ theme: "system", font_scale: "default", auto_check_minutes: 60, git_auto_push: true })),
   setGitAutoPush: vi.fn(async () => ({ theme: "system", font_scale: "default", auto_check_minutes: 60, git_auto_push: true })),
   syncPush: vi.fn(async () => ({ committed: true, pushed: true, remote: "r", message: "已提交并推送工作区全部改动" })),
@@ -52,7 +52,7 @@ describe("useLibrarySaveFlow", () => {
       mocked.syncPush.mock.invocationCallOrder[0],
     );
     // 已确认时不弹确认框。
-    expect(screen.queryByText("保存后自动上传本机 SkillVault？")).toBeNull();
+    expect(screen.queryByText("保存后自动上传本机 SkillManagerVault？")).toBeNull();
   });
 
   it("asks once, records the confirmation, then uploads", async () => {
@@ -60,7 +60,7 @@ describe("useLibrarySaveFlow", () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
-    await waitFor(() => expect(screen.getByText("保存后自动上传本机 SkillVault？")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("保存后自动上传本机 SkillManagerVault？")).toBeTruthy());
     expect(mocked.syncPush).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "确认并上传" }));
@@ -73,9 +73,9 @@ describe("useLibrarySaveFlow", () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
-    await waitFor(() => expect(screen.getByText("保存后自动上传本机 SkillVault？")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("保存后自动上传本机 SkillManagerVault？")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
-    await waitFor(() => expect(screen.queryByText("保存后自动上传本机 SkillVault？")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("保存后自动上传本机 SkillManagerVault？")).toBeNull());
     expect(mocked.syncPush).not.toHaveBeenCalled();
     expect(mocked.setGitAutoPush).not.toHaveBeenCalled();
   });

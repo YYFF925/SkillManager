@@ -9,7 +9,7 @@
 
 | 选项 | 含义 |
 |---|---|
-| `--vault <path>` | SkillVault 根目录（共享内容真值）。未给时用本机记住的库 |
+| `--vault <path>` | SkillManagerVault 根目录（共享内容真值）。未给时用本机记住的库 |
 | `--state-dir <path>` | 本机状态目录（隔离 SQLite、检查缓存与日志），用于双机模拟 |
 | `--json` | 输出结构化 JSON（`result` / `data` / `errors`） |
 | `-h, --help` | 帮助 |
@@ -55,8 +55,7 @@ skill task <ref>... [--requirement <text>]
 
 - `--preset` 须同时给 `--domain`（避免跨域同 id 歧义）；否则报错退出 1。
 - `--deployed-to` 按本机部署记录筛选；`skill get` 的 `deployments` 列出该技能的实际部署位置。
-- 需要共享目录部署时，先用 `settings set-shared-dir --path <绝对路径>` 设置（见 `settings` 一节）；
-  未设置时 `deploy to shared <ref>` 报“尚未设置共享目录路径”。
+- 共享目录自动定位为 `<当前用户主目录>/.agents/skills`（`agents` 带 `s`），无需设置。浏览不创建目录，首次部署时创建。
 - `--agents`：`all` 删除限制键（= 全支持）、`none` 写显式空集合、其余为逗号分隔名单；
   `--oses` 同规则。`--tags` 是替换集合，空字符串清空。`--comment` 空字符串清除。
 - `tag add/detach` 只增减目标标签（不替换）；`tag rename/remove` 两域统一治理，`remove` 只解除关联。
@@ -72,7 +71,7 @@ skill task <ref>... [--requirement <text>]
 skill preview <repo-url> [--ref <branch-or-tag>]
 skill import <repo-url> --domain <domain> --skills <subpath>... [--ref <branch-or-tag>]
              [--category <c> | --uncategorized]
-skill adopt <agent-key> <name>... [--category <c> | --uncategorized]
+skill adopt <target> <name>... [--category <c> | --uncategorized]
             [--comment <text>] [--tags <csv>] [--metadata-file <path>]
 skill adopt-hermes <profile> <name>...
 skill create <ref> [--category <c> | --uncategorized] [--comment <text>] [--tags <csv>]
@@ -94,23 +93,22 @@ skill skipped
   （返回 `failed` 并说明“后续不继续该获取”，不误报入库）。
 - `--to` / `--version` 缺省采用最近检查所得的具体远端提交；尚无检查结果会提示先检查。
 - `update-repo` 只处理两域该仓库**未采用、未跳过**的已有条目；新增只处理 `--include-new` 显式选定项。
-- `adopt` 管理域由 Agent 所属域决定；批量不同资料用 `--metadata-file` 按技能名给各自资料。
+- `adopt` 的目标为内置 Agent key 或 `shared`；管理域由目标所属域决定，共享目录进入编码库并接管原共享部署。批量不同资料用 `--metadata-file` 按技能名给各自资料。
 - 已知限制：`import` / `update-repo` 没有 `--tags` / `--comment` 参数，新增候选入库时标签与注释
   继承上游 `.manager`，只能补充分类（GUI 与 CLI 一致）。入库后再用 `skill set` 补充标签/注释。
 
 ## deploy — 部署与同步
 
 ```text
-deploy to <target> <ref>... [--also-target <target>...] [--dry-run]
-deploy preset <domain> <preset-id> --to <target> [--also-target <target>...] [--dry-run]
-deploy undo <target> <ref>... [--also-target <target>...] [--dry-run] [--discard-local-changes]
-deploy undo-preset <domain> <preset-id> --from <target> [--also-target <target>...] [--dry-run]
+deploy to <target> <ref>... [--also-target <target>...]
+deploy preset <domain> <preset-id> --to <target> [--also-target <target>...]
+deploy undo <target> <ref>... [--also-target <target>...] [--discard-local-changes]
+deploy undo-preset <domain> <preset-id> --from <target> [--also-target <target>...]
 deploy sync [--ref <ref>] [--target <target>] [--overwrite-local]
 deploy status [--target <target>] [--paused]
 ```
 
 - `--also-target` 可重复；未给则只处理一个目标。
-- `--dry-run` 只报告技能/目标/实际路径/预期结果，不修改目标、库内容或业务状态。
 - 遇受管副本外改：普通部署/同步暂停该项（`paused_local_change`），其余继续。
   用户裁决后按库覆盖用 `sync --ref <ref> --target <target> --overwrite-local`；
   确认丢弃待清理副本用 `undo ... --discard-local-changes`。
@@ -143,6 +141,7 @@ agent enable <key> | agent disable <key> | agent reorder --order <key,...>
 agent set-dir <key> (--skills <path> | --project-rel <path> | --instructions <path>)
 agent reset-dir <key> --kind skills|project-rel|instructions
 agent local-skills <target> | agent delete-local <target> <name>...
+agent read-local <target> <name> [--file <技能内相对路径>]
 instruction get global|<key>
 instruction set global|<key> (--file <path> | --stdin)
 ```
@@ -150,7 +149,7 @@ instruction set global|<key> (--file <path> | --stdin)
 - `agent` 的目录/启停/顺序只写本机状态；`detect` 只读目录存在性，不启动、不部署。
 - `local-skills` / `delete-local` 的 `<target>` 接受内置 Agent key、`shared`（共享目录是编码 Agent 的本机部署目标）或 `hermes:default`（Hermes default 档案）：
   按内置 Agent 的同一套语义列出与处理——受管项（存在该目标部署记录）走撤销部署规则、不删库；
-  未受管项直接删除实际文件、不改库。共享目录未设置路径时如实报错“尚未设置共享目录路径”，不猜测默认路径。
+  未受管项直接删除实际文件、不改库。共享目录自动定位为当前用户主目录下的 `.agents/skills`；目录不存在时返回空列表，不要求设置路径。
 - `instruction get` 返回源内容与按“全局在前、专属在后”的合成预览；
   `set` 写入源后立即覆盖本机已启用目标的 `<detect_dir>/AGENTS.md`（可用 `--instructions` 覆盖路径），
   空内容可正常保存并覆盖；单目标写入失败不中断其余并逐项报告。
@@ -186,7 +185,7 @@ tool skill-link <slug> <ref>
 - `tool check` 只写检查结果，不改安装事实；未安装工具取得上游版本后仍显示未安装。
 - `tool task --action register` 允许省略 `<slug>`（用 `--requirement` 说明名称与来源）；其他动作必须给已登记 slug。
 
-## sync — SkillVault 跨机同步
+## sync — SkillManagerVault 跨机同步
 
 ```text
 sync pull
@@ -204,19 +203,18 @@ sync conflicts
 
 ```text
 settings get [<key>...]
-settings set-shared-dir (--path <绝对路径> | --clear)
 settings set-auto-check <0|30|60|360|1440>
 settings diagnostics [--export]
 settings capacity
 ```
 
-- 只读写**本机状态**，不改 SkillVault 内容、不触发上传。
+- 只读写**本机状态**，不改 SkillManagerVault 内容、不触发上传。
 - `settings get` 不带参数返回全部键的当前生效值：`theme`、`font_scale`、`auto_check_minutes`、
   `shared_dir`、`git_auto_push`、`vault_path`、`last_sync_at`、`last_check_at`；带参数只返回指定键。
   **未设置的键返回 `null`**（不省略键、不用空字符串冒充）；已套用默认值：主题 `system`、字号 `default`、
   自动检查频率 `60`。
-- **只有两个写入口**：
-  - `settings set-shared-dir --path <绝对路径>` 设置共享目录（`shared` 部署目标前置）；`--clear` 清除。
+- `shared_dir` 是自动识别的只读路径，不是 SQLite 设置键，不提供修改或清除入口。
+- **只有一个写入口**：
   - `settings set-auto-check <0|30|60|360|1440>` 设置 FR-029 三项共用的自动检查周期（`0` = 关闭）。
     其他取值被拒绝并列出合法值。
 - **不提供写入口**（只能经 `settings get` 读取）：`theme`、`font_scale`（界面偏好，在 GUI 设置页调整）、

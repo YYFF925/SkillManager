@@ -1,6 +1,6 @@
 # Skill Manager（正式产品实现）
 
-Skill Manager 是本地优先的技能库管理器：以用户自己的 **SkillVault**（Git 仓库）为唯一内容真值源，
+Skill Manager 是本地优先的技能库管理器：以用户自己的 **SkillManagerVault**（Git 仓库）为唯一内容真值源，
 Rust 核心承载库管理、部署合成、上游更新、跨机同步与工具中心；GUI（Tauri 2 + React/TypeScript）与
 CLI（clap，面向 Agent 的主要入口）共用同一核心；本机状态（部署记录、档案启用、Agent 配置、设置、
 工具安装记录、检查事实）存 SQLite。
@@ -51,45 +51,51 @@ cargo run -p skill-manager-cli -- --help   # CLI
 ```
 
 Tauri 打包：`npm run tauri build`（`bundle.targets` 为 `app`）。
+macOS 本机打包使用 ad hoc（临时签名，`bundle.macOS.signingIdentity = "-"`），
+使签名标识与应用标识 `com.fei.skillmanager` 一致。实际验证中，未绑定应用信息的链接器签名下，
+系统本地网络开关虽已开启，GUI 的 Git SSH 仍报 `No route to host`；应用包签名并重启后连接成功。
 
 ## CLI 入口
 
 ```bash
 # 全局选项（所有子命令可用）
-skill-manager --vault <SkillVault 路径> --state-dir <本机状态目录> [--json] <命令...>
+skill-manager --vault <SkillManagerVault 路径> --state-dir <本机状态目录> [--json] <命令...>
 
 # 示例
 skill-manager skill list --domain code --query 依赖 --tag 检查
 skill-manager skill set code/dep-guard --comment 检查依赖 --tags 依赖,安全
 skill-manager skill import <repo-url> --domain code --skills <subpath>
 skill-manager skill check --all
-skill-manager deploy to codex code/dep-guard --also-target zcode --dry-run
+skill-manager deploy to codex code/dep-guard --also-target zcode
 skill-manager deploy sync
 skill-manager sync push --message "上传本周维护"
 skill-manager tool check --all
 skill-manager settings get
-skill-manager settings set-shared-dir --path /Users/you/.agents/skills
+skill-manager settings get shared_dir
 skill-manager settings set-auto-check 30
 skill-manager settings diagnostics --export
 skill-manager settings capacity
 skill-manager agent local-skills shared
+skill-manager agent read-local shared <name>
 ```
 
 - `<ref>` = `<domain>/<name>`（**不含分类路径**；技能名在域内唯一，分类只影响目录位置）。
 - `<target>` = 内置 Agent key、`shared`（共享目录，编码 Agent 的本机部署目标）或 `hermes:default`（Hermes default 档案）；
   `agent local-skills <target>` / `agent delete-local <target> <name>...` 接受以上三类取值，
-  受管项走撤销规则、未受管项直接删本机文件，共享目录未设置路径时如实报错。
+  受管项走撤销规则、未受管项直接删本机文件；共享目录自动定位为当前用户主目录下的 `.agents/skills`。
+- 本机技能卡片可点击阅读实际副本的正文与文件；未受管项可「纳入管理」，共享目录收编使用
+  `skill adopt shared <name>`，进入编码库并接管原共享部署，不新增其他目标部署。
 - 退出码：`0` 成功；`1` 失败；`2` 部分完成（参数用法错误也返回 `2`）。
 - `--json` 输出统一对象 `{result, data, errors}`。
 - `settings` 命令组只读写本机状态：`get` 读全部运行配置与调度事实（未设置的键为 `null`）；
-  **只有两个写入口**——`set-shared-dir`（`shared` 部署目标前置）与 `set-auto-check`（FR-029 三项共用周期）；
+  **只有一个写入口**——`set-auto-check`（FR-029 三项共用周期）；共享目录自动识别且只读，不保存路径设置；
   `theme`/`font_scale` 仅 GUI 写（界面偏好，FR-052）、`git_auto_push` 仅 GUI 写（长期上传授权，FR-038），
   三者经 CLI 只读；`diagnostics`/`capacity` 与设置页共用同一 core，`--export` 返回真实文件路径。
 - 完整命令表、参数与语义以 [contracts/cli.md](../specs/002-skill-management/contracts/cli.md) 为准。
 
-## SkillVault 与本机状态位置
+## SkillManagerVault 与本机状态位置
 
-- **SkillVault（共享内容真值）**：用户已有的 Git 仓库，含 `code/`、`lobster/` 两管理域、
+- **SkillManagerVault（共享内容真值）**：用户已有的 Git 仓库，含 `code/`、`lobster/` 两管理域、
   `presets/`、`instructions/`、`tools/`、`upstream-decisions.yaml`；首次接入在 GUI 选择目录，
   之后本机记住路径；CLI 用 `--vault` 指定。所有共享资产都是库内可直接读写的文件，随库 Git 同步。
 - **本机状态（不随库同步）**：SQLite `skill-manager.db`，默认位于系统的本地数据目录下的

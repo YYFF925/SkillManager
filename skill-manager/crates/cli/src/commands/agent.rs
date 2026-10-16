@@ -1,7 +1,7 @@
 //! `agent` 子命令：本机 Agent 配置与本地技能管理（T067/T068）。
 //!
 //! 参数与输出遵循 `specs/002-skill-management/contracts/cli.md`；业务规则全部在 core。
-//! 检测只读本机存在事实；启停、顺序与目录只写本机状态，不进入 SkillVault。
+//! 检测只读本机存在事实；启停、顺序与目录只写本机状态，不进入 SkillManagerVault。
 
 use clap::{Args, Subcommand};
 use serde_json::{Value, json};
@@ -35,6 +35,8 @@ pub enum AgentAction {
     ResetDir(ResetDirArgs),
     /// 列出该目标目录下的本地技能（受管/仅本地）；目标为内置 Agent key、`shared` 或 `hermes:default`。
     LocalSkills(LocalTargetArgs),
+    /// 只读：本机技能正文或指定文件，不用库内原件代替副本。
+    ReadLocal(ReadLocalArgs),
     /// 删除该目标目录下的本地技能（未受管删文件不改库；受管走撤销与暂停规则）；目标为内置 Agent key、`shared` 或 `hermes:default`。
     DeleteLocal(DeleteLocalArgs),
 }
@@ -51,6 +53,17 @@ pub struct LocalTargetArgs {
     /// 内置 Agent key、`shared`（共享目录是本机部署目标）或 `hermes:default`（Hermes default 档案）。
     #[arg(value_name = "target")]
     pub target: String,
+}
+
+#[derive(Args, Debug)]
+pub struct ReadLocalArgs {
+    #[arg(value_name = "target")]
+    pub target: String,
+    #[arg(value_name = "name")]
+    pub name: String,
+    /// 技能内相对文件路径；省略时阅读 SKILL.md 或 skill.md。
+    #[arg(long, value_name = "path")]
+    pub file: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -118,6 +131,13 @@ fn dispatch(action: AgentAction, ctx: &AppContext) -> Result<(CliResult, String)
         AgentAction::SetDir(args) => set_dir(ctx, args),
         AgentAction::ResetDir(args) => reset_dir(ctx, args),
         AgentAction::LocalSkills(args) => local_skills(ctx, &args.target),
+        AgentAction::ReadLocal(args) => {
+            let resolver = ctx.target_resolver()?;
+            let target = parse_target_arg(&args.target)?;
+            let view = local_service(ctx, &resolver)?.read(&target, &args.name, args.file.as_deref())?;
+            let human = view.text.clone().unwrap_or_else(|| format!("非 UTF-8 文本（{} 字节）", view.size));
+            Ok((CliResult::from_data(&view), human))
+        }
         AgentAction::DeleteLocal(args) => delete_local(ctx, &args.target, &args.names),
     }
 }

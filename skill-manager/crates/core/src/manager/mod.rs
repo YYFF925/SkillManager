@@ -1,6 +1,6 @@
 //! 管理层（`.manager`）：技能的六项管理资料与来源记录。
 //!
-//! 管理资料是 SkillVault 内的共享文件，GUI、CLI 与外部 Agent 手改地位平等；
+//! 管理资料是 SkillManagerVault 内的共享文件，GUI、CLI 与外部 Agent 手改地位平等；
 //! 本模块只负责文件读写与字段形状校验，不承载部署或获取规则。
 
 pub mod files;

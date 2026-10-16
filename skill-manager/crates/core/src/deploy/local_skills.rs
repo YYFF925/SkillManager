@@ -18,6 +18,7 @@ use crate::output::ItemError;
 use crate::state::deployments::{DeploymentRecord, DeploymentStatus};
 use crate::state::StateStore;
 use crate::vault::index::SkillIndex;
+use crate::vault::index::file_tree;
 use crate::vault::scan;
 
 /// 本机技能目录下的一项。
@@ -37,6 +38,17 @@ pub struct LocalSkillView {
     pub library_exists: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
+}
+
+/// 本机技能的只读正文或文件；不读取库内原件来代替本机副本。
+#[derive(Clone, Debug, Serialize)]
+pub struct LocalSkillRead {
+    pub name: String,
+    pub path: String,
+    pub file: String,
+    pub text: Option<String>,
+    pub size: u64,
+    pub files: Vec<String>,
 }
 
 /// 删除本地技能的结果：成功移除项与逐项未完成原因。
@@ -67,9 +79,34 @@ impl<'a> LocalSkillService<'a> {
         }
     }
 
-    /// 目标技能目录：内置 Agent key 用其技能目录（含本机覆盖），`shared` 用配置的共享路径。
+    /// 目标技能目录：内置 Agent key 用其技能目录（含本机覆盖），`shared` 用 `<home>/.agents/skills`。
     pub fn skills_dir(&self, target: &Target) -> Result<PathBuf> {
         Ok(PathBuf::from(self.resolver.resolve(target)?.path))
+    }
+
+    /// 阅读指定本机技能；仅允许读取该技能目录内的文件。
+    pub fn read(&self, target: &Target, name: &str, file: Option<&str>) -> Result<LocalSkillRead> {
+        validate_skill_name(name)?;
+        let dir = self.skills_dir(target)?.join(name);
+        let (_, entry) = scan::entry_file(&dir)
+            .ok_or_else(|| CoreError::other(format!("该目标下没有这项技能：{name}")))?;
+        let file = file.unwrap_or(entry);
+        let path = dir.join(file);
+        if !is_within(&dir, &path) {
+            return Err(CoreError::other(format!("只能阅读技能目录内的文件：{file}")));
+        }
+        let bytes = std::fs::read(&path).map_err(|err| CoreError::io(path.clone(), err))?;
+        let size = bytes.len() as u64;
+        let mut files = Vec::new();
+        collect_file_paths(&file_tree(&dir)?, "", &mut files);
+        Ok(LocalSkillRead {
+            name: name.to_string(),
+            path: dir.display().to_string(),
+            file: file.to_string(),
+            text: String::from_utf8(bytes).ok(),
+            size,
+            files,
+        })
     }
 
     /// 列出该目标目录下的技能；目录不存在时如实为空（该 Agent 可能未安装）。
@@ -171,12 +208,12 @@ impl<'a> LocalSkillService<'a> {
     ) -> Result<()> {
         let Some(root) = &self.vault_root else {
             return Err(CoreError::other(
-                "该技能是受管部署，撤销需要接入 SkillVault；请先选择技能库",
+                "该技能是受管部署，撤销需要接入 SkillManagerVault；请先选择技能库",
             ));
         };
         let reference = record.reference();
         let service = DeploymentService::new(root.clone(), self.resolver, self.state);
-        let report = service.undo(std::slice::from_ref(&reference), std::slice::from_ref(target), false, false)?;
+        let report = service.undo(std::slice::from_ref(&reference), std::slice::from_ref(target), false)?;
         for item in report.items {
             outcome.removed.push(LocalSkillView {
                 name: item_skill_name(&item.skill).to_string(),
@@ -239,6 +276,17 @@ impl<'a> LocalSkillService<'a> {
                 library_exists: false,
                 comment: None,
             },
+        }
+    }
+}
+
+fn collect_file_paths(nodes: &[crate::vault::index::FileNode], prefix: &str, files: &mut Vec<String>) {
+    for node in nodes {
+        let path = if prefix.is_empty() { node.name.clone() } else { format!("{prefix}/{}", node.name) };
+        if node.is_dir {
+            collect_file_paths(&node.children, &path, files);
+        } else {
+            files.push(path);
         }
     }
 }

@@ -1,17 +1,17 @@
-# SkillVault 跨电脑同步与 Git 参考
+# SkillManagerVault 跨电脑同步与 Git 参考
 
 2026-10-15 静态核对 FeiSkillDock v1.44.0，提交 `372a223414dc773f7aaefc887c75ab0e1b335be8`。
 未运行旧程序或测试，未执行真实同步、冲突处理、提交或推送。
-依据[需求记录](../requirements.md)“SkillVault 跨电脑同步”与
+依据[需求记录](../requirements.md)“SkillManagerVault 跨电脑同步”与
 [本机状态边界](../adr/0001-library-and-local-state.md)。
 第二轮复查已删除旧对象合并引擎、专用凭据系统和镜像格式的详细展开；它们不是新实现方案。
 
 ## 先区分旧来源库与自己的库同步
 
-旧 `core/skill_vault.rs` 把 SkillVault 当作外部来源，再导入另一个中央库。
+旧 `core/skill_vault.rs` 把 SkillManagerVault 当作外部来源，再导入另一个中央库。
 它的 fresh/existing/conflict/removed 名单不能直接用作新项目自己的跨机同步。
 
-新 SkillVault 就是用户维护的唯一库根，含 code/lobster、管理资料、预设和指令源。
+新 SkillManagerVault 就是用户维护的唯一库根，含 code/lobster、管理资料、预设和指令源。
 各电脑的部署记录、Hermes 启用选择、指令分发目标与上传确认状态留本机。
 旧较接近的实现线索是 `git_backup.rs`、`auto_backup.rs` 及其调用方。
 
@@ -96,7 +96,7 @@
 ## Git 状态、认证与容量报告
 
 旧 `get_status` 读取 ahead/behind（本地领先/落后提交数）与远端状态；
-`auto_update_last_run_at` 是技能上游检查时间，不能当作 SkillVault 上次同步时间。
+`auto_update_last_run_at` 是技能上游检查时间，不能当作 SkillManagerVault 上次同步时间。
 旧未提供完整持久化的库同步时间/结果记录；需要何种界面状态按新需求设计。
 
 本项目复用已有仓库的远端、分支、作者及本机 Git 认证。
@@ -104,7 +104,7 @@
 git2 与合并引擎切换均不继承。提交/推送命令仍需遵守前述上传同意边界。
 
 旧 `size_report`（`git_backup.rs:1257`）只读扫描库文件，排除 `.git`，技能目录命中后不重复下钻。
-这是容量报告的有用小实现点；旧只测 Code 根，新项目口径应覆盖整个 SkillVault。
+这是容量报告的有用小实现点；旧只测 Code 根，新项目口径应覆盖整个 SkillManagerVault。
 旧 100 MiB 单技能与 1 GiB 全库阈值只是历史取值，不是新要求。
 旧自动写 `.gitignore` 排除大技能，会使技能无法跨机同步；
 保留容量显示**不等于授权继承自动排除**，当前不把它作为实现要求。

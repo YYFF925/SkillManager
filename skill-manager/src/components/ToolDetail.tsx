@@ -226,9 +226,7 @@ export function ToolDetail({
                     <Copy className="size-3.5" strokeWidth={1.75} />
                   </button>
                 </label>
-                <p className="mt-2.5 text-[12px] leading-[19px] text-faint">
-                  软件不启动该工具、不扫描路径，也不自动发现本机工具；实际调用方式以维护指南为准。
-                </p>
+
 
                 <h3 className="mt-4 mb-2 text-[14px] font-semibold">维护指南</h3>
                 {entry.has_guide ? (
@@ -274,7 +272,7 @@ export function ToolDetail({
                     </dl>
                   ) : (
                     <p className="text-[13px] leading-[21px] text-muted">
-                      未安装：没有 Agent 核实回写的安装记录。软件不会扫描本机、不会自动提示重装；
+                      未登记安装记录；
                       需要安装时请生成任务交给外部 Agent。
                     </p>
                   )}
@@ -342,9 +340,7 @@ export function ToolDetail({
         {entry && tab === "skills" && (
           <section className="rounded-xl border border-line bg-panel p-4">
             <h3 className="mb-2.5 text-[14px] font-semibold">配套 Skill</h3>
-            <p className="mb-3 text-[12px] leading-[19px] text-faint">
-              Skill 在技能库统一维护与部署；入库不自动部署，工具版本与 Skill 来源版本分别管理。
-            </p>
+
             {entry.skills.length === 0 ? (
               <p className="text-[13px] text-muted">未登记配套 Skill 关联。</p>
             ) : (

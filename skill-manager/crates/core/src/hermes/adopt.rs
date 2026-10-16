@@ -55,7 +55,7 @@ impl<'a> HermesService<'a> {
         }
         let vault_root = self
             .vault_root()
-            .ok_or_else(|| CoreError::other("尚未接入 SkillVault：收编需要写入龙虾库"))?
+            .ok_or_else(|| CoreError::other("尚未接入 SkillManagerVault：收编需要写入龙虾库"))?
             .to_path_buf();
 
         let mut items = Vec::new();
@@ -113,7 +113,6 @@ impl<'a> HermesService<'a> {
         let report = service.deploy_to(
             std::slice::from_ref(&reference),
             std::slice::from_ref(&Target::HermesDefault),
-            false,
         )?;
         if !report.failures.is_empty() {
             let reason = report

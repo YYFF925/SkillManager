@@ -15,7 +15,7 @@ pub enum CoreError {
     #[error("不是 Git 仓库：{0}")]
     NotAGitRepo(PathBuf),
 
-    #[error("SkillVault 未配置远端：{0}")]
+    #[error("SkillManagerVault 未配置远端：{0}")]
     NoRemote(PathBuf),
 
     #[error("技能名不合法（{name}）：{reason}")]

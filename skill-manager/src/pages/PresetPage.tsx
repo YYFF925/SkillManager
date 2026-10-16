@@ -17,6 +17,7 @@ import {
   Plus,
   Rocket,
   Search,
+  Share2,
   Square,
   Trash2,
 } from "lucide-react";
@@ -44,7 +45,14 @@ import {
 import { PRESET_ICON_OPTIONS, presetIconOption } from "../lib/presetIcons";
 import { reorderVisible } from "../lib/presetOrder";
 import { unsupportedDeployReason } from "../lib/support";
+import {
+  normalizeTarget,
+  SHARED_TARGET,
+  targetOptions,
+  type TargetOption,
+} from "../lib/targets";
 import { DeployDialog } from "../components/DeployDialog";
+import { AgentIcon, QuickDeploy } from "../components/QuickDeploy";
 import { PresetDeployDialog } from "../components/PresetDeployDialog";
 import { SkillDetail } from "../components/SkillDetail";
 import { TagChip } from "../components/TagChip";
@@ -58,6 +66,53 @@ type MemberFilter = "all" | "in" | "out";
 
 function lower(value: string): string {
   return value.toLowerCase();
+}
+
+/** 预设总览的本机目标：编码库额外显示共享目录。 */
+function presetTargets(domain: Domain, agents: AgentView[]): TargetOption[] {
+  const targets = targetOptions(domain, agents);
+  if (domain !== "code") {
+    return targets;
+  }
+  return [
+    { value: SHARED_TARGET, label: "共享 Agent", icon: null, invertInDark: false },
+    ...targets,
+  ];
+}
+
+/** 预设成员开关：开=已加入，关=未加入；只修改组合定义。 */
+function MemberToggle({
+  enabled,
+  disabled,
+  onToggle,
+}: {
+  enabled: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={enabled ? "移出该预设" : "加入该预设"}
+      title={enabled ? "移出该预设" : "加入该预设"}
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      className={`relative h-[18px] w-[34px] shrink-0 rounded-full border transition-colors disabled:cursor-default disabled:opacity-40 ${
+        enabled ? "border-accent-strong bg-accent-strong" : "border-line bg-subtle"
+      }`}
+    >
+      <span
+        className={`absolute top-[1px] size-[14px] rounded-full bg-white shadow transition-all ${
+          enabled ? "left-[17px]" : "left-[1px]"
+        }`}
+      />
+    </button>
+  );
 }
 
 /** 图标选择网格（新建与重命名共用；仅改图标也可保存）。 */
@@ -102,6 +157,10 @@ export interface PresetPageProps {
   os: EnvironmentOs | null;
   agents: AgentView[];
   reloadToken: number;
+  /** 上报当前管理域预设数量，用于页头计数。 */
+  onCount: (count: number) => void;
+  /** 上报当前管理域标题。 */
+  onTitle: (title: string) => void;
   /** 保存库内修改后的统一流程（刷新已有部署并按已确认策略上传）。 */
   onLibrarySaved?: () => Promise<void>;
   /** 从其他页面指定初始管理域（默认编码库）。 */
@@ -112,6 +171,8 @@ export function PresetPage({
   os,
   agents,
   reloadToken,
+  onCount,
+  onTitle,
   onLibrarySaved,
   initialDomain,
 }: PresetPageProps) {
@@ -145,6 +206,23 @@ export function PresetPage({
     () => presets.find((item) => item.id === selectedId) ?? null,
     [presets, selectedId],
   );
+  const visiblePresets = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return presets.filter((item) => q === "" || item.name.toLowerCase().includes(q));
+  }, [presets, query]);
+
+  useEffect(() => {
+    onTitle(preset?.name ?? (domain === "code" ? "编码预设" : "龙虾预设"));
+    onCount(preset?.members.length ?? visiblePresets.length);
+  }, [
+    domain,
+    onCount,
+    onTitle,
+    preset?.id,
+    preset?.members.length,
+    preset?.name,
+    visiblePresets.length,
+  ]);
 
   // 搜索去抖：core 每次查询都会重扫库文件。
   useEffect(() => {
@@ -157,7 +235,7 @@ export function PresetPage({
       const list = await listPresets(domain);
       setPresets(list);
       setSelectedId((current) =>
-        current && list.some((item) => item.id === current) ? current : (list[0]?.id ?? null),
+        current && list.some((item) => item.id === current) ? current : null,
       );
       setError(null);
     } catch (err) {
@@ -173,7 +251,7 @@ export function PresetPage({
   useEffect(() => {
     void deployStatus()
       .then(setRecords)
-      .catch(() => setRecords([]));
+      .catch((err) => setError(String(err)));
   }, [version, reloadToken]);
 
   useEffect(() => {
@@ -390,6 +468,9 @@ export function PresetPage({
       await deletePreset(domain, target.id);
       setNotice(`已删除预设「${target.name}」（实际部署未改变）。`);
       setError(null);
+      if (selectedId === target.id) {
+        setSelectedId(null);
+      }
       setVersion((value) => value + 1);
     } catch (err) {
       setError(String(err));
@@ -405,6 +486,7 @@ export function PresetPage({
   return (
     <div className="flex items-start gap-5">
       {/* 左侧预设列表 */}
+      {preset && (
       <aside className="w-[240px] shrink-0">
         <div className="mb-2 flex items-center justify-between px-1">
           <Segmented
@@ -492,6 +574,7 @@ export function PresetPage({
           新建预设
         </button>
       </aside>
+      )}
 
       {/* 右侧成员浏览 */}
       <div className="min-w-0 flex-1">
@@ -507,8 +590,147 @@ export function PresetPage({
         )}
 
         {!preset ? (
-          <div className="rounded-xl border border-line-soft bg-panel p-6 text-[13px] text-muted">
-            选择或新建一个预设以浏览成员。
+          <div>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <label className="flex h-10 w-[280px] items-center gap-2.5 rounded-lg border border-line bg-panel px-3 text-faint">
+                  <Search className="size-4 shrink-0" strokeWidth={1.75} />
+                  <input
+                    value={query}
+                    placeholder="搜索预设名称…"
+                    onChange={(event) => setQuery(event.target.value)}
+                    className="w-full border-0 bg-transparent text-[13px] text-ink-3 outline-0 placeholder:text-faint"
+                  />
+                </label>
+                <Segmented
+                  options={[
+                    { value: "code", label: "编码" },
+                    { value: "lobster", label: "龙虾" },
+                  ]}
+                  value={domain}
+                  onChange={(value) => setDomain(value as Domain)}
+                />
+              </div>
+              <Button kind="primary" onClick={() => setCreateOpen(true)}>
+                <Plus className="size-4" strokeWidth={1.75} />
+                新建预设
+              </Button>
+            </div>
+
+            {visiblePresets.length === 0 ? (
+              <div className="rounded-xl border border-line-soft bg-panel p-6 text-[13px] text-muted">
+                {presets.length === 0
+                  ? "该管理域还没有预设；新建后可组合成员并叠加部署。"
+                  : "没有符合搜索条件的预设。"}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {visiblePresets.map((item) => {
+                  const option = presetIconOption(item.icon);
+                  const Icon = option.icon;
+                  const targets = presetTargets(domain, agents);
+                  return (
+                    <article
+                      key={item.id}
+                      className="overflow-hidden rounded-xl border border-line bg-panel shadow-card"
+                    >
+                      <div className="p-5">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="grid size-[38px] shrink-0 place-items-center rounded-[10px] border"
+                            style={{
+                              borderColor: `${option.color}33`,
+                              backgroundColor: `${option.color}18`,
+                              color: option.color,
+                            }}
+                          >
+                            <Icon className="size-[18px]" strokeWidth={1.75} />
+                          </span>
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedId(item.id)}
+                              className="max-w-full truncate text-left text-[16px] font-semibold hover:text-accent"
+                            >
+                              {item.name}
+                            </button>
+                            <div className="mt-1 text-[12px] text-faint">
+                              {item.members.length} 个技能 · {domain === "code" ? "编码" : "龙虾"}组合
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-1.5">
+                          {item.members.slice(0, 6).map((member) => (
+                            <button
+                              key={member.name}
+                              type="button"
+                              onClick={() => setSelectedId(item.id)}
+                              className={`rounded-md border border-line-soft bg-subtle px-2 py-1 text-[11px] ${
+                                member.missing ? "text-warn" : "text-muted"
+                              }`}
+                            >
+                              {member.name}
+                            </button>
+                          ))}
+                          {item.members.length > 6 && (
+                            <span className="px-1 py-1 text-[11px] text-faint">
+                              +{item.members.length - 6}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px] text-faint">
+                          <span>本机：</span>
+                          {targets.map((target) => {
+                            const deployed = item.members.filter((member) =>
+                              records.some(
+                                (record) =>
+                                  record.skill === `${domain}/${member.name}` &&
+                                  normalizeTarget(record.target) === target.value,
+                              ),
+                            ).length;
+                            return (
+                              <button
+                                key={target.value}
+                                type="button"
+                                onClick={() => setSelectedId(item.id)}
+                                className="flex items-center gap-1.5 rounded-md border border-line-soft bg-panel px-2 py-1 text-[11px] text-muted hover:bg-hover"
+                              >
+                                {target.value === SHARED_TARGET ? (
+                                  <Share2 className="size-3.5" strokeWidth={1.75} />
+                                ) : (
+                                  <AgentIcon option={target} />
+                                )}
+                                {target.label} {deployed}/{item.members.length}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-line-faint px-5 py-3">
+                        <span className="text-[11px] text-faint">组合已随库保存</span>
+                        <div className="flex gap-2.5">
+                          <Button compact onClick={() => setSelectedId(item.id)}>
+                            查看成员
+                          </Button>
+                          <Button
+                            compact
+                            kind="primary"
+                            onClick={() => {
+                              setSelectedId(item.id);
+                              setDeployOpen(true);
+                            }}
+                          >
+                            部署预设
+                          </Button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -536,7 +758,7 @@ export function PresetPage({
               <div className="flex items-center gap-2.5">
                 <Button compact onClick={() => setDeployOpen(true)}>
                   <Rocket className="size-3.5" strokeWidth={1.75} />
-                  组合部署 / 撤销…
+                  组合部署…
                 </Button>
               </div>
             </div>
@@ -659,8 +881,8 @@ export function PresetPage({
               </div>
             )}
 
-            <div className="flex items-start gap-5">
-              <aside className="w-[152px] shrink-0">
+            <div className="flex items-start gap-4">
+              <aside className="w-[132px] shrink-0">
                 <button
                   type="button"
                   onClick={() => setCategory(null)}
@@ -780,19 +1002,10 @@ export function PresetPage({
                             </span>
                           )}
                         </h3>
-                        <button
-                          type="button"
-                          title={isMember ? "移出该预设" : "加入该预设"}
-                          aria-label={isMember ? "移出该预设" : "加入该预设"}
-                          onClick={() => void toggleMember(skill)}
-                          className={`shrink-0 rounded-full border px-2 text-[11px] leading-[18px] transition-colors ${
-                            isMember
-                              ? "border-accent-line bg-accent-soft text-accent"
-                              : "border-line text-muted hover:bg-hover"
-                          }`}
-                        >
-                          {isMember ? "已加入" : "加入"}
-                        </button>
+                        <MemberToggle
+                          enabled={isMember}
+                          onToggle={() => void toggleMember(skill)}
+                        />
                       </div>
 
                       <div
@@ -813,6 +1026,10 @@ export function PresetPage({
                             </Badge>
                           )}
                         </div>
+                      </div>
+                      <div className="mt-auto flex items-center border-t border-line-faint px-3.5 py-2">
+                        <QuickDeploy reference={reference} domain={domain} agents={agents} records={records}
+                          onChange={async () => setRecords(await deployStatus())} onError={setError} />
                       </div>
                     </article>
                   );
@@ -849,12 +1066,15 @@ export function PresetPage({
         <CreatePresetDialog
           domain={domain}
           onCancel={() => setCreateOpen(false)}
-          onConfirm={async (name, icon) => {
+          onConfirm={async (name, icon, targetDomain) => {
             try {
-              const created = await createPreset(domain, name, icon);
+              const created = await createPreset(targetDomain, name, icon);
               setNotice(`已新建预设「${created.name}」（id ${created.id}；尚未部署）。`);
               setError(null);
               setCreateOpen(false);
+              if (targetDomain !== domain) {
+                setDomain(targetDomain);
+              }
               setSelectedId(created.id);
               setVersion((value) => value + 1);
             } catch (err) {
@@ -903,7 +1123,7 @@ export function PresetPage({
             })),
             os,
           )}
-          onClose={() => setDeployOpen(false)}
+          onClose={() => { setDeployOpen(false); setVersion((value) => value + 1); }}
           onDone={(message) => {
             setNotice(message);
             setError(null);
@@ -940,6 +1160,7 @@ export function PresetPage({
           onSyncDeployments={() => {
             void (onLibrarySaved ? onLibrarySaved() : Promise.resolve());
           }}
+          onDeploymentsChanged={async () => setRecords(await deployStatus())}
         />
       )}
 
@@ -948,9 +1169,7 @@ export function PresetPage({
           domain={domain}
           references={skillDeploy}
           agents={agents}
-          sharedDir={null}
-          onSharedDirChange={async () => {}}
-          onClose={() => setSkillDeploy(null)}
+          onClose={() => { setSkillDeploy(null); setVersion((value) => value + 1); }}
           onDone={(message) => {
             setNotice(message);
             setError(null);
@@ -970,14 +1189,15 @@ function CreatePresetDialog({
 }: {
   domain: Domain;
   onCancel: () => void;
-  onConfirm: (name: string, icon: string) => void | Promise<void>;
+  onConfirm: (name: string, icon: string, domain: Domain) => void | Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [icon, setIcon] = useState(PRESET_ICON_OPTIONS[0].key);
+  const [targetDomain, setTargetDomain] = useState<Domain>(domain);
   return (
     <Dialog
       title="新建预设"
-      subtitle={`管理域：${domain === "code" ? "编码库" : "龙虾库"}；新建只保存组合定义，不部署。`}
+      subtitle="创建后进入对应技能库，用卡片开关选择组合成员。"
       onClose={onCancel}
       footer={
         <>
@@ -987,7 +1207,7 @@ function CreatePresetDialog({
             <Button
               kind="primary"
               disabled={name.trim() === ""}
-              onClick={() => void onConfirm(name.trim(), icon)}
+              onClick={() => void onConfirm(name.trim(), icon, targetDomain)}
             >
               创建
             </Button>
@@ -996,18 +1216,28 @@ function CreatePresetDialog({
       }
     >
       <div className="flex flex-col gap-4">
-        <div>
-          <label className="mb-2 block text-[12px] text-faint">预设名称</label>
-          <input
-            autoFocus
-            className="field-input"
-            value={name}
-            placeholder="例如：Rust 依赖检查"
-            onChange={(event) => setName(event.target.value)}
-          />
-          <p className="mt-1.5 text-[12px] text-faint">
-            标识 id 由名称派生并在域内去重，供 CLI 的 `preset` 命令使用。
-          </p>
+        <div className="grid grid-cols-[1fr_230px] gap-4">
+          <div>
+            <label className="mb-2 block text-[12px] text-faint">预设名称</label>
+            <input
+              autoFocus
+              className="field-input"
+              value={name}
+              placeholder="例如：Rust 依赖检查"
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-[12px] text-faint">管理域</label>
+            <select
+              className="field-input"
+              value={targetDomain}
+              onChange={(event) => setTargetDomain(event.target.value as Domain)}
+            >
+              <option value="code">编码技能库</option>
+              <option value="lobster">龙虾技能库</option>
+            </select>
+          </div>
         </div>
         <div>
           <label className="mb-2 block text-[12px] text-faint">图标</label>
@@ -1034,11 +1264,9 @@ function EditPresetDialog({
   return (
     <Dialog
       title="重命名 / 图标"
-      subtitle="只修改组合定义；不改变成员集合或实际部署。"
       onClose={onCancel}
       footer={
         <>
-          <span className="text-[12px] text-faint">仅修改图标也可以保存。</span>
           <div className="flex gap-2.5">
             <Button onClick={onCancel}>取消</Button>
             <Button

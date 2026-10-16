@@ -1,7 +1,7 @@
 //! 上游获取与更新（US2/US4，T032～T046）。
 //!
 //! 设计结论见 `specs/002-skill-management/research.md` D19～D21 与 `data-model.md` §1.3/1.6。
-//! 本模块只承载“对技能上游仓库 B”的获取、发现、检查与显式采用；SkillVault 跨机同步是另一条链路。
+//! 本模块只承载“对技能上游仓库 B”的获取、发现、检查与显式采用；SkillManagerVault 跨机同步是另一条链路。
 
 pub mod apply;
 pub mod changes;

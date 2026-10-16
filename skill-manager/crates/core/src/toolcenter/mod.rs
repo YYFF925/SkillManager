@@ -1,6 +1,6 @@
 //! 工具中心（US9）：共享工具资料、本机安装事实与检查、维护任务与配套 Skill 候选。
 //!
-//! 共享资料是 `tools/<tool-slug>/tool.yaml` + `guide.md`（随 SkillVault 同步）；本机安装
+//! 共享资料是 `tools/<tool-slug>/tool.yaml` + `guide.md`（随 SkillManagerVault 同步）；本机安装
 //! 事实与检查结果只在 SQLite（`state::tool_installs` / `state::tool_checks`）。软件只做版本
 //! 检查；实际安装、更新与资料编写交给外部 Agent（FR-046/047）。
 

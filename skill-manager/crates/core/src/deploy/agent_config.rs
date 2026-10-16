@@ -1,7 +1,7 @@
 //! 本机 Agent 配置（T067）：检测、启停、排序、技能目录、项目相对路径与指令目标。
 //!
 //! 检测只读本机目录存在事实（`AgentEntry::detected`），不启动 Agent、不部署技能；
-//! 启停、顺序与各类目录只写本机状态（SQLite `agents`），不进入 SkillVault。
+//! 启停、顺序与各类目录只写本机状态（SQLite `agents`），不进入 SkillManagerVault。
 //! 全量 53 项内置名单保留，界面据此区分“已检测/其他支持项”。
 
 use std::path::{Path, PathBuf};

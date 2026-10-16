@@ -33,26 +33,23 @@ import {
  */
 type ViewKey = string;
 
-/** 静态页面的标题与副标题；未实现的页面注明后续里程碑。 */
-const VIEWS: Record<string, { title: string; subtitle?: string; pending?: string }> = {
-  "library-code": { title: "技能库", subtitle: "SkillVault · 一份管理库，保留原始技能名" },
+/** 静态页面标题。 */
+const VIEWS: Record<string, { title: string; pending?: string }> = {
+  "library-code": { title: "技能库" },
   "library-lobster": {
     title: "龙虾技能库",
-    subtitle: "SkillVault · 一份管理库，保留原始技能名",
   },
-  hermes: { title: "Hermes 档案", subtitle: "档案共用库内一份技能内容" },
-  tools: { title: "工具中心", subtitle: "本机工具清单 · 版本检查由 Skill Manager 负责，安装与更新交给外部 Agent" },
-  "presets-code": { title: "预设", subtitle: "按组合叠加部署与按成员撤销；定义编辑不触发部署" },
+  hermes: { title: "Hermes 档案" },
+  tools: { title: "工具中心" },
+  "presets-code": { title: "预设" },
   "agents-code": {
     title: "全部编码 Agents",
-    subtitle: "本机部署清单 · 同一个技能可部署到多个目标",
   },
   "agents-lobster": {
     title: "全部龙虾 Agent",
-    subtitle: "本机部署清单 · 同一个技能可部署到多个目标",
   },
-  "agent:shared": { title: "共享 Agent", subtitle: "本机共享技能目录 · 编码 Agent 的部署目标" },
-  settings: { title: "设置", subtitle: "本机配置与 SkillVault 接入" },
+  "agent:shared": { title: "共享 Agent" },
+  settings: { title: "设置" },
 };
 
 const settingsItem: NavItem = { key: "settings", label: "设置", icon: Settings };
@@ -60,7 +57,7 @@ const settingsItem: NavItem = { key: "settings", label: "设置", icon: Settings
 /** 共享目录是编码 Agent 的部署目标，入口与单个 Agent 同级并始终显示（未设置路径也不隐藏）。 */
 const SHARED_VIEW_KEY = "agent:shared";
 
-/** 首次接入：只选择已存在的本地 SkillVault，不提供克隆或创建向导（FR-002）。 */
+/** 首次接入：只选择已存在的本地 SkillManagerVault，不提供克隆或创建向导（FR-002）。 */
 function VaultWelcome({
   error,
   busy,
@@ -77,7 +74,7 @@ function VaultWelcome({
           <img src="/assets/app-logo.png" alt="" className="size-7" />
           <span className="text-[17px] font-semibold">Skill Manager</span>
         </div>
-        <h1 className="text-[15px] font-semibold">接入你的 SkillVault</h1>
+        <h1 className="text-[15px] font-semibold">接入你的 SkillManagerVault</h1>
         <p className="mt-2 text-[13px] leading-[21px] text-muted">
           选择一个已存在的本地技能库目录；它需要是 Git 仓库并已配置远端。
           编码技能库（code/）与龙虾技能库（lobster/）在同一个库内分别管理，
@@ -126,6 +123,8 @@ export function App() {
   const [activeKey, setActiveKey] = useState<ViewKey>("library-code");
   const [reloadToken, setReloadToken] = useState(0);
   const [count, setCount] = useState<number | null>(null);
+  const [subtitle, setSubtitle] = useState<string | null>(null);
+  const [titleOverride, setTitleOverride] = useState<string | null>(null);
   /** 从 Hermes 详情“前往技能库编辑”时，技能库要直接打开的技能引用。 */
   const [libraryFocus, setLibraryFocus] = useState<string | null>(null);
   /** 指令编辑器是否打开。 */
@@ -141,6 +140,13 @@ export function App() {
     onNotice: setNotice,
     onError: setError,
   });
+  const setAgentMeta = useCallback(
+    (meta: { count: number; subtitle: string }) => {
+      setCount(meta.count);
+      setSubtitle(meta.subtitle);
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -218,7 +224,7 @@ export function App() {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "选择已有的 SkillVault 目录",
+        title: "选择已有的 SkillManagerVault 目录",
       });
       if (typeof selected !== "string") {
         return;
@@ -276,7 +282,7 @@ export function App() {
   if (loading) {
     return (
       <div className="grid h-full place-items-center bg-app text-[13px] text-muted">
-        正在接入 SkillVault…
+        正在接入 SkillManagerVault…
       </div>
     );
   }
@@ -294,8 +300,9 @@ export function App() {
     activeKey === "agents-lobster" || selectedAgent?.domain === "lobster" ? "lobster" : "code";
 
   const view = selectedAgent
-    ? { title: selectedAgent.display_name, subtitle: `本机 Agent · ${selectedAgent.skills_dir}` }
+    ? { title: selectedAgent.display_name }
     : (VIEWS[activeKey] ?? { title: activeKey, pending: "后续里程碑" });
+  const pageTitle = titleOverride ?? view.title;
 
   return (
     <>
@@ -306,11 +313,13 @@ export function App() {
       onSelect={(key) => {
         setActiveKey(key);
         setCount(null);
+        setSubtitle(null);
+        setTitleOverride(null);
         setNotice(null);
       }}
-      title={view.title}
-      subtitle={view.subtitle}
-      count={isLibrary || activeKey === "tools" ? (count ?? undefined) : undefined}
+      title={pageTitle}
+      subtitle={subtitle ?? undefined}
+      count={count ?? undefined}
       headerExtra={
         <>
           {notice && <span className="text-[12px] text-muted">{notice}</span>}
@@ -325,7 +334,7 @@ export function App() {
           </button>
         </>
       }
-      vaultStatus={{ label: "SkillVault", detail: vault.root, ok: true }}
+      vaultStatus={{ label: "SkillManagerVault", detail: vault.root, ok: true }}
     >
       {isLibrary ? (
         <LibraryPage
@@ -340,13 +349,17 @@ export function App() {
         />
       ) : activeKey === "hermes" ? (
         <HermesPage
+          agents={agents}
           os={os}
           reloadToken={reloadToken}
+          onCount={setCount}
           onLibrarySaved={saveFlow.afterSave}
           onOpenInLibrary={(reference) => {
             setLibraryFocus(reference);
             setActiveKey("library-lobster");
             setCount(null);
+            setSubtitle(null);
+            setTitleOverride(null);
             setNotice(null);
           }}
         />
@@ -361,6 +374,8 @@ export function App() {
           os={os}
           agents={agents}
           reloadToken={reloadToken}
+          onCount={setCount}
+          onTitle={setTitleOverride}
           onLibrarySaved={saveFlow.afterSave}
         />
       ) : isAgentView ? (
@@ -368,18 +383,13 @@ export function App() {
           domain={agentDomain}
           selectedTarget={selectedTarget}
           agents={agents}
-          onSelectTarget={(target) =>
-            setActiveKey(
-              target
-                ? `agent:${target}`
-                : agentDomain === "lobster"
-                  ? "agents-lobster"
-                  : "agents-code",
-            )
-          }
-          onOpenSettings={() => {
-            setActiveKey("settings");
+          onMeta={setAgentMeta}
+          onOpenInLibrary={(reference) => {
+            setLibraryFocus(reference);
+            setActiveKey(reference.startsWith("lobster/") ? "library-lobster" : "library-code");
             setCount(null);
+            setSubtitle(null);
+            setTitleOverride(null);
             setNotice(null);
           }}
           onLibrarySaved={saveFlow.afterSave}
@@ -400,6 +410,8 @@ export function App() {
           onOpenTarget={(target) => {
             setActiveKey(`agent:${target}`);
             setCount(null);
+            setSubtitle(null);
+            setTitleOverride(null);
             setNotice(null);
           }}
           reloadToken={reloadToken}

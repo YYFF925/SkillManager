@@ -8,7 +8,7 @@
 
 | 能力 | 旧实现线索 | 对新项目的参考与差距 |
 |---|---|---|
-| 库状态与接入路径 | `bin/skills-manager-cli.rs:161` 的 Repo 分组 | 可查库位置与数量；旧双库根覆盖、独立备份仓库不符合单一 SkillVault 模型 |
+| 库状态与接入路径 | `bin/skills-manager-cli.rs:161` 的 Repo 分组 | 可查库位置与数量；旧双库根覆盖、独立备份仓库不符合单一 SkillManagerVault 模型 |
 | Agent 列表、启用与路径 | 同文件 `:177` 的 Tools 分组；`commands/tools.rs` | 旧 CLI 部分覆盖；重新检测、目录配置等核心操作不能要求 Agent 回 GUI 补做 |
 | 技能列表、详情与筛选 | 同文件 `:211`、`show_skill:1884` | 可参考技能来源、预设归属、部署状态及文件清单；需要补中文资料、OS 与分类等新语义 |
 | 从仓库选择入库与收编 | Install/Adopt 分支；`commands/skills.rs`、`agent_workspace.rs` | 旧有基础；需补候选选择、分类询问及收编资料，移除静默改名与自动后缀 |
@@ -18,12 +18,12 @@
 | 管理资料、分类与标签治理 | 标签、中文资料、支持声明与移动分支 | 旧没有 OS 声明；旧 vault 来源只读门、中文名/简介与注释回写库内正文均不继承 |
 | 预设创建、图标、成员与排序 | Preset 分组；`commands/presets.rs:563/593/628` | 旧 CLI 缺排序；新需求要组织与部署分开、按成员叠加部署和撤销，无唯一当前槽 |
 | Hermes 档案技能查看、启停与收编 | `commands/hermes_profile.rs`（旧仅 GUI） | **新项目属于核心 CLI 覆盖范围**；旧无命令不是保留 GUI-only 的依据 |
-| SkillVault 拉取及授权上传 | 旧 Git 分组、`commands/git_backup.rs` | 单独的本地提交、拉取、推送可作技术线索；主动同步不能顺带上传未获同意的 Agent 改动 |
-| Agent 指令读写与分发 | Instructions 分组；`agent_instructions.rs` | 拼接/分发可参考；源文件须在 SkillVault，各机分发目标本地保存 |
+| SkillManagerVault 拉取及授权上传 | 旧 Git 分组、`commands/git_backup.rs` | 单独的本地提交、拉取、推送可作技术线索；主动同步不能顺带上传未获同意的 Agent 改动 |
+| Agent 指令读写与分发 | Instructions 分组；`agent_instructions.rs` | 拼接/分发可参考；源文件须在 SkillManagerVault，各机分发目标本地保存 |
 
 旧顶层实际有七组（Repo/Tools/Skills/Presets/Git/Vault/Instructions，源码 `:108-124`），
 README 少列 Instructions，说明旧说明文档也有漂移；七组组织本身不作为新命令契约。
-旧 Vault 分组指“外部来源库导入中央库”，与新 SkillVault 本身就是管理库根的含义不同，不沿用。
+旧 Vault 分组指“外部来源库导入中央库”，与新 SkillManagerVault 本身就是管理库根的含义不同，不沿用。
 
 ## 机器可读结果与退出状态
 
@@ -75,7 +75,7 @@ Agent 如何读取当前配置的库根是技术入口设计，不需要重做�
 旧仓库 `AGENTS.md` 记录过双域改造后示例漏传 domain 导致实际执行失败。
 这说明配套技能与命令实现需要随开发一起更新，不能只改程序。
 
-新项目已确认管理 Skill 是 SkillVault 中的普通技能，开发时维护入库。
+新项目已确认管理 Skill 是 SkillManagerVault 中的普通技能，开发时维护入库。
 不增加专用自动分发、升级、安装引导或专用冲突机制。
 
 ## 不继承与后续工作

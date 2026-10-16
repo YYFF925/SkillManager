@@ -1,6 +1,6 @@
 //! 上游新增候选决定与发现基线（T039/T046）。
 //!
-//! 共享文件 `upstream-decisions.yaml`（随 SkillVault 同步），按 `(repo, domain)` 记录：
+//! 共享文件 `upstream-decisions.yaml`（随 SkillManagerVault 同步），按 `(repo, domain)` 记录：
 //! - `rejected_subpaths`：用户明确“不入库并记住”的来源子路径（互不影响的跨域选择）；
 //! - `seen_subpaths`：**发现基线**——该 `(repo, domain)` 首次被观察时已存在的候选子路径集合。
 //!
@@ -17,7 +17,7 @@ use crate::domain::Domain;
 use crate::error::{CoreError, Result};
 use crate::manager::SourceRecord;
 
-/// 决定文件名（位于 SkillVault 根）。
+/// 决定文件名（位于 SkillManagerVault 根）。
 pub const DECISIONS_FILE: &str = "upstream-decisions.yaml";
 
 /// 一条 `(repo, domain)` 的决定记录。

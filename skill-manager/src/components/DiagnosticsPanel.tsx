@@ -93,7 +93,7 @@ export function DiagnosticsPanel({ reloadToken }: DiagnosticsPanelProps) {
         <span className="text-ink-3">
           {report.os} / {report.arch}
         </span>
-        <span className="text-faint">SkillVault</span>
+        <span className="text-faint">SkillManagerVault</span>
         <span className="break-all font-mono text-[11px] text-ink-3">
           {report.vault ?? "（尚未接入）"}
         </span>

@@ -83,7 +83,7 @@ impl AppState {
         }
     }
 
-    /// 取得上下文；首次调用时打开本机状态目录并尝试接入记住的 SkillVault。
+    /// 取得上下文；首次调用时打开本机状态目录并尝试接入记住的 SkillManagerVault。
     pub fn get(&self) -> Result<MutexGuard<'_, AppContext>, String> {
         let cell = self.ctx.get_or_init(|| {
             let mut ctx = AppContext::open(None).map_err(|err| err.to_string())?;
@@ -106,7 +106,7 @@ impl AppState {
             let ctx = self.get()?;
             let vault = ctx
                 .vault_opt()
-                .ok_or_else(|| "尚未接入 SkillVault".to_string())?;
+                .ok_or_else(|| "尚未接入 SkillManagerVault".to_string())?;
             vault.root().to_path_buf()
         };
 

@@ -1,11 +1,11 @@
-//! `settings` 子命令：本机运行配置的读取、两个写入口与两条只读报告。
+//! `settings` 子命令：本机运行配置的读取、检查频率写入与两条只读报告。
 //!
 //! 参数与边界遵循 `specs/002-skill-management/contracts/cli.md` 的 `settings` 命令组与
-//! spec.md FR-050「本机运行侧」/FR-052/FR-053：**只暴露两个写入口**（共享目录、
-//! 自动检查频率），主题/字号与上传长期授权没有写入口；诊断与容量复用 core 既有能力。
-//! 只读写本机状态，不改 SkillVault 内容、不触发上传。
+//! spec.md FR-050「本机运行侧」/FR-052/FR-053：只暴露自动检查频率写入，
+//! 共享目录自动定位；主题/字号与上传长期授权没有写入口，诊断与容量复用 core。
+//! 只读写本机状态，不改 SkillManagerVault 内容、不触发上传。
 
-use clap::{ArgGroup, Args, Subcommand};
+use clap::{Args, Subcommand};
 use serde_json::{Value, json};
 use skill_manager_core::diagnostics;
 use skill_manager_core::vault::capacity;
@@ -21,9 +21,6 @@ pub struct SettingsCommand {
 pub enum SettingsAction {
     /// 只读：运行配置与调度事实的当前生效值。
     Get(GetArgs),
-    /// 设置或清除共享部署目录（`shared` 目标的前置）。
-    #[command(name = "set-shared-dir")]
-    SetSharedDir(SetSharedDirArgs),
     /// 设置统一的自动检查频率（FR-029 三项共用）。
     #[command(name = "set-auto-check")]
     SetAutoCheck(SetAutoCheckArgs),
@@ -38,17 +35,6 @@ pub struct GetArgs {
     /// 只读取指定键（可重复）；省略时返回全部键的当前生效值。
     #[arg(value_name = "key")]
     pub keys: Vec<String>,
-}
-
-#[derive(Args, Debug)]
-#[command(group(ArgGroup::new("shared").required(true).args(["path", "clear"])))]
-pub struct SetSharedDirArgs {
-    /// 共享部署目录绝对路径。
-    #[arg(long, value_name = "path")]
-    pub path: Option<String>,
-    /// 清除共享目录设置。
-    #[arg(long)]
-    pub clear: bool,
 }
 
 #[derive(Args, Debug)]
@@ -94,7 +80,6 @@ pub fn run(
 fn dispatch(action: SettingsAction, ctx: &AppContext) -> Result<(CliResult, String)> {
     match action {
         SettingsAction::Get(args) => get(ctx, args),
-        SettingsAction::SetSharedDir(args) => set_shared_dir(ctx, args),
         SettingsAction::SetAutoCheck(args) => set_auto_check(ctx, args),
         SettingsAction::Diagnostics(args) => diagnostics_report(ctx, args),
         SettingsAction::Capacity => capacity_report(ctx),
@@ -112,7 +97,7 @@ fn effective_value(ctx: &AppContext, key: &str) -> Result<Value> {
         "theme" => json!(state.theme()?),
         "font_scale" => json!(state.font_scale()?),
         "auto_check_minutes" => json!(state.auto_check_minutes()?),
-        "shared_dir" => path_value(state.shared_dir()?),
+        "shared_dir" => json!(ctx.shared_dir()?.to_string_lossy()),
         "git_auto_push" => json!(state.git_auto_push()?),
         "vault_path" => path_value(state.vault_path()?),
         "last_sync_at" => text_value(state.last_sync_at()?),
@@ -164,22 +149,8 @@ fn human_value(value: &Value) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// set-shared-dir / set-auto-check
+// set-auto-check
 // ---------------------------------------------------------------------------
-
-fn set_shared_dir(ctx: &AppContext, args: SetSharedDirArgs) -> Result<(CliResult, String)> {
-    match &args.path {
-        Some(path) => ctx.state().set_shared_dir(path)?,
-        None => ctx.state().clear_shared_dir()?,
-    }
-    let current = ctx.state().shared_dir()?;
-    let data = json!({ "shared_dir": path_value(current.clone()) });
-    let human = match &current {
-        Some(path) => format!("已设置共享目录：{}", path.display()),
-        None => "已清除共享目录设置（shared 目标暂时不可用）".to_string(),
-    };
-    Ok((CliResult::success(data), human))
-}
 
 fn set_auto_check(ctx: &AppContext, args: SetAutoCheckArgs) -> Result<(CliResult, String)> {
     ctx.state().set_auto_check_minutes(args.minutes)?;
@@ -212,7 +183,7 @@ fn diagnostics_report(ctx: &AppContext, args: DiagnosticsArgs) -> Result<(CliRes
 
     let report = diagnostics::report(ctx, 100)?;
     let human = format!(
-        "诊断报告\n版本：{}；平台：{} / {}\nSkillVault：{}\n状态目录：{}\n运行日志：{}\n崩溃记录：{}\n自动检查频率：{} 分钟\n最近检查：{}\n最近同步：{}",
+        "诊断报告\n版本：{}；平台：{} / {}\nSkillManagerVault：{}\n状态目录：{}\n运行日志：{}\n崩溃记录：{}\n自动检查频率：{} 分钟\n最近检查：{}\n最近同步：{}",
         report.version,
         report.os,
         report.arch,

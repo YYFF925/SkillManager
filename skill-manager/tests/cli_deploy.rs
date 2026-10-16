@@ -248,30 +248,13 @@ fn multi_skill_multi_target_filters_each_pair_and_continues() {
 }
 
 #[test]
-fn dry_run_reports_paths_without_changing_files_or_records() {
+fn removed_preview_flag_is_rejected() {
     let env = TestEnv::new();
     seed(&env);
-    let before = env.cli_json(&["deploy", "status"]);
-
-    let (code, result) = env.cli_json_raw(&["deploy", "to", "codex", "code/alpha", "--dry-run"]);
-    assert_eq!(code, 0, "{result}");
-    assert_eq!(result["data"]["dry_run"], true);
-    let items = result["data"]["items"].as_array().unwrap();
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["action"], "would_deploy");
-    assert!(items[0]["path"].as_str().unwrap().ends_with(".codex/skills/alpha"));
-    assert!(!deployed(&env, ".codex/skills", "alpha").exists(), "预演不得落文件");
-
-    let after = env.cli_json(&["deploy", "status"]);
-    assert_eq!(before, after, "预演不得改本机记录");
-
-    // 撤销预演：先真实部署，再预演撤销。
-    let (code, _) = env.cli_json_raw(&["deploy", "to", "codex", "code/alpha"]);
-    assert_eq!(code, 0);
-    let (code, result) = env.cli_json_raw(&["deploy", "undo", "codex", "code/alpha", "--dry-run"]);
-    assert_eq!(code, 0, "{result}");
-    assert_eq!(result["data"]["dry_run"], true);
-    assert!(deployed(&env, ".codex/skills", "alpha").exists(), "预演不得删副本");
-    let status = env.cli_json(&["deploy", "status"]);
-    assert_eq!(status["deployments"].as_array().unwrap().len(), 1);
+    for args in [vec!["deploy", "to", "codex", "code/alpha", "--dry-run"], vec!["deploy", "undo", "codex", "code/alpha", "--dry-run"]] {
+        let output = env.cli(&args);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("--dry-run"));
+    }
+    assert!(env.cli_json(&["deploy", "status"])["deployments"].as_array().unwrap().is_empty());
 }

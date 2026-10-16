@@ -156,12 +156,11 @@ export function HermesSkillDetail({
       onClose={onClose}
       footer={
         <>
-          <span className="text-[12px] text-faint">
-            档案只读：修改请前往技能库编辑统一内容。
-          </span>
-          <Button kind="primary" onClick={() => onOpenInLibrary(reference)}>
-            前往技能库编辑
-          </Button>
+          <div className="ml-auto">
+            <Button kind="primary" onClick={() => onOpenInLibrary(reference)}>
+              前往技能库编辑
+            </Button>
+          </div>
         </>
       }
     >
@@ -203,7 +202,7 @@ export function HermesSkillDetail({
       {tab === "manager" && detail && (
         <div className="grid grid-cols-2 gap-3.5">
           <div className="col-span-2">
-            <Notice>档案只管理技能的使用状态；请到技能库编辑统一内容。</Notice>
+
           </div>
           <Field label="中文注释">
             <p className="text-[13px] text-ink-3">{detail.skill.comment ?? "无"}</p>

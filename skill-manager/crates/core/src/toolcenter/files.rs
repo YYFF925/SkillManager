@@ -4,7 +4,7 @@
 //! 概览长简介（可读、多段），两者不能互相代替。写入按原始键值合并，保留软件不认识的
 //! 字段与键顺序（与 `.manager/meta.yaml`、`presets/<domain>.yaml` 同一规则）。
 //!
-//! 资料随 SkillVault 同步（FR-044）；本机安装记录不在库内（见 `state::tool_installs`）。
+//! 资料随 SkillManagerVault 同步（FR-044）；本机安装记录不在库内（见 `state::tool_installs`）。
 
 use std::path::{Path, PathBuf};
 

@@ -1,6 +1,6 @@
 //! Agent 指令源与分发（T069，data-model §1.1/§2.3、FR-043）。
 //!
-//! 源内容保存在 SkillVault 的 `instructions/`（`global.md` + `<agent-key>.md`），随库同步；
+//! 源内容保存在 SkillManagerVault 的 `instructions/`（`global.md` + `<agent-key>.md`），随库同步；
 //! 分发目标为本机已启用且已检测的 Agent 的 `AGENTS.md`（可被 `agents.instructions_target`
 //! 覆盖），分发范围、启用名单与路径都是本机状态，不随库同步。
 //!
@@ -18,7 +18,7 @@ use crate::deploy::targets::AgentCatalog;
 use crate::error::{CoreError, Result};
 use crate::state::StateStore;
 
-/// 指令源目录（相对 SkillVault 根）。
+/// 指令源目录（相对 SkillManagerVault 根）。
 pub const INSTRUCTIONS_DIR: &str = "instructions";
 /// 全局指令源文件名。
 pub const GLOBAL_FILE: &str = "global.md";

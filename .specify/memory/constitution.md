@@ -1,14 +1,3 @@
-<!--
-Sync Impact Report
-Version change: 2.0.1 → 2.0.2
-Reason: the user standardized the project display name to Skill Manager; naming-only clarification.
-Modified principles: none.
-Added sections: none.
-Removed sections: none.
-Technology stack and governance remain unchanged.
-Follow-up TODOs: none.
-This report is amendment review material, not governance; remove before committing.
--->
 # Skill Manager Constitution
 
 ## Core Principles
@@ -22,9 +11,9 @@ This report is amendment review material, not governance; remove before committi
 自动化必须尊重用户指令，清楚表达执行范围和影响，不得通过隐藏行为削弱掌控感。
 这不意味着每个动作都增加审批；具体自动化与确认规则由业务规格明确。
 
-### II. SkillVault 是统一维护中心
+### II. SkillManagerVault 是统一维护中心
 
-技能内容和个人维护成果必须围绕用户自己的 SkillVault 统一管理，
+技能内容和个人维护成果必须围绕用户自己的 SkillManagerVault 统一管理，
 支持多电脑持续维护和使用，不得另建需要用户重复维护的中央技能内容。
 技能资产必须能够由用户与 Agent（代理）直接读取和维护。
 
@@ -47,7 +36,7 @@ This report is amendment review material, not governance; remove before committi
 更新过程必须让用户理解外部变化及其对当前成果的影响，
 不得不加说明地丢弃、覆盖或混淆个人维护成果。
 
-来源更新与自己的 SkillVault 同步必须有清楚的语义和结果边界。
+来源更新与自己的 SkillManagerVault 同步必须有清楚的语义和结果边界。
 这不要求所有本地字段永远优先；取舍、覆盖和确认规则必须由明确的业务规格表达，
 不能由实现隐式决定。
 
@@ -91,7 +80,7 @@ This report is amendment review material, not governance; remove before committi
 
 GUI 与 CLI 必须复用 Rust 核心业务能力；前端负责交互和展示，
 不能另行实现一套决定技能入库、更新与部署结果的业务逻辑。
-共享技能内容与个人管理资料仍以 SkillVault 中可直接维护的文件为资产来源，
+共享技能内容与个人管理资料仍以 SkillManagerVault 中可直接维护的文件为资产来源，
 SQLite 不能成为这些共享资产唯一且无法从库文件还原的存储。
 
 技术栈声明不锁定全部依赖的精确版本，也不要求照搬旧版数据库表、状态管理方式、
@@ -138,4 +127,4 @@ PATCH（修订版本）。修订时更新日期，保留首次通过日期。
 不能为形式合规扩大范围。原则本身不再适用时，必须明确提出修订。
 宪章更新流程只修改本文件；依赖文档在相应后续任务中读取和遵循宪章。
 
-**Version**: 2.0.2 | **Ratified**: 2026-10-14 | **Last Amended**: 2026-10-15
+**Version**: 2.0.3 | **Ratified**: 2026-10-14 | **Last Amended**: 2026-10-16

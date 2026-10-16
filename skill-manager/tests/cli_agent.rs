@@ -184,28 +184,59 @@ fn write_skill_at(dir: &std::path::Path, name: &str, body: &str) {
 }
 
 #[test]
-fn local_skills_and_delete_local_report_unset_shared_dir() {
+fn local_skills_shared_resolves_missing_directory_without_creating_it() {
     let env = TestEnv::new();
+    let data = env.cli_json(&["agent", "local-skills", "shared"]);
+    let shared = env.home.join(".agents/skills");
+    assert_eq!(data["skills_dir"], shared.to_string_lossy().as_ref());
+    assert_eq!(data["total"], 0);
+    assert!(!shared.exists());
+}
 
-    let (code, value) = env.cli_json_raw(&["agent", "local-skills", "shared"]);
-    assert_ne!(code, 0, "未设置共享目录必须非 0 退出：{value}");
-    let message = value["errors"][0]["message"].as_str().unwrap_or("");
-    assert!(message.contains("尚未设置共享目录路径"), "{value}");
+#[test]
+fn shared_local_skill_can_be_adopted_and_original_target_is_managed() {
+    let env = TestEnv::new();
+    env.agent_skill(".agents/skills", "localonly", "---\ndescription: local\n---\nlocal body\n");
+    let result = env.cli_json(&["skill", "adopt", "shared", "localonly", "--comment", "管理本地技能"]);
+    assert_eq!(result["adopted"], 1, "{result}");
+    assert!(env.path("code/localonly/SKILL.md").exists());
+    let local = env.cli_json(&["agent", "local-skills", "shared"]);
+    assert_eq!(local["skills"][0]["managed"], true);
+    assert_eq!(local["skills"][0]["library_skill"], "code/localonly");
+    let status = env.cli_json(&["deploy", "status"]);
+    assert_eq!(status["deployments"].as_array().unwrap().len(), 1);
+    assert_eq!(status["deployments"][0]["target"], "shared");
+    assert!(!env.home.join(".codex/skills/localonly").exists());
+}
 
-    let (code, value) = env.cli_json_raw(&["agent", "delete-local", "shared", "alpha"]);
-    assert_ne!(code, 0, "未设置共享目录必须非 0 退出：{value}");
-    let message = value["errors"][0]["message"].as_str().unwrap_or("");
-    assert!(message.contains("尚未设置共享目录路径"), "{value}");
+#[test]
+fn read_local_uses_actual_copy_supports_nested_files_and_rejects_outside_paths() {
+    let env = TestEnv::new();
+    env.write_skill("code", None, "alpha", "library body\n");
+    let local = env.agent_skill(".agents/skills", "alpha", "local body\n");
+    std::fs::create_dir_all(local.join("references")).unwrap();
+    std::fs::write(local.join("references/usage.md"), "local reference\n").unwrap();
+    std::fs::write(local.join("image.bin"), [0xff_u8]).unwrap();
+    std::fs::write(local.parent().unwrap().join("outside.txt"), "outside\n").unwrap();
+    let body = env.cli_json(&["agent", "read-local", "shared", "alpha"]);
+    assert_eq!(body["text"], "local body\n");
+    assert!(body["files"].as_array().unwrap().iter().any(|p| p == "references/usage.md"));
+    let file = env.cli_json(&["agent", "read-local", "shared", "alpha", "--file", "references/usage.md"]);
+    assert_eq!(file["text"], "local reference\n");
+    let binary = env.cli_json(&["agent", "read-local", "shared", "alpha", "--file", "image.bin"]);
+    assert!(binary["text"].is_null());
+    let (code, _) = env.cli_json_raw(&["agent", "read-local", "shared", "alpha", "--file", "../outside.txt"]);
+    assert_ne!(code, 0);
+    assert_eq!(env.read("code/alpha/SKILL.md").unwrap(), "library body\n");
 }
 
 #[test]
 fn local_skills_shared_lists_and_marks_managed() {
     let env = TestEnv::new();
     seed(&env);
-    let shared = env.root.path().join("shared-skills");
+    let shared = env.home.join(".agents/skills");
     std::fs::create_dir_all(&shared).unwrap();
     let shared_arg = shared.to_str().unwrap().to_string();
-    env.cli_json(&["settings", "set-shared-dir", "--path", &shared_arg]);
     env.cli_json(&["deploy", "to", "shared", "code/alpha"]);
     write_skill_at(&shared, "localonly", "仅本地\n");
 
@@ -225,10 +256,8 @@ fn local_skills_shared_lists_and_marks_managed() {
 fn delete_local_shared_removes_unmanaged_and_undoes_managed() {
     let env = TestEnv::new();
     seed(&env);
-    let shared = env.root.path().join("shared-skills");
+    let shared = env.home.join(".agents/skills");
     std::fs::create_dir_all(&shared).unwrap();
-    let shared_arg = shared.to_str().unwrap().to_string();
-    env.cli_json(&["settings", "set-shared-dir", "--path", &shared_arg]);
     env.cli_json(&["deploy", "to", "shared", "code/alpha"]);
     write_skill_at(&shared, "localonly", "仅本地\n");
 
@@ -252,9 +281,8 @@ fn local_skills_for_agent_key_is_unaffected_by_shared_support() {
     let env = TestEnv::new();
     seed(&env);
     env.agent_skill(".codex/skills", "localonly", "仅本地\n");
-    let shared = env.root.path().join("shared-skills");
+    let shared = env.home.join(".agents/skills");
     std::fs::create_dir_all(&shared).unwrap();
-    env.cli_json(&["settings", "set-shared-dir", "--path", shared.to_str().unwrap()]);
 
     // 设置共享目录不改变内置 Agent key 的浏览结果。
     let data = env.cli_json(&["agent", "local-skills", "codex"]);

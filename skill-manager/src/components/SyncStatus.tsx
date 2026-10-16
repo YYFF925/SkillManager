@@ -152,8 +152,7 @@ export function SyncStatus({ reloadToken = 0, failure = null, onRetryUpload }: S
 
       {status && !status.connected && (
         <Notice tone="warn">
-          远端不可用：本地库管理、部署与“同步已有部署”仍可继续；依赖远端的功能（拉取、上传）
-          不可用。不提供“断开远端”或“重新克隆修复”入口。
+          远端不可用，无法拉取和上传。
           {status.connection_error ? `原因：${status.connection_error}` : ""}
         </Notice>
       )}

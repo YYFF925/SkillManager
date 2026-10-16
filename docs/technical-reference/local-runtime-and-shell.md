@@ -75,7 +75,7 @@ pub fn is_installed(&self) -> bool {
 
 顺序合并逻辑 `merge_order`（`core/tool_service.rs:162-202`）：保存顺序优先、新优先级 Agent 插到其前驱之后、其余按 adapter 注册顺序追加；无保存时按 `DEFAULT_PRIORITY_ORDER`（`tool_service.rs:112-136`）。
 
-对应需求「目录、Agent 启用状态与显示顺序是本机配置，不随 SkillVault 同步」：旧实现正确地把它们放在本机 SQLite。旧 Git 备份仓库根是 `skills_dir()`（`core/git_backup.rs:282-290` 注释明确不把 `base_dir()` 提升为仓库根，以免提交 `skills-manager.db`），而 `skills_dir()=base_dir()/skills`、`lobster_skills_dir()=base_dir()/lobster-skills`（`central_repo.rs:299-330`）；DB 与 `settings` 不在其中。**这是可沿用的模型判断：本机配置落本机存储，不进库。**
+对应需求「目录、Agent 启用状态与显示顺序是本机配置，不随 SkillManagerVault 同步」：旧实现正确地把它们放在本机 SQLite。旧 Git 备份仓库根是 `skills_dir()`（`core/git_backup.rs:282-290` 注释明确不把 `base_dir()` 提升为仓库根，以免提交 `skills-manager.db`），而 `skills_dir()=base_dir()/skills`、`lobster_skills_dir()=base_dir()/lobster-skills`（`central_repo.rs:299-330`）；DB 与 `settings` 不在其中。**这是可沿用的模型判断：本机配置落本机存储，不进库。**
 
 ### 1.5 G03 修改技能目录后的旧部署协调（重点参考）
 
@@ -111,7 +111,7 @@ fn reconcile_tool_sync_after_path_change(store: &SkillStore, tool_key: &str) {
 
 `core/agent_instructions.rs` 顶部注释：源是纯文件，`<central_repo::base_dir()>/instructions/` 下 `global.md` + `<agent_key>.md`，**不进 SQLite**。`instructions_dir() = base_dir().join("instructions")`（`agent_instructions.rs:29-31`）。`save_sources` 写这两类文件，空内容也写空文件（`agent_instructions.rs:74-86`）。`read_source`（`agent_instructions.rs:42-52`）：文件不存在 → 空串；其它读取失败**也折叠为空串**并 warn（这是 `content-composition.md` 已标出的不能复用点）。
 
-**新需求差异（事实冲突）**：旧 `base_dir()` 不是 Git 跟踪根（Git 备份根是 `skills_dir()`，`git_backup.rs:282-290`），`instructions/` 与 `skills/` 是同级、在当前备份仓库之外，因此旧指令源**不随库同步**。新需求明确「指令文件的源内容也放进 SkillVault，跨电脑同步」。旧存储位置不满足，需重新设计；旧只提供「源即文件、非 DB」这一模型。
+**新需求差异（事实冲突）**：旧 `base_dir()` 不是 Git 跟踪根（Git 备份根是 `skills_dir()`，`git_backup.rs:282-290`），`instructions/` 与 `skills/` 是同级、在当前备份仓库之外，因此旧指令源**不随库同步**。新需求明确「指令文件的源内容也放进 SkillManagerVault，跨电脑同步」。旧存储位置不满足，需重新设计；旧只提供「源即文件、非 DB」这一模型。
 
 ### 2.2 拼接
 
@@ -224,7 +224,7 @@ fn reconcile_tool_sync_after_path_change(store: &SkillStore, tool_key: &str) {
 
 ## 6. 已确认边界与待设计细节
 
-指令源进 SkillVault、默认跟随系统、关窗收托盘、托盘重开/退出/检查更新均已确认，
+指令源进 SkillManagerVault、默认跟随系统、关窗收托盘、托盘重开/退出/检查更新均已确认，
 不因旧实现不同而重新询问。
 
 技能目录修改后的已有部署协调、有路径覆盖时如何表达“已检测”、托盘具体视觉设置仍需设计。
@@ -233,6 +233,6 @@ Agent 检测目录需按实施时实际安装核对；原型计数不是检测�
 
 ## 未涉及（供查漏）
 
-- SkillVault 同步 / Git 引擎、上游检查与更新应用（其他子代理负责）。
+- SkillManagerVault 同步 / Git 引擎、上游检查与更新应用（其他子代理负责）。
 - Hermes 档案、部署合成与覆盖层、预设、工具中心、CLI 命令语法细节。
 - 内容合成、中文注释注入与覆盖层合成（见 `content-composition.md`）。

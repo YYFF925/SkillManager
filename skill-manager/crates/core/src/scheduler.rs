@@ -157,7 +157,7 @@ pub fn run(ctx: &AppContext, trigger: Trigger) -> Result<ScheduleReport> {
     }
 
     let Some(vault) = ctx.vault_opt() else {
-        let note = "尚未接入 SkillVault，未执行；接入后可用";
+        let note = "尚未接入 SkillManagerVault，未执行；接入后可用";
         return Ok(ScheduleReport {
             trigger: trigger.as_str().to_string(),
             interval_minutes: interval,

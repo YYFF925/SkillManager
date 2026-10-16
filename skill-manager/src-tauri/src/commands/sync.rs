@@ -1,4 +1,4 @@
-//! SkillVault 同步命令：拉取、上传、状态与冲突（T054）。
+//! SkillManagerVault 同步命令：拉取、上传、状态与冲突（T054）。
 //!
 //! 薄封装 core。GUI 保存后按已确认策略调用 `sync_push`；文件监听与 `deploy sync` 不调用它，
 //! 后台路径不提交、不推送。`sync_push` 也是 Agent 获明确同意后的显式入口。
@@ -7,7 +7,7 @@ use skill_manager_core::sync::{ConflictView, PullReport, PushReport, SyncService
 
 use super::AppState;
 
-/// 拉取同一 SkillVault；无冲突静默应用并刷新已有部署/指令目标。
+/// 拉取同一 SkillManagerVault；无冲突静默应用并刷新已有部署/指令目标。
 #[tauri::command]
 pub fn sync_pull(state: tauri::State<'_, AppState>) -> Result<PullReport, String> {
     let ctx = state.get()?;
@@ -18,7 +18,7 @@ pub fn sync_pull(state: tauri::State<'_, AppState>) -> Result<PullReport, String
     service.pull().map_err(|err| err.to_string())
 }
 
-/// 提交并推送本机 SkillVault（工作区全部改动）。
+/// 提交并推送本机 SkillManagerVault（工作区全部改动）。
 #[tauri::command]
 pub fn sync_push(
     state: tauri::State<'_, AppState>,

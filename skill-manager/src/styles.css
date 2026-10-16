@@ -101,6 +101,25 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+@layer base {
+  button:not(:disabled),
+  a[href],
+  summary,
+  select:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  label:has(input[type="checkbox"]:not(:disabled)),
+  label:has(input[type="radio"]:not(:disabled)) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  input:disabled {
+    cursor: default;
+  }
+}
+
 /* 键盘焦点样式沿用原型；鼠标点击不显示焦点环。 */
 button:focus-visible,
 a:focus-visible,
@@ -164,6 +183,155 @@ textarea:focus-visible {
     color: var(--c-ink-3);
     border-radius: 8px;
     padding: 14px;
+  }
+
+  /* Markdown 正文：结构化标题、段落、列表与代码块。 */
+  .markdown-body {
+    border: 1px solid var(--c-line-soft);
+    border-radius: 12px;
+    background: var(--c-surface);
+    padding: 22px 24px;
+    color: var(--c-ink-3);
+    font-size: 13px;
+    line-height: 24px;
+    overflow-wrap: anywhere;
+    box-shadow: 0 1px 2px #18181b0a;
+  }
+  .markdown-body > :first-child { margin-top: 0; }
+  .markdown-body > :last-child { margin-bottom: 0; }
+  .markdown-body h1,
+  .markdown-body h2,
+  .markdown-body h3,
+  .markdown-body h4 {
+    color: var(--c-ink);
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 24px 0 9px;
+  }
+  .markdown-body h1 { font-size: 20px; }
+  .markdown-body h2 {
+    font-size: 16px;
+    border-bottom: 1px solid var(--c-line-soft);
+    padding-bottom: 8px;
+  }
+  .markdown-body h3 { font-size: 14px; }
+  .markdown-body h4 { font-size: 13px; }
+  .markdown-body p { margin: 10px 0; }
+  .markdown-body strong { color: var(--c-ink); }
+  .markdown-body a {
+    color: var(--c-accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .markdown-body code {
+    border: 1px solid var(--c-line-soft);
+    border-radius: 4px;
+    background: var(--c-bg-subtle);
+    padding: 1px 5px;
+    color: #be185d;
+    font: 12px/20px var(--font-mono);
+  }
+  .markdown-body .markdown-code-block {
+    position: relative;
+    overflow-x: auto;
+    margin: 14px 0;
+    border: 1px solid var(--c-line-soft);
+    border-radius: 9px;
+    background: var(--c-bg-subtle);
+    padding: 16px 18px;
+    color: var(--c-ink-3);
+  }
+  .markdown-body .markdown-code-block code {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font: 12px/21px var(--font-mono);
+    white-space: pre;
+  }
+  .markdown-code-language {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    color: var(--c-faint);
+    font: 10px/1 var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+  .markdown-body blockquote {
+    margin: 14px 0;
+    border-left: 3px solid var(--c-accent);
+    border-radius: 0 7px 7px 0;
+    background: var(--c-accent-soft);
+    padding: 10px 13px;
+  }
+  .markdown-body blockquote p { margin: 0; }
+  .markdown-body ul,
+  .markdown-body ol {
+    margin: 9px 0;
+    padding-left: 22px;
+  }
+  .markdown-body ul { list-style: disc; }
+  .markdown-body ol { list-style: decimal; }
+  .markdown-body li { margin: 4px 0; }
+  .markdown-body hr {
+    border: 0;
+    border-top: 1px solid var(--c-line);
+    margin: 20px 0;
+  }
+  .markdown-frontmatter {
+    display: grid;
+    gap: 7px;
+    margin: 0 0 20px;
+    border: 1px solid var(--c-line-soft);
+    border-radius: 9px;
+    background: var(--c-bg-subtle);
+    padding: 12px 14px;
+    font-size: 12px;
+  }
+  .markdown-frontmatter > div {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .markdown-frontmatter dt {
+    color: var(--c-faint);
+    font: 11px/20px var(--font-mono);
+  }
+  .markdown-frontmatter dd {
+    margin: 0;
+    color: var(--c-ink-3);
+    line-height: 20px;
+  }
+
+  /* 即时悬浮提示：不等待系统 title 延迟。 */
+  .fast-tooltip {
+    position: relative;
+    display: inline-flex;
+  }
+  .fast-tooltip-label {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    z-index: 80;
+    transform: translateX(-50%);
+    border-radius: 6px;
+    background: var(--c-ink);
+    padding: 3px 7px;
+    color: var(--c-surface);
+    box-shadow: 0 3px 10px rgba(24, 24, 27, 0.2);
+    font-size: 11px;
+    line-height: 18px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 60ms ease;
+  }
+  .fast-tooltip:hover > .fast-tooltip-label,
+  .fast-tooltip:focus-within > .fast-tooltip-label {
+    opacity: 1;
+    visibility: visible;
   }
 
   /* 表单控件。 */

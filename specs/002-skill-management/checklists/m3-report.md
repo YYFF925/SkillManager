@@ -2,7 +2,7 @@
 
 **日期**：2026-10-16 | **范围**：T030～T049（US2 + US4） | **依据**：[quickstart.md](../quickstart.md) M3、[spec.md](../spec.md) US2/US4、[tasks.md](../tasks.md) Phase 5/6
 
-**证据说明**：结论来自本机实际执行（临时 SkillVault + 临时 HOME + 独立 `--state-dir` + 临时本地 Git 上游）；GUI 证据为真实 Tauri 应用截图，位于 `/tmp/m3-gui/`。真实用户目录未被写入。**未取得证据的项记为未验证。**
+**证据说明**：结论来自本机实际执行（临时 SkillManagerVault + 临时 HOME + 独立 `--state-dir` + 临时本地 Git 上游）；GUI 证据为真实 Tauri 应用截图，位于 `/tmp/m3-gui/`。真实用户目录未被写入。**未取得证据的项记为未验证。**
 
 ## 一、场景核对表
 

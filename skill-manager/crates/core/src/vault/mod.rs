@@ -1,4 +1,4 @@
-//! SkillVault 接入、目录模型、内存索引与文件监听。
+//! SkillManagerVault 接入、目录模型、内存索引与文件监听。
 
 pub mod acquire;
 pub mod adopt;

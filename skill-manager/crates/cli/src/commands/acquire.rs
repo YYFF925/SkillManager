@@ -56,7 +56,8 @@ pub struct ImportArgs {
 
 #[derive(Args, Debug)]
 pub struct AdoptArgs {
-    #[arg(value_name = "agent-key")]
+    /// 内置 Agent key 或共享目录目标 shared。
+    #[arg(value_name = "target")]
     pub agent: String,
     #[arg(value_name = "name", required = true)]
     pub names: Vec<String>,

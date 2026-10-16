@@ -14,7 +14,7 @@ pub use apply::{
     DeployItemView, DeployReport, DeploymentService, DeploymentStatusView, SkillDeleteOutcome,
 };
 pub use compose::{compose_skill, ComposedArtifact, ComposedFile};
-pub use local_skills::{LocalDeleteOutcome, LocalSkillService, LocalSkillView};
+pub use local_skills::{LocalDeleteOutcome, LocalSkillRead, LocalSkillService, LocalSkillView};
 pub use policy::{Admission, HERMES_AGENT_KEY, agent_dimension};
 pub use targets::{
     AgentCatalog, AgentEntry, TargetResolution, TargetResolver, SHARED_TARGET, parse_target_arg,

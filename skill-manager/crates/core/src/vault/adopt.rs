@@ -1,7 +1,7 @@
 //! 收编本机 Agent 中未受管的技能（T035，US2-5）。
 //!
 //! 规则：
-//! - 管理域由 Agent 所属域决定；**同名库技能阻止而不覆盖**；
+//! - 管理域由目标所属域决定，共享目录进入编码库；**同名库技能阻止而不覆盖**；
 //! - 支持逐技能资料输入（注释/标签/分类/支持声明/译文）；公共参数只表示用户明确要求的共用值，
 //!   不把同一段注释擅自套给全部技能（逐技能值用 `--metadata-file` 传入）；
 //! - 调用 US3 的 `DeploymentService::adopt_existing` 接管原副本，**不新增其他目标部署**；
@@ -12,7 +12,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::deploy::targets::{AgentCatalog, TargetResolver};
+use crate::deploy::targets::TargetResolver;
 use crate::deploy::DeploymentService;
 use crate::domain::{SkillRef, Target};
 use crate::error::{CoreError, Result};
@@ -76,7 +76,7 @@ pub struct AdoptOutcome {
     pub errors: Vec<ItemError>,
 }
 
-/// 收编某 Agent 的未受管技能至其所属管理域，并接管原部署。
+/// 收编本机 Agent 或共享目录的未受管技能至对应域，并接管原部署。
 pub fn adopt_skills(
     vault_root: &Path,
     resolver: &TargetResolver<'static>,
@@ -86,14 +86,15 @@ pub fn adopt_skills(
     common: &AdoptMeta,
     per_skill: &BTreeMap<String, AdoptMeta>,
 ) -> Result<AdoptOutcome> {
-    let entry = AgentCatalog::embedded()
-        .get(agent_key)
-        .ok_or_else(|| CoreError::InvalidTarget(format!("{agent_key} 不在内置 Agent 名单中")))?;
-    let domain = entry.reference_domain;
-    let skills_dir = resolver.agent_skills_dir(agent_key)?;
-    let target = Target::Agent {
-        key: agent_key.to_string(),
+    let target = if agent_key == "shared" {
+        Target::Shared
+    } else {
+        Target::Agent {
+            key: agent_key.to_string(),
+        }
     };
+    let domain = resolver.domain_of(&target)?;
+    let skills_dir = std::path::PathBuf::from(resolver.resolve(&target)?.path);
 
     let mut outcome = AdoptOutcome {
         agent: agent_key.to_string(),

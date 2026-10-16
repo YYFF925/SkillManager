@@ -1,11 +1,11 @@
 //! 运行上下文：同一份 core 逻辑由 CLI 与 Tauri 共用。
 //!
-//! `--vault` 指定共享内容真值（SkillVault），`--state-dir` 隔离本机状态，
+//! `--vault` 指定共享内容真值（SkillManagerVault），`--state-dir` 隔离本机状态，
 //! 两者一起即可在同一台机器上模拟两台电脑的运行参数。
 
 use std::path::{Path, PathBuf};
 
-use crate::deploy::targets::{AgentCatalog, TargetResolver};
+use crate::deploy::targets::{AgentCatalog, TargetResolver, shared_skills_dir};
 use crate::error::{CoreError, Result};
 use crate::state::StateStore;
 use crate::vault::VaultConnection;
@@ -16,7 +16,7 @@ pub struct GlobalOptions {
     /// 输出结构化 JSON 结果。
     #[serde(default)]
     pub json: bool,
-    /// SkillVault 根目录。
+    /// SkillManagerVault 根目录。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vault: Option<PathBuf>,
     /// 本机状态目录。
@@ -38,7 +38,7 @@ impl AppContext {
         base.join("SkillManager")
     }
 
-    /// 只连接本机状态；SkillVault 稍后按需接入。
+    /// 只连接本机状态；SkillManagerVault 稍后按需接入。
     pub fn open(state_dir: Option<PathBuf>) -> Result<Self> {
         let dir = state_dir.unwrap_or_else(Self::default_state_dir);
         let state = StateStore::open(&dir)?;
@@ -49,7 +49,7 @@ impl AppContext {
         })
     }
 
-    /// 连接状态目录并直接接入指定 SkillVault。
+    /// 连接状态目录并直接接入指定 SkillManagerVault。
     pub fn open_with_vault(
         vault: impl AsRef<Path>,
         state_dir: Option<PathBuf>,
@@ -59,7 +59,7 @@ impl AppContext {
         Ok(ctx)
     }
 
-    /// 接入（或切换）SkillVault；接入结果记在本机状态，便于下次直接进入。
+    /// 接入（或切换）SkillManagerVault；接入结果记在本机状态，便于下次直接进入。
     pub fn attach_vault(&mut self, path: impl AsRef<Path>) -> Result<()> {
         let connection = VaultConnection::open(path.as_ref())?;
         self.state.set_vault_path(connection.root())?;
@@ -87,10 +87,10 @@ impl AppContext {
         self.catalog
     }
 
-    /// 已接入的 SkillVault；尚未接入时报错。
+    /// 已接入的 SkillManagerVault；尚未接入时报错。
     pub fn vault(&self) -> Result<&VaultConnection> {
         self.vault.as_ref().ok_or_else(|| {
-            CoreError::other("尚未接入 SkillVault：请先选择已有本地技能库目录")
+            CoreError::other("尚未接入 SkillManagerVault：请先选择已有本地技能库目录")
         })
     }
 
@@ -103,14 +103,14 @@ impl AppContext {
         dirs::home_dir().ok_or_else(|| CoreError::other("无法确定当前用户 home 目录"))
     }
 
-    /// 设置中的共享部署目录。
-    pub fn shared_dir(&self) -> Result<Option<PathBuf>> {
-        self.state.shared_dir()
+    /// 按当前系统用户主目录自动定位共享部署目录。
+    pub fn shared_dir(&self) -> Result<PathBuf> {
+        Ok(shared_skills_dir(&self.home()?))
     }
 
-    /// 目标解析器（内置名单 + 本机共享目录设置 + 本机 Agent 目录覆盖）。
+    /// 目标解析器（内置名单 + 用户主目录 + 本机 Agent 目录覆盖）。
     pub fn target_resolver(&self) -> Result<TargetResolver<'static>> {
-        let mut resolver = TargetResolver::new(self.home()?, self.catalog, self.shared_dir()?);
+        let mut resolver = TargetResolver::new(self.home()?, self.catalog);
         let dirs: Vec<(String, PathBuf)> = self
             .state
             .agents()?
@@ -176,8 +176,8 @@ mod tests {
             .unwrap();
 
         a.state()
-            .set_setting(setting_key::SHARED_DIR, "/a/only")
+            .set_setting(setting_key::THEME, "dark")
             .unwrap();
-        assert_eq!(b.state().setting(setting_key::SHARED_DIR).unwrap(), None);
+        assert_eq!(b.state().setting(setting_key::THEME).unwrap(), None);
     }
 }

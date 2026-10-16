@@ -50,6 +50,8 @@ impl ProfileKind {
 #[derive(Clone, Debug, Serialize)]
 pub struct ProfileInfo {
     pub name: String,
+    /// Hermes 面板配置的显示名称；None 时前端回退到目录名。
+    pub display_name: Option<String>,
     pub kind: ProfileKind,
     /// 档案 home（default 为根自身）。
     pub home: PathBuf,
@@ -61,6 +63,33 @@ impl ProfileInfo {
     pub fn is_default(&self) -> bool {
         self.kind == ProfileKind::Default
     }
+}
+
+/// 读取档案显示名称：优先 `profile.yaml` 的 `ui_meta.hermes-bots.title`，
+/// 回退 `SOUL.md` 首个 `# ` 标题。只读，不创建或修改档案文件。
+fn read_profile_display_name(home: &Path) -> Option<String> {
+    if let Ok(text) = std::fs::read_to_string(home.join("profile.yaml")) {
+        if let Ok(value) = yaml_serde::from_str::<yaml_serde::Value>(&text) {
+            if let Some(title) = value
+                .get("ui_meta")
+                .and_then(|meta| meta.get("hermes-bots"))
+                .and_then(|bots| bots.get("title"))
+                .and_then(yaml_serde::Value::as_str)
+                .map(str::trim)
+                .filter(|title| !title.is_empty())
+            {
+                return Some(title.to_string());
+            }
+        }
+    }
+    let soul = std::fs::read_to_string(home.join("SOUL.md")).ok()?;
+    soul.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .and_then(|line| line.strip_prefix("# "))
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+        .map(str::to_string)
 }
 
 /// 档案 id 是否合法（与 Hermes `PROFILE_ID_RE` 一致：小写字母/数字开头，其余小写字母/数字/`-`/`_`，≤64）。
@@ -114,6 +143,7 @@ pub fn is_deleted(root: &Path, name: &str) -> bool {
 pub fn discover_profiles(root: &Path) -> Vec<ProfileInfo> {
     let mut out = vec![ProfileInfo {
         name: DEFAULT_PROFILE.to_string(),
+        display_name: None,
         kind: ProfileKind::Default,
         home: root.to_path_buf(),
         skills_dir: default_skills_dir(root),
@@ -141,6 +171,7 @@ pub fn discover_profiles(root: &Path) -> Vec<ProfileInfo> {
         }
         named.push(ProfileInfo {
             name: name.clone(),
+            display_name: read_profile_display_name(&entry.path()),
             kind: ProfileKind::Named,
             home: entry.path(),
             skills_dir: entry.path().join("skills"),
@@ -156,6 +187,7 @@ pub fn resolve_profile(root: &Path, name: &str) -> Result<ProfileInfo> {
     if name == DEFAULT_PROFILE {
         return Ok(ProfileInfo {
             name: DEFAULT_PROFILE.to_string(),
+            display_name: None,
             kind: ProfileKind::Default,
             home: root.to_path_buf(),
             skills_dir: default_skills_dir(root),
@@ -187,6 +219,7 @@ pub fn resolve_profile(root: &Path, name: &str) -> Result<ProfileInfo> {
     }
     Ok(ProfileInfo {
         name: name.to_string(),
+        display_name: read_profile_display_name(&home),
         kind: ProfileKind::Named,
         skills_dir: home.join("skills"),
         home,
@@ -228,6 +261,25 @@ mod tests {
             .map(|profile| profile.name)
             .collect();
         assert_eq!(names, vec!["default", "blank"]);
+    }
+
+    #[test]
+    fn named_profile_uses_hermes_panel_title() {
+        let dir = root();
+        let home = dir.path().join("profiles/drawing");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::write(home.join("config.yaml"), "x: 1\n").unwrap();
+        std::fs::write(
+            home.join("profile.yaml"),
+            "ui_meta:\n  hermes-bots:\n    title: 绘画助手\n",
+        )
+        .unwrap();
+
+        let drawing = discover_profiles(dir.path())
+            .into_iter()
+            .find(|profile| profile.name == "drawing")
+            .unwrap();
+        assert_eq!(drawing.display_name.as_deref(), Some("绘画助手"));
     }
 
     #[test]

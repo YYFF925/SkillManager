@@ -2,7 +2,7 @@
  * 设置页（T110/T112）：按原型分区的区块顺序、块内只读展示行，以及既有行为的接线。
  *
  * 只验证界面与 core 输出之间的接线：区块顺序按 FR-056；只读行（部署方式/语言/关闭行为）
- * 不得渲染成可编辑控件；共享目录未设置时如实显示并保留行内修改入口。
+ * 不得渲染成可编辑控件；共享目录按系统用户主目录自动识别并只读展示。
  * Agent 检测区块来自 AgentSettings（FR-041），本页只断言它作为首个区块并带摘要与三个动作。
  */
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -50,9 +50,7 @@ const hermes: AgentView = {
 };
 
 vi.mock("../services/client", () => ({
-  // 共享目录未设置时为 null；用例按需覆盖。
-  sharedDirGet: vi.fn(async () => null),
-  sharedDirSet: vi.fn(async () => "/tmp/shared-skills"),
+  sharedDirGet: vi.fn(async () => "/tmp/home/.agents/skills"),
   setTheme: vi.fn(async () => settingsFixture),
   setFontScale: vi.fn(async () => settingsFixture),
   setAutoCheckMinutes: vi.fn(async () => settingsFixture),
@@ -124,7 +122,7 @@ import { checkUpstream, sharedDirGet, syncPull } from "../services/client";
 
 afterEach(() => {
   vi.clearAllMocks();
-  vi.mocked(sharedDirGet).mockResolvedValue(null);
+  vi.mocked(sharedDirGet).mockResolvedValue("/tmp/home/.agents/skills");
 });
 
 function renderSettings() {
@@ -170,7 +168,7 @@ describe("SettingsPage · 区块顺序", () => {
 
     // 其余区块按 FR-056 顺序（代码块之外不再有 Agent 管理入口）。
     expect(sections[1].textContent).toContain("全局配置");
-    expect(sections[2].textContent).toContain("自己的 SkillVault 同步");
+    expect(sections[2].textContent).toContain("自己的 SkillManagerVault 同步");
     expect(sections[3].textContent).toContain("后台检查与上游更新");
     expect(sections[4].textContent).toContain("诊断与日志");
     expect(sections.length).toBe(5);
@@ -203,18 +201,13 @@ describe("SettingsPage · 只读展示行", () => {
     }
   });
 
-  it("共享目录未设置时如实显示，并保留行内修改入口（既有行为不回归）", async () => {
+  it("自动显示共享目录，且不提供手动修改入口", async () => {
     renderSettings();
     const global = await screen.findByRole("heading", { name: "全局配置" });
     const panel = global.closest("section")!;
-
-    await waitFor(() => expect(within(panel).getByText("未设置")).toBeTruthy());
-    // 只读展示，不猜默认路径：未设置时不渲染输入框。
+    await waitFor(() => expect(within(panel).getByText("/tmp/home/.agents/skills")).toBeTruthy());
     expect(within(panel).queryByRole("textbox")).toBeNull();
-
-    fireEvent.click(within(panel).getByRole("button", { name: /修改/ }));
-    const input = within(panel).getByPlaceholderText("绝对路径");
-    expect((input as HTMLInputElement).value).toBe("");
+    expect(within(panel).queryByRole("button", { name: /修改/ })).toBeNull();
   });
 });
 

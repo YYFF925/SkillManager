@@ -16,7 +16,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::new())
         .setup(|app| {
-            // 启动时若已记住 SkillVault，接入后即开始监听外部改动。
+            // 启动时若已记住 SkillManagerVault，接入后即开始监听外部改动。
             // 监听启动失败不影响库的使用（各命令都会重新读取库文件），只记录原因。
             let state: tauri::State<'_, AppState> = app.state();
             if let Err(err) = state.watch_vault(app.handle()) {
@@ -92,9 +92,9 @@ pub fn run() {
             commands::agent::agent_set_dir,
             commands::agent::agent_reset_dir,
             commands::agent::agent_local_skills,
+            commands::agent::agent_read_local,
             commands::agent::agent_delete_local,
             commands::agent::shared_dir_get,
-            commands::agent::shared_dir_set,
             commands::hermes::hermes_profiles,
             commands::hermes::hermes_list,
             commands::hermes::hermes_enable,

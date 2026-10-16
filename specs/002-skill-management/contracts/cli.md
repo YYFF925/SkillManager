@@ -44,10 +44,10 @@ skill task <ref>... [--requirement <text>]                     # 单项/多选�
 skill preview <repo-url> [--ref <branch-or-tag>]             # 获取/列出候选，不入库；可取消
 skill import <repo-url> --domain <domain> --skills <subpath,...>
              [--ref <branch-or-tag>] [--category <c> | --uncategorized]
-skill adopt <agent-key> <name>... [--category <c> | --uncategorized]
+skill adopt <target> <name>... [--category <c> | --uncategorized]
             [--comment <text>] [--tags <csv>] [--metadata-file <path>]
 skill adopt-hermes <profile> <name>...
-skill check (<ref> | --repo <url> | --all)                    # 检查 B；不拉取自己的 SkillVault
+skill check (<ref> | --repo <url> | --all)                    # 检查 B；不拉取自己的 SkillManagerVault
 skill update <ref> [--to <commit-oid>]                       # 单项显式采用
 skill update-repo <repo-url> [--include-new <subpath,...> --domain <domain>]
                   [--category <c> | --uncategorized]
@@ -58,8 +58,8 @@ skill skip <ref> [--version <commit-oid>] | skill unskip <ref> | skill skipped
 
 - 来源候选按上游子路径选择，保留其技能原名；多技能仓库默认分类按仓库总技能数决定，CLI 由 Agent 与用户确认分类后传入；单技能仓库默认不分类。`--uncategorized` 可显式选择不分类。
 - `preview/import` 显示真实 Git 进度，Ctrl-C 取消本次获取；`--json` 的最终结果在标准输出，进度在标准错误，Tauri 使用同一核心的进度事件。
-- `adopt` 管理域由 Agent 所属域决定；批量不同资料使用 `--metadata-file`，按技能名给各自管理资料，公共参数只能表示用户明确要求的共用值。收编不强制来源，不新增其他目标的首次部署。
-- 来源/采用版本记录随唯一 SkillVault 跨机共享。另一机 `sync pull` 不重新执行 import；`skill check/update` 依据技能来源检查和获取上游 B。
+- `adopt` 的 `<target>` 接受内置 Agent key 或 `shared`；管理域由目标所属域决定，共享目标进入编码库并接管原共享部署。批量不同资料使用 `--metadata-file`，按技能名给各自管理资料，公共参数只能表示用户明确要求的共用值。收编不强制来源，不新增其他目标的首次部署。
+- 来源/采用版本记录随唯一 SkillManagerVault 跨机共享。另一机 `sync pull` 不重新执行 import；`skill check/update` 依据技能来源检查和获取上游 B。
 - `--to` / `--version` 缺省采用最近检查所得的具体远端提交；尚无检查结果则提示先检查，不在应用时静默选择另一个版本。`update-repo` 作用于两域该仓库未采用、未跳过的已有条目，新增仅处理显式选择及所给域。
 - `reject-new` 是明确“不入库并记住”，记录位置见 data-model.md §1.6；不选择、返回或取消均不调用它。`update --to <oid>` 可明确采用已经跳过的版本；普通仓库批量更新尊重跳过决定。
 - 新增候选的“后来出现”含义及首次未选条目的例子见 spec.md“业务关系与阅读示例”；检查或更新已有技能不等于拒绝未决定、当前仍存在的新增候选，发现基线由 T039/T043 落定，不与本机检查时间混同。
@@ -67,17 +67,16 @@ skill skip <ref> [--version <commit-oid>] | skill unskip <ref> | skill skipped
 ### deploy — 部署与同步
 
 ```text
-deploy to <target> <ref>... [--also-target <target>...] [--dry-run]
-deploy preset <domain> <preset-id> --to <target> [--also-target <target>...] [--dry-run]
-deploy undo <target> <ref>... [--also-target <target>...] [--dry-run] [--discard-local-changes]
-deploy undo-preset <domain> <preset-id> --from <target> [--also-target <target>...] [--dry-run]
+deploy to <target> <ref>... [--also-target <target>...]
+deploy preset <domain> <preset-id> --to <target> [--also-target <target>...]
+deploy undo <target> <ref>... [--also-target <target>...] [--discard-local-changes]
+deploy undo-preset <domain> <preset-id> --from <target> [--also-target <target>...]
 deploy sync [--ref <ref>] [--target <target>] [--overwrite-local]
 deploy status [--target <target>] [--paused]
 ```
 
 - `--also-target` 指定本次其他目标，支持一次多技能至多目标，以及预设至多目标；每个技能/目标组合复用同一准入、暂停和结果表达，不增加批次实体或整批回滚。未传则只处理一个目标。
 - 普通部署/同步/撤销遇受管副本外改均暂停该项。Agent 整理并获得用户裁决后，可对明确的单项 `--ref` 与 `--target` 使用 `sync --overwrite-local` 按库覆盖；确认丢弃待清理副本时可显式 `undo --discard-local-changes`。这是执行裁决的参数，不是自动合并或冲突分析功能；GUI 给出暂停信息和外部维护任务，不提供内置合并界面。
-- `dry-run` 报告技能/Agent/实际路径/预期结果，不修改目标、库内容或业务状态；不同于可保存检查事实的上游/工具检查。
 - 撤销保留库技能。库技能已删除而副本暂停时，仍可按本机记录定位并继续清理；记录在副本成功移除后才删除。
 
 ### preset — 预设
@@ -122,10 +121,10 @@ tool skill-link <slug> <ref>                                 # 配套 Skill 来�
 - `set-install` 仅在 Agent 核实实际结果后回写安装事实并重置该工具检查结果；命令本身不安装程序。`--version ""`（空字符串）表示 Agent 核实该工具已不在本机：清除安装记录并同样重置检查结果。工具版本与配套技能版本互不代替。
 - `skill-link <slug> <ref>` 追加一个配套 Skill 关联（`<ref>` = `<domain>/<name>`）；来源资料（repo/subpath）随 `tool set` 维护。未入库时如实显示“未入库”，可经 `skill preview`/`skill import` 选择入库，入库不自动部署。
 
-### sync — SkillVault 跨机同步
+### sync — SkillManagerVault 跨机同步
 
 ```text
-sync pull                                                   # 拉取同一 SkillVault，刷新已有部署/指令目标
+sync pull                                                   # 拉取同一 SkillManagerVault，刷新已有部署/指令目标
 sync push [--message <text>]                                # 获同意后显式上传工作区全部改动
 sync status                                                 # 连接/未提交/未拉取事实
 sync conflicts                                              # Git 冲突信息供 Agent 检查
@@ -145,14 +144,17 @@ agent enable <key> | agent disable <key> | agent reorder --order <key,...>
 agent set-dir <key> (--skills <path> | --project-rel <path> | --instructions <path>)
 agent reset-dir <key> --kind skills|project-rel|instructions
 agent local-skills <target> | agent delete-local <target> <name>...
+agent read-local <target> <name> [--file <技能内相对路径>]
 instruction get global|<key>
 instruction set global|<key> (--file <path> | --stdin)
 ```
 
 `local-skills` / `delete-local` 的 `<target>` 接受内置 Agent key、`shared` 或 `hermes:default`：共享目录与 Hermes default 档案同为本机部署目标（FR-042/FR-055），
 按内置 Agent 的同一套语义列出与处理——受管项（存在该目标部署记录）按撤销部署规则处理，
-未受管项直接删除实际文件。共享目录未设置路径时如实报错"尚未设置共享目录路径"，不猜测默认路径；
+未受管项直接删除实际文件。共享目录自动定位为 `<当前用户主目录>/.agents/skills`；不存在时浏览返回空列表且不创建目录，首次部署时创建；
 `shared` 只对编码域有效（FR-021）。
+
+`read-local` 接受相同三类目标，默认阅读本机技能的 `SKILL.md` 或 `skill.md`，不使用库内原件替代。返回 `name/path/file/text/size/files`，`files` 为可阅读文件的相对路径列表，非 UTF-8 文件的 `text` 为 `null`；只允许读取所选技能目录内的文件，不修改库、部署或本机状态记录。
 
 Agent 目录/启停/顺序只在本机；检测不启动、不部署。指令编辑沿用单保存动作，保存源并按“全局+专属”覆盖本机目标；没有独立分发勾选。指令路径与技能路径独立，不把源跨机一致视为已经完成目标分发。用户已确认：`sync pull` 拉取到指令源变化后，按同一拼接覆盖规则自动刷新本机已有启用目标，不改变启用名单/指令路径；刷新失败分别报告，不把源同步成功冒充目标刷新成功。
 
@@ -162,7 +164,6 @@ Agent 目录/启停/顺序只在本机；检测不启动、不部署。指令编
 
 ```text
 settings get [<key>...]                                  # 只读：运行配置与调度事实
-settings set-shared-dir (--path <绝对路径> | --clear)
 settings set-auto-check <0|30|60|360|1440>
 settings diagnostics [--export]
 settings capacity
@@ -170,14 +171,15 @@ settings capacity
 
 2026-10-16 按 spec.md FR-050 的“本机运行侧”条款补齐（此前这一整类只有 GUI 入口）：
 
-- `settings get` 不带参数返回全部键的**当前生效值**（含默认值推导，例如主题缺省 `system`、检查频率缺省 60、未设置的共享目录为 `null`）；带参数只返回指定键。**未设置的键返回 `null`**，不省略键、不用空字符串冒充。
-- 只暴露**两个写入口**：`shared_dir`（`shared` 部署目标的前置）与 `auto_check_minutes`（FR-029 三项共用周期，值须为 0/30/60/360/1440）。其余键按 FR-050 保持单侧：
+- `settings get` 不带参数返回全部键的**当前生效值**（含默认值推导，例如主题缺省 `system`、检查频率缺省 60、共享目录为当前用户主目录下的 `.agents/skills`）；带参数只返回指定键。**未设置的键返回 `null`**，不省略键、不用空字符串冒充。
+- 只暴露**一个写入口**：`auto_check_minutes`（FR-029 三项共用周期，值须为 0/30/60/360/1440）。其余键按 FR-050 保持单侧：
   - `theme`、`font_scale` **不提供写**（界面偏好，不影响管理结果，见 FR-052）；
   - `git_auto_push`（GUI 保存自动上传的长期授权记录）**不提供写**——该授权只能由用户在 GUI 给出，Agent 的上传仍需每次取得明确同意后显式 `sync push`（FR-038）；允许 CLI 读取以便解释当前行为。
+- `shared_dir` 只读派生自当前系统用户主目录下的 `.agents/skills`，不写 SQLite，不提供修改或清除路径的命令。
 - 手动检查**不新增组合命令**：CLI 以 `skill check --all`、`sync pull`、`tool check --all` 分别表达同一批动作（FR-029 的三项），不合并成一条命令。
 - `settings diagnostics` 输出诊断报告内容与日志/崩溃记录的**真实文件路径**；`--export` 追加写出可交给 Agent 的文件并返回其路径。**不提供上传诊断**。
 - `settings capacity` 输出库总占用与较大技能排行；空库如实返回 0 与空排行。
-- 这一组命令只读写本机状态，不改 SkillVault 内容、不触发上传。
+- 这一组命令只读写本机状态，不改 SkillManagerVault 内容、不触发上传。
 
 ## 输出与状态约定
 
@@ -205,7 +207,7 @@ settings capacity
 | 工具维护任务 | tool task | 生成/复制，不冒充执行 |
 | 库同步 | sync * | 同意边界与全量提交一致 |
 | Agent 配置/本地技能/指令 | agent *，instruction * | 本机配置与单保存指令入口 |
-| 本机运行配置与只读报告 | settings get/set-shared-dir/set-auto-check/diagnostics/capacity | 设置页同一核心；主题/字号与上传长期授权不提供 CLI 写入 |
+| 本机运行配置与只读报告 | settings get/set-auto-check/diagnostics/capacity | 设置页同一核心；主题/字号与上传长期授权不提供 CLI 写入 |
 
 **覆盖结论**：上表为需求与命令契约映射，不是命令已实现的证明。各入口实施后仍须按 SC-002 实际验收；CHK026 已确认拉取后自动刷新本机已有启用指令目标。
 
@@ -221,7 +223,7 @@ settings capacity
 | 入库/收编/自建/跨域复制 | `skill preview/import/adopt/adopt-hermes/create/copy` | 实际执行；入库含显式子路径与来源记录 | 通过 |
 | 上游检查/单项与仓库更新 | `skill check`（`<ref>`/`--repo`/`--all` 三者之一必给）/`update`/`update-repo` | 实际执行；检查只写事实不应用 | 通过 |
 | 新增拒绝/跳过与恢复 | `skill reject-new/rejected/skip/unskip/skipped`，`update --to` | 实际执行 | 通过 |
-| 部署/撤销/同步/暂停处置 | `deploy to/preset/undo/undo-preset/sync/status` | 实际执行；`--dry-run` 不变文件 | 通过 |
+| 部署/撤销/同步/暂停处置 | `deploy to/preset/undo/undo-preset/sync/status` | 实际执行 | 通过 |
 | 预设 | `preset list/get/create/delete/members/rename/icon/reorder/reorder-members` | 实际执行；两种排序校验全量排列 | 通过 |
 | 标签/分类/注释/支持范围 | `skill tag add/detach/rename/remove`、`skill set`、`skill move` | 实际执行；`--agents all/none/csv` 写回核对 | 通过 |
 | 译文/覆盖层维护 | `skill translation get/set/remove`、`skill overlay list/get/set/remove` | 实际执行；`set` 缺 `--file/--stdin` 报错退出 1 | 通过 |
@@ -232,7 +234,7 @@ settings capacity
 | 工具维护任务 | `tool task --action register/edit/install/update/guide` | 实际执行；`register` 可无 slug | 通过 |
 | 库同步 | `sync pull/push/status/conflicts` | 实际执行（临时裸远端）；后台路径不推送 | 通过 |
 | Agent 配置/本地技能/指令 | `agent list/detect/enable/disable/reorder/set-dir/reset-dir/local-skills/delete-local`，`instruction get/set` | 实际执行（临时 HOME 假目录） | 通过 |
-| 本机运行配置与只读报告 | `settings get/set-shared-dir/set-auto-check/diagnostics/capacity` | 实际执行（临时库 + 临时 HOME + 独立 `--state-dir`）：`get` 全键/指定键与 `null` 语义、`set-shared-dir --path` 后 `deploy to shared` 成功且 `--clear` 后如实报"尚未设置共享目录路径"、`set-auto-check` 接受 0/30/60/360/1440 并拒绝 45、`theme`/`font_scale`/`git_auto_push` 无 CLI 写入口（`--help` 无对应子命令，调用退出 2）、`diagnostics --export` 返回真实存在文件、`capacity` 空库返回 0 与空排行；并与 `--help` 逐项比对子命令与互斥关系。自动化见 `skill-manager/tests/cli_settings.rs`（8 项） | 通过 |
+| 本机运行配置与只读报告 | `settings get/set-auto-check/diagnostics/capacity` | 实际执行（临时库 + 临时 HOME + 独立 `--state-dir`）：`get` 全键/指定键与 `null` 语义、`shared_dir` 自动定位，未配置即可 `deploy to shared`，目录不存在时浏览不创建而首次部署创建，旧路径设置不再生效且已删除写入命令、`set-auto-check` 接受 0/30/60/360/1440 并拒绝 45、`theme`/`font_scale`/`git_auto_push` 无 CLI 写入口（`--help` 无对应子命令，调用退出 2）、`diagnostics --export` 返回真实存在文件、`capacity` 空库返回 0 与空排行；并与 `--help` 逐项比对子命令与互斥关系。自动化见 `skill-manager/tests/cli_settings.rs`（8 项） | 通过 |
 
 **JSON/退出码核对**：`--json` 输出统一 `result`(`success|partial|failed`)/`data`/`errors`；退出码 0/1/2 = 成功/失败/部分完成。**已知碰撞**：clap 的参数用法错误也返回 2，调用方需按 `errors` 或提示前缀区分（本节如实记录，未新增机制消除该碰撞）。
 
@@ -243,7 +245,7 @@ settings capacity
 **发现的缺口与处理**
 
 1. **本机运行侧整类缺 CLI 入口**（原记为"仅共享目录路径"，2026-10-16 逐项清点后确认为整类，已在 `spec.md` FR-050/FR-052/FR-053 补齐表述并在本节补齐命令契约，见 `settings` 命令组与 tasks T093～T100）。清点结论：
-   - **必须 CLI 可写**：`shared_dir`（`shared` 部署目标前置）、`auto_check_minutes`（FR-029 三项共用周期）；
+   - **必须 CLI 可写**：`auto_check_minutes`（FR-029 三项共用周期）；
    - **必须 CLI 可读**：全部运行配置与调度事实（含仅由 GUI 写入的 `theme`、`font_scale`、`git_auto_push`）；
    - **不提供 CLI 写**：`theme`、`font_scale`（界面偏好）、`git_auto_push`（长期上传授权，FR-038）；
    - **有意单侧**：工具安装事实回写只有 CLI（FR-047/FR-050），不是缺口。

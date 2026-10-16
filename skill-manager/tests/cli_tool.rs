@@ -314,7 +314,7 @@ fn skill_task_single_and_multiple_keep_context_and_only_reference_the_skill() {
         "补充中文译文",
     ]);
     let task = single["task"].as_str().unwrap();
-    assert!(task.contains("SkillVault 本机目录："), "{task}");
+    assert!(task.contains("SkillManagerVault 本机目录："), "{task}");
     assert!(task.contains("我的维护要求：\n补充中文译文"), "{task}");
     assert!(task.contains("库内路径："), "{task}");
     assert!(task.contains("中文注释：写 PR"), "{task}");

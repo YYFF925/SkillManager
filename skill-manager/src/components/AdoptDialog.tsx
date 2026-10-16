@@ -5,7 +5,7 @@
  * 收编会接管原 Agent 中的部署，不新增其他目标部署；同名库技能由 core 阻止并给出原因。
  */
 import { useState } from "react";
-import { GitBranch, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 
 import {
   adoptSkills,
@@ -136,15 +136,12 @@ export function AdoptDialog({
   return (
     <Dialog
       title="收编本机技能"
-      subtitle={`补充入库资料，并接管这些技能在 ${agentLabel} 中的原部署；不会新增其他目标部署。`}
+      subtitle={agentLabel}
       width="w-[920px]"
       onClose={onClose}
       footer={
         <>
-          <span className="text-[12px] text-faint">
-            同名库技能会被阻止；每项资料独立填写，不会把同一段注释套给全部技能。
-          </span>
-          <div className="flex gap-2.5">
+          <div className="ml-auto flex gap-2.5">
             <Button onClick={onClose}>取消</Button>
             <Button kind="primary" disabled={busy} onClick={() => void confirm()}>
               {busy ? "正在收编…" : "确认收编"}
@@ -251,15 +248,6 @@ export function AdoptDialog({
         })}
       </div>
 
-      <div className="mt-3.5">
-        <Notice>
-          <span className="inline-flex items-center gap-1.5">
-            <GitBranch className="size-3.5" strokeWidth={1.75} />
-            原技能名与原始正文保持不变；管理资料进入 `.manager`，部署使用中文注释及适配内容。
-            收编不强制补充上游来源。
-          </span>
-        </Notice>
-      </div>
     </Dialog>
   );
 }

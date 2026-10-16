@@ -66,7 +66,7 @@ export function useLibrarySaveFlow({
     try {
       const report = await syncPush();
       setFailure(null);
-      onNotice(report.message || "已提交并推送本机 SkillVault。");
+      onNotice(report.message || "已提交并推送本机 SkillManagerVault。");
     } catch (err) {
       const reason = String(err);
       setFailure(reason);
@@ -117,10 +117,10 @@ export function useLibrarySaveFlow({
 
   const dialog = askOpen ? (
     <ConfirmDialog
-      title="保存后自动上传本机 SkillVault？"
-      subtitle="仅上传你自己的 SkillVault，不向来源仓库提交。"
+      title="保存后自动上传本机 SkillManagerVault？"
+      subtitle="仅上传你自己的 SkillManagerVault，不向来源仓库提交。"
       message={
-        "确认后，之后每次在界面保存库内修改都会自动提交并推送本机 SkillVault（不逐次询问）；" +
+        "确认后，之后每次在界面保存库内修改都会自动提交并推送本机 SkillManagerVault（不逐次询问）；" +
         "软件会提交当前工作区全部改动，不区分改动来源。外部文件改动与同步已有部署不会触发上传。"
       }
       confirmLabel="确认并上传"

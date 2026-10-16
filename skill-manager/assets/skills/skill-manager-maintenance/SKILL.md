@@ -1,6 +1,6 @@
 ---
 name: skill-manager-maintenance
-description: 维护 Skill Manager 的 SkillVault：.manager 格式、目录与同名规则、原文/译文/注释/覆盖层边界、来源更新与同项合并、部署与上传约定、冲突暂停处理、CLI 参考与工具中心登记/检查/回写流程
+description: 维护 Skill Manager 的 SkillManagerVault：.manager 格式、目录与同名规则、原文/译文/注释/覆盖层边界、来源更新与同项合并、部署与上传约定、冲突暂停处理、CLI 参考与工具中心登记/检查/回写流程
 ---
 
 # Skill Manager 库维护规范
@@ -15,8 +15,10 @@ description: 维护 Skill Manager 的 SkillVault：.manager 格式、目录与�
 
 ## 一、基本概念
 
-- **SkillVault**：用户自己已有的 Git 仓库，是技能内容的唯一真值源。首次接入由用户在 GUI 选择目录，
+- **SkillManagerVault**：用户自己已有的 Git 仓库，是技能内容的唯一真值源。首次接入由用户在 GUI 选择目录，
   本机记住路径；CLI 用全局 `--vault <path>` 指定。共享内容全部是库内可直接读写的文件，随库 Git 同步。
+- **共享目录**：按系统当前用户主目录自动定位 `.agents/skills`，无需设置，不提供自定义或清除路径。浏览不创建目录，首次部署时创建。
+- **本机技能收编与阅读**：`skill adopt` 接受内置 Agent key 或 `shared`；共享目录未受管技能进入编码库并接管原共享部署，不新增其他目标部署。`agent read-local <target> <name> [--file <相对路径>]` 只读实际本机副本，不以库内原件代替。
 - **管理域**：`code`（编码库）与 `lobster`（龙虾库）。域的边界是硬约束：编码技能不能部署给龙虾目标，
   反之亦然；支持声明不能绕过域边界。
 - **技能身份** = 管理域 + 技能名，技能名即目录名。有上游来源的技能保留上游原名。
@@ -30,7 +32,7 @@ description: 维护 Skill Manager 的 SkillVault：.manager 格式、目录与�
 ## 二、目录与同名规则
 
 ```text
-SkillVault/
+SkillManagerVault/
 ├── code/                    # 编码技能库
 │   └── [分类/]技能名/        # 分类最多一级
 │       ├── SKILL.md（或 skill.md）及技能文件   # 原始内容
@@ -116,9 +118,9 @@ registered_at: 2026-10-15
   相等判断已采用/已跳过，标签仅用于显示，**不假设 Git tag 有版本大小顺序**。
 - 仓库去重按保存的地址字符串（去首尾空白与末尾 `/`）；同地址跨域只获取一次，各 `ref` 分别解析；
   不推断 SSH/HTTPS 等不同写法是否同一仓库。
-- 来源记录绑定技能的**上游仓库**。技能进入唯一 SkillVault，来源/子路径/采用版本用于后续对上游的
-  检查与更新；所有电脑同步同一个 SkillVault，**另一台电脑拉取是库同步，不是重新入库**，
-  不要把 SkillVault 远端写成该技能的上游。
+- 来源记录绑定技能的**上游仓库**。技能进入唯一 SkillManagerVault，来源/子路径/采用版本用于后续对上游的
+  检查与更新；所有电脑同步同一个 SkillManagerVault，**另一台电脑拉取是库同步，不是重新入库**，
+  不要把 SkillManagerVault 远端写成该技能的上游。
 
 ### 3.5 其他共享文件
 
@@ -244,7 +246,7 @@ skill-manager skill update-repo <repo-url> [--include-new <subpath,…> --domain
 skill-manager skill skip|unskip <ref> | skill-manager skill skipped
 
 # 部署与同步
-skill-manager deploy to <target> <ref>… [--also-target <target>…] [--dry-run]
+skill-manager deploy to <target> <ref>… [--also-target <target>…]
 skill-manager deploy sync [--ref <ref>] [--target <target>] [--overwrite-local]
 skill-manager deploy status [--target <target>] [--paused]
 skill-manager sync pull | sync push | sync status | sync conflicts

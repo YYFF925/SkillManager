@@ -37,7 +37,7 @@ impl Env {
     }
 
     fn resolver(&self) -> TargetResolver<'static> {
-        let mut resolver = TargetResolver::new(self.home.clone(), AgentCatalog::embedded(), None);
+        let mut resolver = TargetResolver::new(self.home.clone(), AgentCatalog::embedded());
         let dirs: Vec<(String, PathBuf)> = self
             .state
             .agents()
@@ -70,7 +70,7 @@ impl Env {
     fn deploy(&self, resolver: &TargetResolver<'static>, reference: &SkillRef, target: Target) {
         let service = DeploymentService::new(self.vault.clone(), resolver, &self.state);
         let report = service
-            .deploy_to(std::slice::from_ref(reference), std::slice::from_ref(&target), false)
+            .deploy_to(std::slice::from_ref(reference), std::slice::from_ref(&target))
             .unwrap();
         assert!(report.failures.is_empty(), "{:?}", report.failures);
     }

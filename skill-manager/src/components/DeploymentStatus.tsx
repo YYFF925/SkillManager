@@ -4,10 +4,20 @@
  * 部署记录与警告来自本机状态与 core 准入；前端只做亮暗与文案组织，
  * 不提供差异合并界面；暂停项只提示并可复制定位信息交给 Agent 处理。
  */
+import { useEffect, useState } from "react";
 import { Copy, Info } from "lucide-react";
 
-import type { AgentView, DeploymentStatusView, Domain } from "../services/client";
-import { normalizeTarget, targetLabel, targetOptions } from "../lib/targets";
+import {
+  deployStatus,
+  deployTo,
+  deployUndo,
+  type AgentView,
+  type DeploymentStatusView,
+  type Domain,
+} from "../services/client";
+import { type TargetOption, normalizeTarget, SHARED_TARGET, targetLabel, targetOptions } from "../lib/targets";
+import { AgentIcon } from "./QuickDeploy";
+import { FastTooltip } from "./FastTooltip";
 import { Badge, Button, Notice } from "./ui";
 
 export interface DeploymentStatusProps {
@@ -17,6 +27,8 @@ export interface DeploymentStatusProps {
   records: DeploymentStatusView[];
   agents: AgentView[];
   onNotice?: (message: string) => void;
+  /** 直接部署/撤销后通知父页面刷新本机记录。 */
+  onChanged?: () => void | Promise<void>;
 }
 
 export function DeploymentStatus({
@@ -25,23 +37,40 @@ export function DeploymentStatus({
   records,
   agents,
   onNotice,
+  onChanged,
 }: DeploymentStatusProps) {
-  const mine = records.filter((record) => record.skill === skill);
+  const [currentRecords, setCurrentRecords] = useState(records);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentRecords(records);
+  }, [records]);
+
+  const mine = currentRecords.filter((record) => record.skill === skill);
   // 记录里的目标是 `agent:<key>`，目标选项与 chips 用裸 key；统一后匹配。
   const byTarget = new Map(mine.map((record) => [normalizeTarget(record.target), record]));
-  const options = targetOptions(domain, agents);
+  const options: TargetOption[] =
+    domain === "code"
+      ? [
+          { value: SHARED_TARGET, label: "共享目录", icon: null, invertInDark: false },
+          ...targetOptions(domain, agents),
+        ]
+      : targetOptions(domain, agents);
 
   // 显示本机检测到的目标与已有部署的目标（去重、保持目录顺序）。
-  const shown: { value: string; label: string }[] = [];
+  const shown: TargetOption[] = [];
   for (const option of options) {
-    if (option.detected) {
-      shown.push({ value: option.value, label: option.label });
-    }
+    shown.push(option);
   }
   for (const record of mine) {
     const value = normalizeTarget(record.target);
     if (!shown.some((item) => item.value === value)) {
-      shown.push({ value, label: targetLabel(record.target, agents) });
+      shown.push({
+        value,
+        label: targetLabel(record.target, agents),
+        icon: null,
+        invertInDark: false,
+      });
     }
   }
 
@@ -54,7 +83,7 @@ export function DeploymentStatus({
         `${record.skill} → ${record.target}\n路径：${record.target_path}\n状态：本地副本已被外部修改，覆盖已暂停`,
     );
     const text = [
-      "以下受管部署副本被外部修改，管理器已暂停覆盖；请检查并整理回 SkillVault 后再同步。",
+      "以下受管部署副本被外部修改，管理器已暂停覆盖；请检查并整理回 SkillManagerVault 后再同步。",
       ...lines,
     ].join("\n\n");
     try {
@@ -62,6 +91,39 @@ export function DeploymentStatus({
       onNotice?.(`已复制 ${paused.length} 项暂停部署的定位信息，可交给 Agent 检查。`);
     } catch (err) {
       onNotice?.(`复制失败：${String(err)}`);
+    }
+  }
+
+  async function toggle(item: TargetOption) {
+    if (busy !== null) {
+      return;
+    }
+    const record = byTarget.get(item.value);
+    setBusy(item.value);
+    try {
+      const result = record
+        ? await deployUndo(item.value, [skill])
+        : await deployTo(item.value, [skill]);
+      const messages = [
+        ...result.errors.map((entry) => entry.message),
+        ...result.items.flatMap((entry) => (entry.message ? [entry.message] : [])),
+      ];
+      const next = await deployStatus();
+      setCurrentRecords(next);
+      await onChanged?.();
+      if (messages.length > 0) {
+        onNotice?.(messages.join("\n"));
+      } else {
+        onNotice?.(
+          record
+            ? `已从 ${item.label} 撤销部署：${skill}`
+            : `已部署到 ${item.label}：${skill}`,
+        );
+      }
+    } catch (err) {
+      onNotice?.(String(err));
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -76,42 +138,37 @@ export function DeploymentStatus({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1.5 rounded-[10px] border border-line p-3.5">
         {shown.map((item) => {
           const record = byTarget.get(item.value);
           const deployed = record !== undefined;
           const warned = record?.warning !== undefined;
           return (
-            <span
-              key={item.value}
-              title={
-                record
-                  ? `${item.label} · ${record.target_path}${record.warning ? ` · ${record.warning}` : ""}`
-                  : `${item.label} · 未部署`
-              }
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[12px] ${
-                deployed
-                  ? warned
-                    ? "border-warn bg-warn-soft text-ink-2 shadow-[0_0_0_1px_var(--c-warn)]"
-                    : "border-accent-line bg-accent-soft font-medium text-accent"
-                  : "border-line-soft bg-subtle text-faint opacity-70"
-              }`}
-            >
-              <span
-                className={`size-1.5 rounded-full ${
-                  deployed ? (warned ? "bg-warn" : "bg-accent-light") : "bg-faint"
+            <FastTooltip key={item.value} label={item.label}>
+              <button
+                type="button"
+                disabled={busy !== null}
+                aria-label={`${item.label} · ${deployed ? "已部署，点击撤销" : "未部署，点击部署"}`}
+                onClick={() => void toggle(item)}
+                className={`relative grid size-8 place-items-center rounded-lg border transition-colors hover:bg-hover disabled:cursor-default ${
+                  deployed
+                    ? warned
+                      ? "border-warn bg-warn-soft text-ink-2 shadow-[0_0_0_1px_var(--c-warn)]"
+                      : "border-accent-line bg-accent-soft text-accent"
+                    : "border-line-soft bg-subtle text-faint opacity-70"
                 }`}
-              />
-              {item.label}
-              {deployed && <span>{warned ? "！" : ""}</span>}
-            </span>
+              >
+                <AgentIcon option={item} />
+                {deployed && warned && (
+                  <span className="absolute -top-1 -right-1 grid size-3.5 place-items-center rounded-full bg-warn text-[9px] text-white">
+                    !
+                  </span>
+                )}
+              </button>
+            </FastTooltip>
           );
         })}
       </div>
-      <p className="text-[12px] text-faint">
-        亮色：已部署 · 灰暗：未部署{warnings.length > 0 ? " · 感叹号：已有部署因支持范围收窄不再适用" : ""}
-      </p>
-
       {warnings.map((record) => (
         <p key={`${record.target}:${record.target_path}`} className="text-[12px] text-ink-3">
           {targetLabel(record.target, agents)}：{record.warning}（{record.target_path}）
@@ -120,7 +177,7 @@ export function DeploymentStatus({
 
       {paused.length > 0 && (
         <Notice tone="warn">
-          有 {paused.length} 项受管副本被外部修改，覆盖已暂停；请在目标目录检查后整理回 SkillVault，
+          有 {paused.length} 项受管副本被外部修改，覆盖已暂停；请在目标目录检查后整理回 SkillManagerVault，
           或由 Agent 裁决后显式按库覆盖。
         </Notice>
       )}

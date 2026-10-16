@@ -118,7 +118,6 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
   return (
     <Dialog
       title={`配套 Skill 入库 · ${data.slug}`}
-      subtitle="进入技能库统一维护；入库不会自动部署到 Agent 或 Hermes 档案。"
       width="w-[880px]"
       onClose={onClose}
       footer={
@@ -258,12 +257,6 @@ export function ToolSkillCandidates({ data, onClose, onDone }: ToolSkillCandidat
         </Field>
       </div>
 
-      <div className="mt-3.5">
-        <Notice>
-          仅勾选的 Skill 会入库；下方管理资料只用于本次所选技能。入库不部署，工具版本与 Skill
-          来源版本互不代表对方已更新。
-        </Notice>
-      </div>
     </Dialog>
   );
 }

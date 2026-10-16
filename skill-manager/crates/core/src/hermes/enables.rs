@@ -78,6 +78,7 @@ pub(crate) fn create_dir_symlink(target: &Path, link: &Path) -> std::io::Result<
 #[derive(Clone, Debug, Serialize)]
 pub struct ProfileView {
     pub name: String,
+    pub display_name: Option<String>,
     pub kind: &'static str,
     pub path: String,
     pub skills_dir: String,
@@ -148,7 +149,7 @@ pub struct HermesItem {
     pub message: Option<String>,
 }
 
-/// 档案服务：绑定 Hermes 根、SkillVault 与本机状态。
+/// 档案服务：绑定 Hermes 根、SkillManagerVault 与本机状态。
 pub struct HermesService<'a> {
     root: PathBuf,
     vault_root: Option<PathBuf>,
@@ -233,6 +234,7 @@ impl<'a> HermesService<'a> {
             let enabled_count = self.enabled_count(&info);
             out.push(ProfileView {
                 name: info.name.clone(),
+                display_name: info.display_name.clone(),
                 kind: info.kind.as_str(),
                 path: info.home.display().to_string(),
                 skills_dir: info.skills_dir.display().to_string(),
@@ -381,7 +383,7 @@ impl<'a> HermesService<'a> {
             ));
         }
         let library = self.library()?.ok_or_else(|| {
-            CoreError::other("尚未接入 SkillVault：档案启用需要库内技能内容")
+            CoreError::other("尚未接入 SkillManagerVault：档案启用需要库内技能内容")
         })?;
         let disabled = read_disabled(&info.home);
         let default_dir = self.default_skills_dir();

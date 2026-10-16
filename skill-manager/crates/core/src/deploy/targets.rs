@@ -135,7 +135,7 @@ impl AgentCatalog {
 pub struct TargetResolution {
     pub target: String,
     pub label: String,
-    /// 实际使用路径：Agent 与 Hermes 为目标目录，共享目录为配置的共享路径。
+    /// 实际使用路径：Agent 与 Hermes 为目标目录，共享目录为 `<home>/.agents/skills`。
     pub path: String,
     /// 目标所属域；共享目录属于编码域。
     pub domain: Option<Domain>,
@@ -146,21 +146,15 @@ pub struct TargetResolution {
 pub struct TargetResolver<'a> {
     home: PathBuf,
     catalog: &'a AgentCatalog,
-    shared_dir: Option<PathBuf>,
     /// 本机配置的 Agent 技能目录覆盖（`agents.skills_dir`）；缺省时用内置默认目录。
     agent_dirs: HashMap<String, PathBuf>,
 }
 
 impl<'a> TargetResolver<'a> {
-    pub fn new(
-        home: impl Into<PathBuf>,
-        catalog: &'a AgentCatalog,
-        shared_dir: Option<PathBuf>,
-    ) -> Self {
+    pub fn new(home: impl Into<PathBuf>, catalog: &'a AgentCatalog) -> Self {
         Self {
             home: home.into(),
             catalog,
-            shared_dir,
             agent_dirs: HashMap::new(),
         }
     }
@@ -187,7 +181,7 @@ impl<'a> TargetResolver<'a> {
             .unwrap_or_else(|| entry.default_skills_dir(&self.home)))
     }
 
-    /// 用内置名单与设置中的共享目录解析目标路径。
+    /// 用内置名单与当前用户主目录解析目标路径。
     pub fn resolve(&self, target: &Target) -> Result<TargetResolution> {
         self.resolve_with_override(target, None)
     }
@@ -216,11 +210,7 @@ impl<'a> TargetResolver<'a> {
                 })
             }
             Target::Shared => {
-                let dir = self.shared_dir.as_ref().ok_or_else(|| {
-                    CoreError::InvalidTarget(
-                        "尚未设置共享目录路径（shared 是部署目标，不是第二个管理库）".to_string(),
-                    )
-                })?;
+                let dir = shared_skills_dir(&self.home);
                 Ok(TargetResolution {
                     target: target.as_str(),
                     label: "共享目录".to_string(),
@@ -277,6 +267,11 @@ impl<'a> TargetResolver<'a> {
 /// 共享目录目标的固定标识。
 pub const SHARED_TARGET: Target = Target::Shared;
 
+/// 共享部署目录：按系统解析的用户主目录定位，无可写路径设置。
+pub fn shared_skills_dir(home: &Path) -> PathBuf {
+    home.join(".agents").join("skills")
+}
+
 /// 解析 CLI/GUI 传入的目标参数：Agent key、`shared` 或 `hermes:default`。
 pub fn parse_target_arg(raw: &str) -> Result<Target> {
     let trimmed = raw.trim();
@@ -309,7 +304,7 @@ mod tests {
     fn detection_is_path_existence_only() {
         let home = tempfile::TempDir::new().unwrap();
         let catalog = AgentCatalog::embedded();
-        let resolver = TargetResolver::new(home.path(), catalog, None);
+        let resolver = TargetResolver::new(home.path(), catalog);
         assert!(resolver.detected().is_empty());
 
         std::fs::create_dir_all(home.path().join(".codex")).unwrap();
@@ -322,7 +317,7 @@ mod tests {
     fn agent_skills_dir_uses_catalog_path_and_override() {
         let home = tempfile::TempDir::new().unwrap();
         let catalog = AgentCatalog::embedded();
-        let resolver = TargetResolver::new(home.path(), catalog, None);
+        let resolver = TargetResolver::new(home.path(), catalog);
 
         let target = Target::Agent {
             key: "codex".to_string(),
@@ -338,20 +333,14 @@ mod tests {
     }
 
     #[test]
-    fn shared_requires_configured_dir_and_belongs_to_code() {
+    fn shared_uses_home_without_creating_directory_and_belongs_to_code() {
         let home = tempfile::TempDir::new().unwrap();
         let catalog = AgentCatalog::embedded();
-        let without = TargetResolver::new(home.path(), catalog, None);
-        let err = without.resolve(&SHARED_TARGET).unwrap_err();
-        assert!(err.to_string().contains("共享目录"), "{err}");
-
-        let with = TargetResolver::new(
-            home.path(),
-            catalog,
-            Some(PathBuf::from("/shared/skills")),
-        );
-        let resolved = with.resolve(&SHARED_TARGET).unwrap();
-        assert_eq!(resolved.path, "/shared/skills");
+        let resolver = TargetResolver::new(home.path(), catalog);
+        let resolved = resolver.resolve(&SHARED_TARGET).unwrap();
+        let expected = home.path().join(".agents").join("skills");
+        assert_eq!(PathBuf::from(resolved.path), expected);
+        assert!(!expected.exists(), "路径识别不应创建目录");
         assert_eq!(resolved.domain, Some(Domain::Code));
     }
 
@@ -359,7 +348,7 @@ mod tests {
     fn hermes_default_is_lobster_domain() {
         let home = tempfile::TempDir::new().unwrap();
         let catalog = AgentCatalog::embedded();
-        let resolver = TargetResolver::new(home.path(), catalog, None);
+        let resolver = TargetResolver::new(home.path(), catalog);
         let resolved = resolver.resolve(&Target::HermesDefault).unwrap();
         assert_eq!(resolved.domain, Some(Domain::Lobster));
         assert!(resolved.path.contains("hermes"), "{}", resolved.path);
@@ -369,7 +358,7 @@ mod tests {
     fn unknown_agent_key_is_reported() {
         let home = tempfile::TempDir::new().unwrap();
         let catalog = AgentCatalog::embedded();
-        let resolver = TargetResolver::new(home.path(), catalog, None);
+        let resolver = TargetResolver::new(home.path(), catalog);
         let err = resolver
             .resolve(&Target::Agent {
                 key: "nope".to_string(),

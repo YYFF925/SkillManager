@@ -6,7 +6,7 @@
 
 ## Summary
 
-构建 Skill Manager v1 桌面应用：以用户已有 SkillVault（Git 仓库）为唯一技能内容真值源，Rust 核心承载库管理、部署合成、上游更新、跨机同步与工具中心业务，GUI（Tauri 2 + React/TypeScript）与 CLI（clap）双入口共用同一核心，本机状态（部署记录、档案启用、Agent 配置、设置、工具安装记录）存 SQLite，共享资产零入库、不做文件镜像。
+构建 Skill Manager v1 桌面应用：以用户已有 SkillManagerVault（Git 仓库）为唯一技能内容真值源，Rust 核心承载库管理、部署合成、上游更新、跨机同步与工具中心业务，GUI（Tauri 2 + React/TypeScript）与 CLI（clap）双入口共用同一核心，本机状态（部署记录、档案启用、Agent 配置、设置、工具安装记录）存 SQLite，共享资产零入库、不做文件镜像。
 
 实施资料分两类使用：技术实现先按 [技术参考索引](../../docs/technical-reference/README.md)定位对应主题，复用已提取的数据、素材与适用实现经验，不继承旧业务或旧架构；GUI 按 [原型页面与效果图索引](../001-skill-management-prototype/ui-prototype/README.md)、[视觉说明](../001-skill-management-prototype/visual-reference.md)和[交互细节](../001-skill-management-prototype/ui-interaction-audit.md)实现，必要时操作同目录 `index.html` 核对动态效果。原型是正式界面的视觉与交互验收基线，各期按 quickstart 对照，不以原型使用 HTML 或模拟状态为由另做一套界面；业务差异按 spec.md 处理并记录。
 
@@ -25,7 +25,7 @@
 
 **Primary Dependencies**: Tauri 2、Vite、Tailwind CSS、clap、rusqlite（bundled）、notify（文件监听）、git2 不使用——仓库操作调用本机 `git` 命令（用户裁决：不内置 Git 引擎）
 
-**Storage**: 共享资产 = SkillVault 内文件（技能目录 + `.manager/`、预设定义文件、指令源文件、工具资料文件，随库 Git 同步）；本机状态 = SQLite（`skill-manager.db`，仅本机状态表，见 data-model.md）
+**Storage**: 共享资产 = SkillManagerVault 内文件（技能目录 + `.manager/`、预设定义文件、指令源文件、工具资料文件，随库 Git 同步）；本机状态 = SQLite（`skill-manager.db`，仅本机状态表，见 data-model.md）
 
 **Testing**: cargo test（核心业务）、Vitest + React Testing Library（前端交互）、CLI 端到端验收（对照 quickstart.md 场景）
 
@@ -35,7 +35,7 @@
 
 **Performance Goals**: 几十至几百技能规模下记录启动扫描与浏览/筛选的实际耗时；文件为真值、浏览使用内存索引。不将未确认的“<1s”“微秒级”作为产品承诺或验收门槛，不预建数据库镜像或性能机制。
 
-**Constraints**: 首次接入必须选择已有本地 SkillVault；Git 认证复用本机配置；界面仅简体中文
+**Constraints**: 首次接入必须选择已有本地 SkillManagerVault；Git 认证复用本机配置；界面仅简体中文
 
 **Scale/Scope**: 单用户个人库（几十至几百技能）、约 50 个内置 Agent 目标、单机运行
 
@@ -46,9 +46,9 @@
 | 原则 | 对照结论 |
 |---|---|
 | I. 用户对能力的掌控优先 | 规格全部状态表达诚实条款（SC-004）直译为实现约束：检查/任务/同步状态不得冒充完成。设计无违背 |
-| II. SkillVault 是统一维护中心 | 真值全部在库文件；SQLite 只存本机状态且不做镜像——比旧项目更贴合。通过 |
+| II. SkillManagerVault 是统一维护中心 | 真值全部在库文件；SQLite 只存本机状态且不做镜像——比旧项目更贴合。通过 |
 | III. 管理能力可持续维护 | `.manager` 字段即项、可由 GUI/CLI/Agent 直接读写、未知字段保留写回。通过 |
-| IV. 维护成果与上游更新共存 | 同项上游值优先按管理资料字段粒度落地；来源记录绑定技能上游并随 SkillVault 共享，库同步不重新绑定。通过 |
+| IV. 维护成果与上游更新共存 | 同项上游值优先按管理资料字段粒度落地；来源记录绑定技能上游并随 SkillManagerVault 共享，库同步不重新绑定。通过 |
 | V. GUI 与 Agent 同一规则 | 单一 Rust 核心、双壳调用；CLI 按 FR-050 清单全覆盖（contracts/cli.md 对照表）。通过 |
 | VI. 最小充分控制复杂度 | 已裁决删除：改动归属跟踪、ID 体系、sidecar 镜像、DB 迁移体系（文件格式无迁移）、自动发现。通过 |
 
@@ -86,7 +86,7 @@ skill-manager/
 ├── crates/
 │   ├── core/                # 业务核心（无 UI 依赖）：库扫描、.manager、部署合成、
 │   │   └── src/             #   上游更新、同步、工具中心、状态存储
-│   │       ├── vault/       #   SkillVault 接入、目录模型、内存索引、文件监听
+│   │       ├── vault/       #   SkillManagerVault 接入、目录模型、内存索引、文件监听
 │   │       ├── manager/     #   .manager 读写与字段合并
 │   │       ├── deploy/      #   部署合成（overlay+注释）、目标管理、同步
 │   │       ├── upstream/    #   来源获取、检查、更新、新增候选、跳过
@@ -116,8 +116,8 @@ skill-manager/
 
 | 期 | 内容 | 覆盖 FR | 收尾检查 |
 |---|---|---|---|
-| M1 底座 | workspace 骨架、SkillVault 接入、扫描与内存索引、`.manager` 读写、文件监听、CLI `skill` 查询与资料命令、GUI 技能库（浏览/搜索/筛选/详情/资料编辑） | FR-001~010（库组织与管理资料） | US1 现有库维护场景；获取入口同名在 M3、真实部署位置在 M2、来源变化提示在 M3 补验，不提前报告 US1 全部通过 |
-| M2 部署 | Agent 检测/目录/启停、部署合成、SQLite 部署记录、已有部署同步、撤销、dry-run、共享目录、Hermes default 与档案启用/收编 | FR-016~022、FR-026~028、FR-041~042 | US3 + US6 场景；SC-003 抽查；预设入口在 M5 补验 |
+| M1 底座 | workspace 骨架、SkillManagerVault 接入、扫描与内存索引、`.manager` 读写、文件监听、CLI `skill` 查询与资料命令、GUI 技能库（浏览/搜索/筛选/详情/资料编辑） | FR-001~010（库组织与管理资料） | US1 现有库维护场景；获取入口同名在 M3、真实部署位置在 M2、来源变化提示在 M3 补验，不提前报告 US1 全部通过 |
+| M2 部署 | Agent 检测/目录/启停、部署合成、SQLite 部署记录、已有部署同步、撤销、共享目录、Hermes default 与档案启用/收编 | FR-016~022、FR-026~028、FR-041~042 | US3 + US6 场景；SC-003 抽查；预设入口在 M5 补验 |
 | M3 获取与上游 | 上游入库（进度/取消/分类规则/继承）、收编（接管/批量）、自建创建、仓库级检查（跨域一次/周期）、变化展示、单项/批量更新、同项合并、新增候选、跳过版本、删除清理 | FR-011~015（获取部分）、FR-029~035 | US2 + US4 场景；SC-008 实测 |
 | M4 同步与指令 | 拉取（静默/部署与已有指令目标刷新/冲突暂停/断连态）、上传两路径（全量提交语义）、指令源编辑/拼接/分发 | FR-036~040、FR-043 | US5 + US8 场景；SC-006 双机模拟 |
 | M5 预设/工具/收尾 | 预设全链路、工具中心全链路（登记/检查命令/任务/回写/配套 Skill/未安装展示）、任务书含配套 Skill 指引、配套维护 Skill 编写并从本仓库远端入库、设置页、主题/字号、托盘、诊断、容量 | FR-016~025（预设）、FR-044~054 | US7/9/10 + SC-001 完整旅程 |
@@ -128,7 +128,7 @@ skill-manager/
 
 **代码入口**：`skill-manager/`（Cargo workspace：`crates/core` 业务核心、`crates/cli` clap 命令、
 `src-tauri` Tauri 2 壳、`src/` React/TypeScript 前端）。开发、构建、测试与 CLI 用法见
-[skill-manager/README.md](../../skill-manager/README.md)。SkillVault 是共享内容真值；
+[skill-manager/README.md](../../skill-manager/README.md)。SkillManagerVault 是共享内容真值；
 本机状态在 SQLite `skill-manager.db`（macOS：`~/Library/Application Support/SkillManager/`），
 CLI 用 `--vault` / `--state-dir` 覆盖，可在一台机器上模拟两台电脑。
 
@@ -171,14 +171,14 @@ CLI 用 `--vault` / `--state-dir` 覆盖，可在一台机器上模拟两台电�
 
 | 类别 | 项 | 依据 |
 |---|---|---|
-| 必须 CLI 可写 | `shared_dir`（`shared` 部署目标前置）、`auto_check_minutes`（FR-029 三项共用周期） | 缺前者则无 GUI 的机器无法完成共享目录部署；缺后者 Agent 无法按用户指令调整自动检查 |
+| 必须 CLI 可写 | `auto_check_minutes`（FR-029 三项共用周期） | Agent 需能按用户指令调整自动检查；共享目录改为按当前用户主目录自动识别，不是配置前置 |
 | 必须 CLI 可读 | 全部运行配置与调度事实（含仅 GUI 写入的 `theme`、`font_scale`、`git_auto_push`） | Agent 需能解释当前行为（例如为何未自动检查） |
 | 不提供 CLI 写 | `theme`、`font_scale`（界面偏好）、`git_auto_push`（上传长期授权） | 界面偏好不改变管理结果；长期上传授权只能由用户在 GUI 给出（FR-038） |
 | 有意单侧 | 工具本机安装事实回写（只有 CLI） | FR-047/FR-050 明令 GUI 只生成任务 |
 | 清理 | 自定义日志目录（删除）、Hermes 根（改按 `HERMES_HOME` 与平台默认解析） | 两键无任何写入点；可写 Hermes 根会与 Hermes 自身定位规则分叉 |
 
 **契约取法（最小充分）**：新增单一 `settings` 命令组 = 一条读命令（读全部配置与调度事实）
-\+ 两个写命令（共享目录、检查频率）+ 两条只读报告（诊断、容量）。**不新增组合调度命令**——
+\+ 一个写命令（检查频率）+ 两条只读报告（诊断、容量）。**不新增组合调度命令**——
 CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` 分别表达 FR-029 的三项。
 
 **本次规划变更的文件**：`spec.md`（FR-029/050/052/053 与 Clarifications）、
@@ -197,9 +197,9 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 目录扫描与受管判定复用 `LocalSkillService`（`deploy/local_skills.rs`），`shared` 的受管判定沿用 `target=shared` 的部署记录。
 
 **不做**：不把共享目录变成可登记 Agent 或第二个管理库（FR-021 已定性）；不在该页增加"从库部署"按钮；
-不为共享目录实现收编（它是部署产物，不是来源）。
+共享目录未受管技能按用户后续修订支持收编，复用既有 `adopt_skills` 与原部署接管，进入编码库，不新增其他目标部署。
 
-**契约取法**：扩展现有 `agent local-skills` / `agent delete-local` 的取值（`<target>` = 内置 Agent key、`shared` 或 `hermes:default`），
+**契约取法**：扩展现有 `agent local-skills` / `agent delete-local` 的取值，并以 `agent read-local` 阅读实际本机副本（`<target>` = 内置 Agent key、`shared` 或 `hermes:default`），
 不新开命令组——该能力与 Agent 目录同构，新开面只会制造两条平行入口。
 
 **本次规划变更的文件**：`docs/requirements.md`（新增"共享目录技能浏览"一节）、
@@ -221,7 +221,7 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 **刻意不做（附理由）**：
 - **「打开文件夹」**：原型自身是模拟控件（`index.html:840` 明确"原型不调用系统文件管理器"，只弹路径列表）。实现真实打开目录需新增 Tauri opener 依赖与权限，收益不成立，故不做。
 - **「托盘／菜单栏图标」开关**：原型的开关"仅改变模拟状态"，实现也没有对应设置键（托盘行为是固定的"关闭收起到托盘"）。按只读呈现，不新增设置键与能力。
-- **「更改目录」（更换 SkillVault）**：原型是模拟目录对话框，但这条在实现里是**真实能力缺口**（库接入后 GUI 无换库入口）。先不动，因为"换库后本机状态（部署记录／Hermes 启用／工具记录）怎么处理"没有文档依据，待用户裁决后再入规格。
+- **「更改目录」（更换 SkillManagerVault）**：原型是模拟目录对话框，但这条在实现里是**真实能力缺口**（库接入后 GUI 无换库入口）。先不动，因为"换库后本机状态（部署记录／Hermes 启用／工具记录）怎么处理"没有文档依据，待用户裁决后再入规格。
 
 **本次规划变更的文件**：`spec.md`（FR-041 补位置、新增 FR-056/FR-057）、`tasks.md`（Phase 17，T109～T114）。
 
@@ -229,8 +229,32 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 
 - 本次评审记录位于 `checklists/readiness.md`，勾选只表示需求文字质量通过，不表示代码、远端或第三方协议已验证。
 - 已确认行为的技术细节可在对应设计任务先落定再实现：T011 译文时效的存储；T021 覆盖层顺序/注释格式/暂停处置；T030 获取缓存/取消；T050 GUI 自动上传确认记录；T056 当前 Hermes 协议；T074 非标准版本比较。不能以存在任务代替这些设计已经完成。
-- SkillVault 是各电脑同步的同一技能库，上游仓库是技能检查与获取更新的来源；来源记录随 SkillVault 共享，不因另一机拉取而重新绑定。质检中把这两者混同所产生的“来源冲突”已撤销，不是业务待决项。用户已确认拉取到指令源变化后按本机已有启用配置自动刷新指令目标，CHK026 已收口；第三方协议查证是设计工作，不要求用户替 Agent 调查。
+- SkillManagerVault 是各电脑同步的同一技能库，上游仓库是技能检查与获取更新的来源；来源记录随 SkillManagerVault 共享，不因另一机拉取而重新绑定。质检中把这两者混同所产生的“来源冲突”已撤销，不是业务待决项。用户已确认拉取到指令源变化后按本机已有启用配置自动刷新指令目标，CHK026 已收口；第三方协议查证是设计工作，不要求用户替 Agent 调查。
 
 ## Complexity Tracking
 
 > 无宪章违背项需辩护。所有"新增复杂度"裁决均已在规格 Clarifications 与 research.md 记录理由；被拒绝的复杂方案（ID 体系、改动归属账本、sidecar 镜像、DB migration 链、路径级提交拆分）记录于 research.md 供回溯。
+
+
+## 共享目录自动识别修订（2026-10-16）
+
+依据用户最新要求及 FR-021/042/050/055/056，共享目标由 core 统一按系统当前用户主目录解析 `.agents/skills`。移除 SQLite 路径设置、CLI 写命令、Tauri 写命令及设置页/部署弹窗的路径编辑；不保留旧路径兼容或迁移。`settings get shared_dir` 与设置页只读展示同一结果，目标浏览直接复用目录服务，不存在时为空且不创建，首次部署沿用现有目录创建逻辑。
+
+本机技能交互后续修订：空列表留白并移除底部解释；共享目录未受管技能复用收编与部署接管；`LocalSkillService::read` 通过 CLI 与 Tauri 共用，读取实际本机副本和目录内文件，GUI 用只读详情呈现，受管项可前往库内管理。文件阅读沿用现有路径边界，避免文件参数读到技能目录外的私人文件。全局基础样式统一可用控件的手型光标，卡片保留独立的勾选、收编、复制与删除动作，避免点击动作误开详情。
+
+## 部署交互修订（2026-10-16）
+
+部署交互后续修订（2026-10-16）：GUI 目标选择仅展示同域 `detected && enabled` 的 Agent。弹窗载入本机部署记录作为基线，逐目标保留多技能部分部署状态，用户点击改变期望状态，「保存」将差量分为部署和撤销并调用现有 core 操作；部分失败保留结果且更新成功项基线，重试不重复成功项。预设复用同一弹窗。各技能卡片复用快捷部署图标，点击即时执行并刷新真实记录。移除前后端、CLI 的预演参数与分支；共享目录及 Hermes default 仍可通过显式 CLI 目标管理。清理常驻规则说明，保留真实错误、必要状态和操作影响（FR-014/021/052）。
+
+## 界面细节修订（2026-10-17）
+
+本轮不改变部署与管理数据边界，只修订 FR-010/021/026 对应的界面表现：
+
+- 技能库内容最大宽调整为约 1440px、分类列 132px，让宽窗口卡片获得更多横向空间；快捷部署图标保持紧凑右对齐。
+- 编码库技能卡片快捷部署同时包含共享 Agent 目标；悬浮提示即时显示目标名，不附加“部署到/撤销部署”。
+- 技能详情正文使用结构化 Markdown 阅读视图；页签和阅读状态控件吸顶；代码块跟随主题。
+- 技能详情「文件与部署」目标区域只显示可点击图标；移除「本机已有部署」标题、页脚重复部署按钮、管理专用目录说明；来源页不重复展示库内位置。
+- Hermes 档案选择显示 `profile.yaml` / `SOUL.md` 推导的 bot 显示名，回退目录 id；移除下拉底部说明。
+- 系统 `.app` 图标改用老项目 `FeiSkillDock` 的多尺寸 Tauri 图标集。
+
+逐项交付、测试和 GUI 证据见 `checklists/m6-report.md` 第十三～十八节；现行行为以 `spec.md`、`docs/requirements.md` 与实现为准。

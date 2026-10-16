@@ -20,7 +20,7 @@ pub struct VaultWatcher {
 }
 
 impl VaultWatcher {
-    /// 递归监听 SkillVault；每次相关事件后重建索引并调用 `on_change`。
+    /// 递归监听 SkillManagerVault；每次相关事件后重建索引并调用 `on_change`。
     ///
     /// 回调运行在 notify 的事件线程上，应尽快返回（GUI 侧仅转发事件）。
     pub fn start<F>(root: impl AsRef<Path>, on_change: F) -> Result<Self>

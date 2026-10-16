@@ -23,38 +23,38 @@
 | A11 | 保留 | 外部修改技能内容、管理资料或目录后自动刷新库内显示，无需重启；部署生效另已确认 GUI 保存自动同步、Agent 编辑后调用 CLI 同步。 |
 | A12 | 移除 | 用户没有单独导出技能的需求，不提供技能目录导出功能。 |
 | B01 | 双库独立，同库名称唯一 | Code／Lobster 分域，可跨库同名；同库内创建、入库、收编、复制遇到同名应提示并阻止，不因分类不同允许重名。 |
-| B02 | 调整 | 选择已有本地 SkillVault 仓库，只管理这一根目录，不另存中央库内容，不提供远端克隆首次接入。code/ 与 lobster/ 是同一库内两个管理域，现行布局与职责见 002 spec/data-model。 |
-| B03 | 移除 | 不提供普通本地技能文件夹、ZIP 或 .skill 压缩包添加入口；自建技能由 Agent 按规范写入 SkillVault。 |
+| B02 | 调整 | 选择已有本地 SkillManagerVault 仓库，只管理这一根目录，不另存中央库内容，不提供远端克隆首次接入。code/ 与 lobster/ 是同一库内两个管理域，现行布局与职责见 002 spec/data-model。 |
+| B03 | 移除 | 不提供普通本地技能文件夹、ZIP 或 .skill 压缩包添加入口；自建技能由 Agent 按规范写入 SkillManagerVault。 |
 | B04 | 移除 | 不提供扫描普通目录批量导入的独立入口；Agent 已有技能的单项/批量收编仍保留。 |
-| B05 | 普通目录入库，SkillVault 统一管理版本 | 技能及 .manager 以普通目录入库；来源按仓库检查，2026-10-15 最新要求同时支持单技能与仓库批量更新，各技能记录采用版本。分类、新增选择、改名按删除＋新增及只提交自己库等边界保留。 |
+| B05 | 普通目录入库，SkillManagerVault 统一管理版本 | 技能及 .manager 以普通目录入库；来源按仓库检查，2026-10-15 最新要求同时支持单技能与仓库批量更新，各技能记录采用版本。分类、新增选择、改名按删除＋新增及只提交自己库等边界保留。 |
 | B06 | 保留分类与资料配置，移除入库改名 | 多技能仓库默认以仓库名分类，可修改；Agent 与用户确认后传入 CLI，单技能仓库不自动分类。保留原名；资料继承与后续维护按 002 FR-005/011/012 及入库单页要求处理，不把早期“待讨论”当作禁止补充资料。 |
 | B07 | 移除 | 不保留内置在线技能市场，包括市场浏览、排行榜、在线搜索和市场获取入口。 |
-| B08 | 保留并调整 | 支持单项/批量收编并接管原部署，补充各技能资料；GUI 与 CLI 同规则。正式修改在 SkillVault，保存后 Agent 调 CLI 同步；不强制补来源，当前无专用来源绑定/重绑入口，来源和后续检查按 002 现行规则。 |
+| B08 | 保留并调整 | 支持单项/批量收编并接管原部署，补充各技能资料；GUI 与 CLI 同规则。正式修改在 SkillManagerVault，保存后 Agent 调 CLI 同步；不强制补来源，当前无专用来源绑定/重绑入口，来源和后续检查按 002 现行规则。 |
 | B10 | 保留并改进实际获取体验 | 获取时显示实际下载进度并允许取消。用户反馈旧版看不到进度条、较大仓库经常失败；大仓库获取需验证，失败根因未诊断，不照搬旧实现作为已验收方案。 |
-| B11 | 已有本地 Git 库接入，复用本机认证 | SkillVault 须已有本地仓库及远端，沿用本地 Git 远端/分支及既有认证，不另存应用专用远端/分支，不提供独立登录授权。 |
-| C01 | 保留并调整为仓库级检查及新增发现 | GUI 显示更新/新增数量和更新标记；新增专指已登记来源仓库后来出现的技能，点击按仓库展示供用户选择。决定不入库的下次不再提示，决定随 SkillVault 同步。CLI 支持全库检查供 Agent 汇总、用户裁决；报告格式待设计。 |
+| B11 | 已有本地 Git 库接入，复用本机认证 | SkillManagerVault 须已有本地仓库及远端，沿用本地 Git 远端/分支及既有认证，不另存应用专用远端/分支，不提供独立登录授权。 |
+| C01 | 保留并调整为仓库级检查及新增发现 | GUI 显示更新/新增数量和更新标记；新增专指已登记来源仓库后来出现的技能，点击按仓库展示供用户选择。决定不入库的下次不再提示，决定随 SkillManagerVault 同步。CLI 支持全库检查供 Agent 汇总、用户裁决；报告格式待设计。 |
 | C02 | 保留单技能及仓库批量更新 | 最新要求替代此前仅做整批更新：单项确认只更新所选条目，其他技能和新增候选保留；仓库确认批量处理剩余变化及选定新增，GUI／CLI 同规则，已更新版本不重复应用。 |
 | C03 | 保留技能与文件变化清单 | 更新前展示新增、删除与内容修改，并列出变化文件；改名按删除与新增展示，不单独识别。不提供专门的逐行差异界面。 |
 | C05 | 当前不提供来源绑定／重绑 | 来源迁至 Gitea 等仓库后重新从该仓库导入，不通过修改既有条目的来源完成。 |
-| C07 | 三项检查共用已确认周期 | 上游检查、SkillVault 拉取及工具版本检查共用一个自动检查频率：关闭、30分钟、1小时、6小时、24小时，默认1小时；上游只提示、库无冲突静默拉取，见 002 FR-029/037/046。 |
-| C08 | 上游显式采用，库同步静默拉取 | 全部技能上游（包括用户自维护 Gitea）先展示变化并经用户确认采用；同一 SkillVault 的跨机拉取无冲突静默应用，按与库的关系区分，不按平台或作者身份决定。 |
+| C07 | 三项检查共用已确认周期 | 上游检查、SkillManagerVault 拉取及工具版本检查共用一个自动检查频率：关闭、30分钟、1小时、6小时、24小时，默认1小时；上游只提示、库无冲突静默拉取，见 002 FR-029/037/046。 |
+| C08 | 上游显式采用，库同步静默拉取 | 全部技能上游（包括用户自维护 Gitea）先展示变化并经用户确认采用；同一 SkillManagerVault 的跨机拉取无冲突静默应用，按与库的关系区分，不按平台或作者身份决定。 |
 | D01 | 保留按 Agent 部署及撤销部署 | 库内技能可提供给指定 Agent，也可撤销受管部署；撤销部署不删除库内技能。GUI 与 CLI 均支持。 |
 | D02 | 保留多技能、多 Agent 批量操作 | 可一次选择多个技能部署到多个指定 Agent，也可批量撤销指定 Agent 上的受管部署，库内技能保留；GUI 与 CLI 均支持。具体交互与命令形式后续设计。 |
 | D03 | 当前独立副本，部署不带 .manager | 不提供复制／符号链接切换；副本包含实际文件、Agent/系统覆盖结果及中文注释，不携带 .manager。库内修改后按既定规则同步。属于当前技术方案，不作为永久规格限制。 |
 | D04 | 未受管同名目标直接覆盖 | 部署遇到 Agent 中未受管的同名技能时直接覆盖并接管目标，不做同名冲突检查；不采用暂停同名项、检查和裁决的建议。受管副本修改后的同步处理另见 F01。 |
-| D05 | 保留可选部署预演 | CLI 可报告将部署或撤销的技能、Agent 与目标路径而不修改文件，不要求每次部署先预演。部署状态展示沿用已确认的列表/同步状态要求，具体报告与命令待设计。 |
+| D05 | 取消部署预演 | 2026-10-16 按用户最新要求移除 GUI、CLI 与底层预演功能；实际部署与撤销保留。 |
 | D06 | 更新后同步部署已确认，旧链接修正不沿用 | 库内容更新后同步本机已有部署，按 GUI 保存/Agent 调用 CLI 的已确认规则执行。当前采用独立副本，旧版分类移动后修正符号链接的机制不沿用；移动分类时的具体部署记录维护留到技术设计。 |
-| D07 | 保留共享技能目录部署，要求内容通用 | 共享目标供支持读取该目录的编码 Agent 使用，所有读取它的 Agent 均应支持该技能且可使用相同内容；有 Agent 内容差异时分别部署。SkillVault 是唯一管理库，具体路径及通用性判断待设计，不按存在 overlay 目录机械拒绝。 |
-| D08 | 保留管理域部署边界 | 编码库技能不能直接部署给龙虾 Agent，即使声明支持也须先明确放入 SkillVault 的龙虾技能库，再从该库部署。分库决定部署管理域，不只是展示分类。 |
+| D07 | 保留共享技能目录部署，要求内容通用 | 共享目标供支持读取该目录的编码 Agent 使用，所有读取它的 Agent 均应支持该技能且可使用相同内容；有 Agent 内容差异时分别部署。SkillManagerVault 是唯一管理库，具体路径及通用性判断待设计，不按存在 overlay 目录机械拒绝。 |
+| D08 | 保留管理域部署边界 | 编码库技能不能直接部署给龙虾 Agent，即使声明支持也须先明确放入 SkillManagerVault 的龙虾技能库，再从该库部署。分库决定部署管理域，不只是展示分类。 |
 | D09 | 删除与部署清理规则保留 | 删除库内技能时一并撤销受管部署，包括已批准的上游删除；副本有本地变更时暂停，由 Agent 检查、用户裁决。具体删除入口和批量操作形式待讨论。 |
 | D10 | 保留库间独立复制，保留上游来源 | 内容与 .manager 复制后两份独立维护，不自动部署，保留来源。来源只检查一次；单项更新只影响所选副本，仓库批量更新处理两库剩余相关变化，管理资料遵守上游同项值优先规则。 |
-| E01 | 两库预设分开，组合定义随库同步 | 两库各自维护预设，成员来自对应库，按库区分预设。定义随 SkillVault 跨电脑同步，部署各机独立；具体资料与格式待设计，不沿用旧跨域名称唯一限制。 |
+| E01 | 两库预设分开，组合定义随库同步 | 两库各自维护预设，成员来自对应库，按库区分预设。定义随 SkillManagerVault 跨电脑同步，部署各机独立；具体资料与格式待设计，不沿用旧跨域名称唯一限制。 |
 | E02 | 保留成员管理，编辑组合不自动改变部署 | 预设不移动技能目录，同一技能可加入多个预设。加入成员不自动部署，移出成员不自动撤销部署，明确执行部署/撤销才改变 Agent 中的技能。展示与筛选形式后续设计。 |
 | E03 | 保留预设与成员的手动排序 | 可调整预设及预设内技能的显示顺序，具体交互与保存形式后续设计。 |
 | E04 | 当前不采用互斥预设切换 | 部署预设只增加该组技能，保留已有其他技能；不以整套切换方式撤销新预设以外的受管技能，不引入唯一当前预设槽。 |
 | E05 | 保留 GUI／CLI 按组部署与撤销，不放托盘 | 部署增加成员并保留其他技能；撤销按成员执行，即使成员属于其他预设或单独部署，也撤销，库内技能保留。不追踪部署来源预设。编辑成员只改组合；GUI 主窗口与 CLI 提供操作，不提供托盘预设入口。 |
 | F01 | 保留列表、状态与简单变更处理；专用差异功能不纳入 | 保留 Agent 技能列表、受管绿点、“已同步”“仅本地”和“本地有变更”提示。遇到本地变更暂停该技能覆盖，Agent 自行检查，用户决策；其他无本地变更的技能正常同步。不建设专用 GUI 差异查看、CLI 详细差异命令或内置冲突分析/合并。 |
-| F02 | 保留并调整流程，旧受管上传入口待定 | 未受管技能通过上传图标按钮快速收编。受管技能正式修改直接在 SkillVault 完成；副本改动须经 Agent 检查、用户裁决，由 Agent 将保留改动整理入库并维护相关 .manager，再调用 CLI 同步部署。旧版受管副本独立上传界面入口尚未裁决。 |
+| F02 | 保留并调整流程，旧受管上传入口待定 | 未受管技能通过上传图标按钮快速收编。受管技能正式修改直接在 SkillManagerVault 完成；副本改动须经 Agent 检查、用户裁决，由 Agent 将保留改动整理入库并维护相关 .manager，再调用 CLI 同步部署。旧版受管副本独立上传界面入口尚未裁决。 |
 | F04 | 保留未受管技能删除与受管撤销部署 | Agent 中未受管的本地技能可单项／多选删除实际文件；受管技能撤销部署，保留库内技能。 |
 | F05 | 当前不管理项目专属技能 | 不安排手动项目登记或项目批量扫描；后续有实际需求再讨论。 |
 | F06 | 当前不保留独立目录登记 | 不提供 linked workspace（关联工作区）入口；已知 Agent 的实际技能目录配置、浏览与收编仍保留。 |
@@ -65,24 +65,24 @@
 | G03 | 保留实际技能目录配置 | Agent 使用非默认技能路径时，可在管理器指定其实际目录。设置卡片内悬停显示铅笔，支持行内保存、取消和恢复默认；已有部署记录协调留到正式实现。 |
 | G04 | 保留 Agent 项目技能相对路径配置 | 按 Agent 配置，不按单个项目分别配置；沿用设置卡片的项目相对路径行内编辑，项目技能管理仍后置。 |
 | G05 | 不保留读取声明 | 管理器默认编码 Agent 都读取共享目录，不提供逐 Agent 声明；这是产品处理假设，不等于实际读取能力已验证。技能支持声明仍保留。 |
-| G06 | 单保存指令编辑，按本机配置刷新 | 全局/专属指令源放 SkillVault 共享；单编辑区、单保存，按全局前专属后覆盖本机目标，无独立分发勾选。拉取源变化也刷新本机已有启用目标，路径与启用状态本机保存；技能路径不隐式改变指令路径，见 FR-043。 |
+| G06 | 单保存指令编辑，按本机配置刷新 | 全局/专属指令源放 SkillManagerVault 共享；单编辑区、单保存，按全局前专属后覆盖本机目标，无独立分发勾选。拉取源变化也刷新本机已有启用目标，路径与启用状态本机保存；技能路径不隐式改变指令路径，见 FR-043。 |
 | H01 | 保留本机多档案技能管理，不做档案生命周期 | 重点功能，按一个 Hermes 根目录下多个档案管理，只管本机、不考虑多实例。当前不做档案创建/改名/删除/活动切换，界面选择只用于查看和管理技能。 |
 | H02 | default 候选池、明确启用、收编与普通批量操作 | 保留先部署 default 再按档案启用；名单留本机，新技能不自动在其他档案启用。档案独有技能可收编入库并同时部署 default，原档案启用状态不变；保留普通多选批量启停。暂不做预设分配及档案 SOUL.md 等指令管理。 |
-| I01 | 调整为接入已准备的本地库及远端 | 接入必须已有本地 SkillVault 仓库且已配置远端，软件不提供远端克隆首次接入，沿用本地 Git 配置进行同步。旧独立备份初始化/远端配置流程不作为新接入方案。 |
+| I01 | 调整为接入已准备的本地库及远端 | 接入必须已有本地 SkillManagerVault 仓库且已配置远端，软件不提供远端克隆首次接入，沿用本地 Git 配置进行同步。旧独立备份初始化/远端配置流程不作为新接入方案。 |
 | I02 | 移除独立授权，复用本机 Git 认证 | 用户或 Agent 提前配置认证，管理器复用本机已有的密钥或凭据，不提供独立登录授权界面。 |
 | I03 | Agent 维护后询问上传，保留库同步及已授权上传重试 | 最新裁决：配套维护 Skill 在每次 Agent 修改后主动询问是否上传，未同意不提交推送；CLI 同步部署不等于上传。不是新增常驻 Git 操作面板；已同意的上传失败可重试。 |
 | I04 | 静默拉取；已确认上传提交全工作区 | 库无冲突拉取后刷新本机已有部署/指令目标，新增不首次部署。Agent 每次维护后询问上传；一旦经 GUI 保存既有确认或 Agent 获同意显式上传，提交工作区全部改动，允许混入尚未单独上传的改动，不做归属账本。此为 2026-10-15 后续裁决，替代早期禁止 GUI 顺带上传的表述；后台路径不提交/推送。 |
 | I05 | 移除查看历史与恢复功能，手动备份点入口待定 | 产品不提供查看历史版本和恢复历史版本的功能；自动提交仍产生 Git 历史。手动创建备份点的独立入口尚未单独裁决。 |
-| I06 | 调整为提示冲突、Agent 检查与用户裁决 | SkillVault 跨电脑同步冲突时暂停本次库同步并提示，由 Agent 检查、用户决策，处理完再继续。不提供专门的冲突裁决界面或旧版本地/远端/双方选择流程。 |
-| I07 | 移除重新克隆修复入口 | 仓库故障显示失败原因，由 Agent 检查处理，产品不提供从远端重新克隆 SkillVault 的修复按钮。 |
+| I06 | 调整为提示冲突、Agent 检查与用户裁决 | SkillManagerVault 跨电脑同步冲突时暂停本次库同步并提示，由 Agent 检查、用户决策，处理完再继续。不提供专门的冲突裁决界面或旧版本地/远端/双方选择流程。 |
+| I07 | 移除重新克隆修复入口 | 仓库故障显示失败原因，由 Agent 检查处理，产品不提供从远端重新克隆 SkillManagerVault 的修复按钮。 |
 | I08 | 移除断开远端操作，展示未连接状态 | 远端未连接时依赖该远端的功能暂不可用，本地库管理与部署仍可使用。不提供移除远端配置、清除认证信息的断开流程。 |
 | I09 | 移除设备名称设置，保留容量报告 | 不需要区分改动来自哪台电脑，提交沿用本机 Git 作者配置。保留查看库占用空间及体积较大技能的容量报告；具体展示和体积标准待定，旧版排除状态展示尚未单独裁决。 |
 | I10 | 当前使用本机 Git，移除引擎切换设置 | 当前阶段不内置 Git 库，仓库操作使用本机 Git；不提供传输或合并引擎的切换设置。 |
 | I11 | 暂不纳入 | 目前没有明确实际应用场景，暂不实现旧版远端同步内部引用清理命令。不构成永久禁止；后续同步设计发现实际需要时重新评估，不要求绕路替代。 |
-| I12 | 调整为选择已有本地库的首次启动界面 | 当前方案为选择已准备好的本地 SkillVault 目录后进入技能库，不提供创建、克隆和恢复向导；属于暂定界面范围，不作永久规格限制。 |
+| I12 | 调整为选择已有本地库的首次启动界面 | 当前方案为选择已准备好的本地 SkillManagerVault 目录后进入技能库，不提供创建、克隆和恢复向导；属于暂定界面范围，不作永久规格限制。 |
 | J01 | 所有核心技能管理操作可由 CLI 完成 | Agent 是 CLI 的主要使用者；可通过 CLI 完成所有核心技能管理操作，无需用户回 GUI 补做。已有分类对话、更新裁决、创建与部署分离等管理规则仍适用。具体命令、输出格式及调用入口实现留到设计阶段讨论，不直接沿用旧版 JSON 与命令行桥方案。 |
-| J02 | 按普通 Skill 管理，开发时维护入库 | 开发时写好并入库，后续开发同步更新 SkillVault 中的管理 Skill，属于开发维护规范；按普通技能管理，不增加专门分发、升级或冲突机制，不沿用旧外部获取的专用引导。此前关于软件升级后专用自动更新的提议不采用。 |
-| J03 | 工具中心已确认，Agent 登记维护 | 共享工具条目/简介/指南/检查命令随 SkillVault 同步，安装事实各机独立；软件展示和检查，外部 Agent 登记、安装/更新、验证回写。未安装工具仍显示，配套 Skill 明确选择入库；详见 requirements 工具中心现行章节及 002 FR-044～050，早期“专题暂缓”已被取代。 |
+| J02 | 按普通 Skill 管理，开发时维护入库 | 开发时写好并入库，后续开发同步更新 SkillManagerVault 中的管理 Skill，属于开发维护规范；按普通技能管理，不增加专门分发、升级或冲突机制，不沿用旧外部获取的专用引导。此前关于软件升级后专用自动更新的提议不采用。 |
+| J03 | 工具中心已确认，Agent 登记维护 | 共享工具条目/简介/指南/检查命令随 SkillManagerVault 同步，安装事实各机独立；软件展示和检查，外部 Agent 登记、安装/更新、验证回写。未安装工具仍显示，配套 Skill 明确选择入库；详见 requirements 工具中心现行章节及 002 FR-044～050，早期“专题暂缓”已被取代。 |
 | J04 | 当前移除代理设置，不专门做代理功能 | 新软件当前不提供独立代理设置、不专门实现代理功能；不据此要求干预本机 Git 或系统已有网络配置。 |
 | J05 | 保留故障信息与日志获取能力 | 支持方便获取崩溃记录、诊断信息及日志，供 Agent 排查下载失败、部署异常等问题。具体展示、复制及导出形式后续设计；清除记录、问题页面等旧细节不自动作为规格条款。 |
 | J06 | 只需简体中文，保留主题、字号与托盘后台运行 | 没有其他界面语言需求；支持浅色、深色、跟随系统主题，默认跟随系统；可调整文字大小。关闭窗口收起到系统托盘并继续后台检查与同步，只有托盘右键“退出”才真正退出。具体字号及托盘视觉设置待设计。 |
@@ -98,7 +98,7 @@
 | 中文正文翻译 | 人工编辑/保存中文正文；没有自动翻译服务；另有中文显示名和简介。 | 译文用于管理器阅读，不作为部署正文；不提供内置一键翻译；上游原文变化后保留译文并提示待更新，由用户决定重译。 |
 | 中文短注释 | 单行最多10字；在装入旧中央库时及编辑注释时改写库内 SKILL.md。 | 一般不超过20字；部署才注入，库中原始文件保持原样，已确认；具体注入形式与生效时机待讨论。 |
 | Agent 与 OS 支持声明 | 只有 Agent 的 all/selected，后端/CLI 可修改，GUI 无编辑调用；没有 OS 管理字段。 | 未声明默认全支持，可修改范围；Agent 不适用不提供部署，预设批量过滤；当前系统不适用整项变灰、禁止部署。具体展示及共享目标条件待设计。 |
-| 技能 overlay（覆盖层） | 有覆盖层格式与合成部署，但仅用于 SkillVault 来源；没有覆盖层编辑 UI，普通自建技能不走合成。 | 按 Agent 和当前系统应用覆盖层并可替换文件，适用于自建及有上游的技能；有 Agent 内容差异时分别部署，通用内容可共享。维度组合及具体合成规则待设计。 |
+| 技能 overlay（覆盖层） | 有覆盖层格式与合成部署，但仅用于 SkillManagerVault 来源；没有覆盖层编辑 UI，普通自建技能不走合成。 | 按 Agent 和当前系统应用覆盖层并可替换文件，适用于自建及有上游的技能；有 Agent 内容差异时分别部署，通用内容可共享。维度组合及具体合成规则待设计。 |
 
 每个技能自己的 `.manager` 存放管理资料已确认，分类由目录决定。上游自带 `.manager` 是正常输入：入库继承已有管理资料，更新采用上游提供的同项值，即使本地改过也不上管理资料冲突流程；上游不带管理资料时保留本地资料。现行管理文件格式与字段粒度见 `specs/002-skill-management/data-model.md` 与 `research.md` D3；此处旧源码情况不替代正式设计。
 
@@ -139,8 +139,8 @@ GUI-only 表示只有图形界面入口；CLI-only 表示只有命令行入口�
 | B08 | 扫描 Agent 已有技能并导入 | 扫描 Agent 技能目录、识别已导入项，从发现结果单项或批量导入中央库。 | GUI | [scan.rs:70](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/scan.rs:70)；[InstallSkills.tsx:1286](/Users/fei/Projects/workspace/FeiSkillDock/src/views/InstallSkills.tsx:1286) |
 | B09 | CLI 收编既有目录 | adopt 可收编指定目录内技能，支持预演、来源关联和注释；与普通安装入口分开。 | CLI-only | [skills-manager-cli.rs:466](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/bin/skills-manager-cli.rs:466)；[skills-manager-cli.rs:3178](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/bin/skills-manager-cli.rs:3178) |
 | B10 | 安装进度与取消 | 长时间获取过程显示进度，允许取消安装或取消 Git 预览。 | GUI / 后端 | [InstallSkills.tsx:448](/Users/fei/Projects/workspace/FeiSkillDock/src/views/InstallSkills.tsx:448)；[skills.rs:4606](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/skills.rs:4606) |
-| B11 | SkillVault 源连接管理 | 配置远端 Git 地址或本地目录及分支，检查连接、清除配置；CLI 还可将既有来源地址迁往新地址。 | GUI / CLI | [Settings.tsx:715](/Users/fei/Projects/workspace/FeiSkillDock/src/views/Settings.tsx:715)；[skills-manager-cli.rs:751](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/bin/skills-manager-cli.rs:751) |
-| B12 | SkillVault 清单检查与同步 | 检查新增/既有/冲突/移除条目，按外部库导入、刷新或清理；旧流程会按源库覆盖 .manager，并拒绝软件直接编辑这些来源的管理资料。 | GUI / CLI | [skill_vault.rs:16](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/skill_vault.rs:16)；[skill_vault.rs:1588](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/core/skill_vault.rs:1588) |
+| B11 | SkillManagerVault 源连接管理 | 配置远端 Git 地址或本地目录及分支，检查连接、清除配置；CLI 还可将既有来源地址迁往新地址。 | GUI / CLI | [Settings.tsx:715](/Users/fei/Projects/workspace/FeiSkillDock/src/views/Settings.tsx:715)；[skills-manager-cli.rs:751](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/bin/skills-manager-cli.rs:751) |
+| B12 | SkillManagerVault 清单检查与同步 | 检查新增/既有/冲突/移除条目，按外部库导入、刷新或清理；旧流程会按源库覆盖 .manager，并拒绝软件直接编辑这些来源的管理资料。 | GUI / CLI | [skill_vault.rs:16](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/skill_vault.rs:16)；[skill_vault.rs:1588](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/core/skill_vault.rs:1588) |
 | B13 | CLI 临时指定外部库 | 通过 --skills-root / --lobster-skills-root 临时操作外部目录，管理状态放在独立本机命名空间；不改变持久库路径配置。 | CLI-only | [skills-manager-cli.rs:22](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/bin/skills-manager-cli.rs:22)；[skills-manager-cli.rs:1215](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/bin/skills-manager-cli.rs:1215) |
 
 ### 来源维护与更新
@@ -162,11 +162,11 @@ GUI-only 表示只有图形界面入口；CLI-only 表示只有命令行入口�
 |---|---|---|---|---|
 | D01 | 按技能×Agent 部署/取消 | 把库内技能提供给指定 Agent，或撤销受管部署；取消部署保留库内技能。 | GUI / CLI | [sync.rs:84](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/sync.rs:84)；[sync.rs:167](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/sync.rs:167) |
 | D02 | 批量多 Agent 部署 | 多选技能批量部署到若干 Agent；库页批量同步只加不减，CLI 另有多引用部署/撤销。 | GUI / CLI | [BatchSyncAgentDialog.tsx:1](/Users/fei/Projects/workspace/FeiSkillDock/src/components/BatchSyncAgentDialog.tsx:1)；[skills-manager-cli.rs:381](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/bin/skills-manager-cli.rs:381) |
-| D03 | Copy / Symlink 部署模式 | 选择复制或符号链接作为全局默认模式；旧 SkillVault 合成部署强制复制。 | GUI / 后端 | [Settings.tsx:1604](/Users/fei/Projects/workspace/FeiSkillDock/src/views/Settings.tsx:1604)；[sync_engine.rs:260](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/core/sync_engine.rs:260) |
+| D03 | Copy / Symlink 部署模式 | 选择复制或符号链接作为全局默认模式；旧 SkillManagerVault 合成部署强制复制。 | GUI / 后端 | [Settings.tsx:1604](/Users/fei/Projects/workspace/FeiSkillDock/src/views/Settings.tsx:1604)；[sync_engine.rs:260](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/core/sync_engine.rs:260) |
 | D04 | 部署冲突与目标覆盖规则 | 已有同名目标按是否受管及对象类型决定能否替换；拒绝时呈现路径，避免覆盖未受管目录。旧链路不校验目标文件内容是否被外部改过。 | GUI / CLI / 后端 | [sync_engine.rs:193](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/core/sync_engine.rs:193)；[sync_engine.rs:232](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/core/sync_engine.rs:232) |
 | D05 | 部署状态查询与预演 | 查看技能在各 Agent 的实际部署状态；CLI 支持指定 Agent 和 dry-run 预演。 | GUI / CLI | [skills-manager-cli.rs:408](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/bin/skills-manager-cli.rs:408)；[skills-manager-cli.rs:2002](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/bin/skills-manager-cli.rs:2002) |
 | D06 | 更新后刷新部署与移动后修正链接 | 更新技能后重新同步受管复制目标；移动分类目录后修正已部署符号链接并报告失败。 | 后端随操作执行 | [skills.rs:3946](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/skills.rs:3946)；[skills.rs:1249](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/skills.rs:1249) |
-| D07 | 共享技能目录部署 | 把共享目录作为 _global 目标管理；旧版只面向 Code 域，SkillVault 来源需全 Agent 支持且没有 overlay。 | GUI / CLI | [GlobalAgentView.tsx:1](/Users/fei/Projects/workspace/FeiSkillDock/src/views/GlobalAgentView.tsx:1)；[tool_adapters.rs:239](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/core/tool_adapters.rs:239) |
+| D07 | 共享技能目录部署 | 把共享目录作为 _global 目标管理；旧版只面向 Code 域，SkillManagerVault 来源需全 Agent 支持且没有 overlay。 | GUI / CLI | [GlobalAgentView.tsx:1](/Users/fei/Projects/workspace/FeiSkillDock/src/views/GlobalAgentView.tsx:1)；[tool_adapters.rs:239](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/core/tool_adapters.rs:239) |
 | D08 | Code / Lobster 部署边界 | 库中技能只能部署到同域 Agent；支持声明不能绕过跨域拒绝。 | GUI / CLI / 后端 | [scenario_service.rs:400](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/core/scenario_service.rs:400) |
 | D09 | 删除库技能与部署清理 | 单个/批量删除库技能，同时清理已登记部署；共享目标仍有其他认领时保留，失败会呈现。 | GUI / CLI | [skills.rs:1023](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/skills.rs:1023)；[skills.rs:1057](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/skills.rs:1057) |
 | D10 | 跨域复制独立技能 | 复制到另一域，保留内容和管理资料，但生成独立条目、清除来源和部署关系；同名目标拒绝覆盖。 | GUI / CLI | [skills.rs:4910](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/commands/skills.rs:4910)；[skills-manager-cli.rs:271](/Users/fei/Projects/workspace/FeiSkillDock/src-tauri/src/bin/skills-manager-cli.rs:271) |
@@ -265,7 +265,7 @@ OS 声明、普通自建技能覆盖层合成、覆盖层编辑 UI 的旧实现�
 - Agent 是否读取共享目录（G05）与 Skill 支持哪些 Agent 的声明是两个不同主体。
 - 旧备份页侧栏入口被隐藏，但 Settings 和直接路由可达，功能并未移除；旧 Git 备份只覆盖 Code 根。
 - CLI instructions push 的旧帮助写“全部 Agent”，核心默认范围实际是已检测且启用的 Agent。
-- SkillVault 同步、只读管理层、来源类型决定是否合成覆盖层，是旧模型的实际行为；此处列出供新产品重新决定其去留及形式。
+- SkillManagerVault 同步、只读管理层、来源类型决定是否合成覆盖层，是旧模型的实际行为；此处列出供新产品重新决定其去留及形式。
 
 ## 裁决记录
 

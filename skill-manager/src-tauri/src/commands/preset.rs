@@ -153,7 +153,7 @@ pub fn preset_reorder_members(
 // 预设叠加部署与撤销
 // ---------------------------------------------------------------------------
 
-/// 按预设成员叠加部署到目标（可多目标）；预演只报告不改文件与记录。
+/// 按预设成员叠加部署到目标（可多目标）。
 #[tauri::command]
 pub fn deploy_preset(
     state: tauri::State<'_, AppState>,
@@ -161,7 +161,6 @@ pub fn deploy_preset(
     preset_id: String,
     target: String,
     also_targets: Option<Vec<String>>,
-    dry_run: Option<bool>,
 ) -> Result<DeployReportView, String> {
     let ctx = state.get()?;
     let root = ctx.vault().map_err(|err| err.to_string())?.root().to_path_buf();
@@ -169,15 +168,13 @@ pub fn deploy_preset(
     let service = DeploymentService::new(root, &resolver, ctx.state());
 
     let targets = parse_targets(&target, also_targets)?;
-    let dry_run = dry_run.unwrap_or(false);
     let report = service
-        .deploy_preset(parse_domain(&domain)?, &preset_id, &targets, dry_run)
+        .deploy_preset(parse_domain(&domain)?, &preset_id, &targets)
         .map_err(|err| err.to_string())?;
     super::deploy::log_failures(&ctx, "deploy-preset", &report);
     Ok(DeployReportView {
         items: report.items,
         errors: report.failures,
-        dry_run,
     })
 }
 
@@ -189,7 +186,6 @@ pub fn deploy_undo_preset(
     preset_id: String,
     target: String,
     also_targets: Option<Vec<String>>,
-    dry_run: Option<bool>,
 ) -> Result<DeployReportView, String> {
     let ctx = state.get()?;
     let root = ctx.vault().map_err(|err| err.to_string())?.root().to_path_buf();
@@ -197,14 +193,12 @@ pub fn deploy_undo_preset(
     let service = DeploymentService::new(root, &resolver, ctx.state());
 
     let targets = parse_targets(&target, also_targets)?;
-    let dry_run = dry_run.unwrap_or(false);
     let report = service
-        .undo_preset(parse_domain(&domain)?, &preset_id, &targets, dry_run)
+        .undo_preset(parse_domain(&domain)?, &preset_id, &targets)
         .map_err(|err| err.to_string())?;
     super::deploy::log_failures(&ctx, "undo-preset", &report);
     Ok(DeployReportView {
         items: report.items,
         errors: report.failures,
-        dry_run,
     })
 }

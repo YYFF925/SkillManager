@@ -123,14 +123,13 @@ impl<'a> DeploymentService<'a> {
         &self,
         references: &[SkillRef],
         targets: &[Target],
-        dry_run: bool,
     ) -> Result<DeployReport> {
         let index = self.index()?;
         let targets = dedup_targets(targets);
         let mut report = DeployReport::default();
         for reference in references {
             for target in &targets {
-                match self.deploy_pair(&index, reference, target, dry_run)? {
+                match self.deploy_pair(&index, reference, target)? {
                     PairOutcome::Done(item) => report.push_item(item),
                     PairOutcome::Failed(error) => report.push_failure(error),
                 }
@@ -141,7 +140,7 @@ impl<'a> DeploymentService<'a> {
 
     /// 收编时接管原副本（供 US2/US6 调用）：按库合成覆盖并登记为受管部署。
     pub fn adopt_existing(&self, reference: &SkillRef, target: &Target) -> Result<DeployReport> {
-        self.deploy_to(std::slice::from_ref(reference), std::slice::from_ref(target), false)
+        self.deploy_to(std::slice::from_ref(reference), std::slice::from_ref(target))
     }
 
     /// 本机部署记录（供 `deploy status` 与 GUI 展示）。
@@ -197,7 +196,6 @@ impl<'a> DeploymentService<'a> {
         index: &SkillIndex,
         reference: &SkillRef,
         target: &Target,
-        dry_run: bool,
     ) -> Result<PairOutcome> {
         let Some(entry) = index.get(reference) else {
             return Ok(PairOutcome::Failed(
@@ -258,10 +256,8 @@ impl<'a> DeploymentService<'a> {
         // 受管副本被外部修改：暂停该项，不覆盖（FR-020）。
         if let Some(record) = &existing {
             if self.is_locally_changed(record, &copy_path)? {
-                if !dry_run {
-                    let paused = paused_record(record);
-                    self.state.upsert_deployment(&paused)?;
-                }
+                let paused = paused_record(record);
+                self.state.upsert_deployment(&paused)?;
                 return Ok(PairOutcome::Failed(
                     ItemError::new("受管副本已被外部修改，部署暂停；确认按库覆盖请用 deploy sync --ref <技能> --target <目标> --overwrite-local")
                         .skill(reference.to_string())
@@ -284,30 +280,22 @@ impl<'a> DeploymentService<'a> {
             });
         }
 
-        let action = if dry_run {
-            if existing.is_some() {
-                "would_update"
-            } else {
-                "would_deploy"
-            }
-        } else if existing.is_some() {
+        let action = if existing.is_some() {
             "updated"
         } else {
             "deployed"
         };
 
-        if !dry_run {
-            write_artifact(&copy_path, &composed.files)?;
-            let record = record_ok(
-                entry.domain,
-                &entry.name,
-                target,
-                &copy_path,
-                &composed,
-                now_iso(),
-            );
-            self.state.upsert_deployment(&record)?;
-        }
+        write_artifact(&copy_path, &composed.files)?;
+        let record = record_ok(
+            entry.domain,
+            &entry.name,
+            target,
+            &copy_path,
+            &composed,
+            now_iso(),
+        );
+        self.state.upsert_deployment(&record)?;
 
         Ok(PairOutcome::Done(DeployItemView {
             skill: reference.to_string(),

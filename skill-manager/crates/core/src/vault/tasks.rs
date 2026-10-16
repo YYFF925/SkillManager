@@ -1,6 +1,6 @@
 //! 技能维护任务文本生成（T078，FR-051）。
 //!
-//! 支持单项或多选技能：保留用户要求、本机 SkillVault 路径、所选技能的库内路径、注释/
+//! 支持单项或多选技能：保留用户要求、本机 SkillManagerVault 路径、所选技能的库内路径、注释/
 //! 分类/标签/支持声明、译文/覆盖层概况与本机已有部署；规范只引用配套维护 Skill 的库内
 //! 路径与“按其规范执行”，不内联规范全文，也不把完整仓库内容塞进任务。
 //! 只生成文本：不改库、不部署、不上传，不启动 Agent 或任务队列。
@@ -38,7 +38,7 @@ pub fn skill_task(
     out.push_str("请通过本项目配套维护 Skill 的规范与 CLI（命令行接口）维护以下技能。\n");
     out.push_str(&maintenance_skill_line(Some(index)));
     out.push('\n');
-    out.push_str(&format!("SkillVault 本机目录：{}\n", root.display()));
+    out.push_str(&format!("SkillManagerVault 本机目录：{}\n", root.display()));
     out.push_str(&format!(
         "我的维护要求：\n{}\n",
         requirement
@@ -159,7 +159,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(text.contains("SkillVault 本机目录："), "{text}");
+        assert!(text.contains("SkillManagerVault 本机目录："), "{text}");
         assert!(text.contains("我的维护要求：\n补充中文译文"), "{text}");
         assert!(text.contains("库内路径："), "{text}");
         assert!(text.contains("中文注释：写 PR"), "{text}");

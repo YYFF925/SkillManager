@@ -4,6 +4,10 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 # Tasks: Skill Manager 正式产品
 
+**2026-10-16 后续修订**：共享目录按当前用户主目录自动定位 `.agents/skills`，无需配置。下列已完成任务中关于手动设置路径、缺路径报错或前往设置的内容属于此前实施记录，已由本次修订取代；现行行为及验收以 FR-021/042/050/055/056、CLI 契约及 quickstart 为准，结果见 `checklists/m6-report.md` 第十节。
+
+**同日交互修订**：此前“共享目录不收编”及空列表说明的任务描述也已取代。共享目录未受管技能支持纳入管理；卡片打开本机正文与文件详情，可点击控件显示手型。对应 FR-014/042/052/055，验收见 `checklists/m6-report.md` 第十一节。
+
 **Input**：本目录的 `spec.md`、`plan.md`、`research.md`、`data-model.md`、`contracts/cli.md`、`quickstart.md`；约束依据 `.specify/memory/constitution.md` v2.0.2。
 
 **范围**：全部 10 个 User Story（用户故事）与 FR-001～054；构建真实桌面应用与 CLI（命令行接口），不把 `001` 原型的模拟行为当作实现。所有源文件路径均相对仓库根目录，正式产品代码位于 `skill-manager/`。
@@ -27,7 +31,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 - [X] T001 在 `skill-manager/Cargo.toml`、`skill-manager/crates/core/Cargo.toml`、`skill-manager/crates/cli/Cargo.toml`、`skill-manager/src-tauri/Cargo.toml` 建立 Rust 2024 workspace 三成员与最小入口，按当前官方资料核对稳定版依赖兼容性；使用 clap、rusqlite bundled、notify 及成熟 YAML/序列化库，仓库操作调用本机 Git，不引入 git2。
 - [X] T002 在 `skill-manager/package.json`、`skill-manager/vite.config.ts`、`skill-manager/tsconfig.json`、`skill-manager/src/main.tsx`、`skill-manager/src-tauri/tauri.conf.json` 建立 React/TypeScript、Vite、Tailwind 与 Tauri 2 开发构建入口，使用 npm 并保存锁文件。
-- [X] T003 在 `skill-manager/tests/common/mod.rs`、`skill-manager/crates/cli/Cargo.toml`、`skill-manager/vitest.config.ts`、`skill-manager/src/test/setup.ts` 建立临时 SkillVault、Git 上游、Agent 目录与独立状态目录测试设施；CLI crate 显式注册根 `tests/` 下的集成测试，确保 `cargo test --workspace` 真正执行它们。
+- [X] T003 在 `skill-manager/tests/common/mod.rs`、`skill-manager/crates/cli/Cargo.toml`、`skill-manager/vitest.config.ts`、`skill-manager/src/test/setup.ts` 建立临时 SkillManagerVault、Git 上游、Agent 目录与独立状态目录测试设施；CLI crate 显式注册根 `tests/` 下的集成测试，确保 `cargo test --workspace` 真正执行它们。
 - [X] T004 在 `skill-manager/src/App.tsx`、`skill-manager/src/styles.css`、`skill-manager/src/components/AppShell.tsx` 按原型的导航、布局、视觉密度与样式建立简体中文外壳，先阅读上述界面基线并查看对应效果图，复用 `docs/technical-reference/assets/` 的合法视觉素材及许可，覆盖两技能库、预设、Agent、Hermes、工具中心与设置入口，不嵌入演示数据。
 
 **Checkpoint（检查点）**：Rust 两入口与前端可构建，测试入口可发现，业务规则尚未实现。
@@ -37,7 +41,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 **目的**：只提供所有故事需要的连接、类型、本机存储及目标基础；部署合成、获取、工具检查等仍放在所属故事。
 
 - [X] T005 在 `skill-manager/crates/core/src/domain.rs` 定义管理域、技能引用与目标引用；逐字落实 data-model 的“技能身份 = 管理域 + 技能名”“同域内唯一（大小写不敏感比较，macOS 文件系统不区分大小写）”“分类最多一级；未分类直接在域根下”，跨域同名允许，不以分类路径作身份。
-- [X] T006 在 `skill-manager/crates/core/src/vault/connection.rs`、`skill-manager/crates/core/src/sync/git.rs` 实现选择已有本地 SkillVault、确认 Git 仓库与远端、本机 Git 子进程与既有认证复用；提供后续获取/同步可复用的命令执行基础，不提供克隆 SkillVault 或创建向导；路径无效时给出可定位原因。
+- [X] T006 在 `skill-manager/crates/core/src/vault/connection.rs`、`skill-manager/crates/core/src/sync/git.rs` 实现选择已有本地 SkillManagerVault、确认 Git 仓库与远端、本机 Git 子进程与既有认证复用；提供后续获取/同步可复用的命令执行基础，不提供克隆 SkillManagerVault 或创建向导；路径无效时给出可定位原因。
 - [X] T007 在 `skill-manager/crates/core/src/state/schema.sql`、`skill-manager/crates/core/src/state/mod.rs` 初始化仅本机状态 SQLite，采用 WAL 与 busy_timeout；实现 `settings`/`agents` 基础读写，共享资料原文不写 SQLite；引用使用 `(domain, name)`，`skills_dir` 的“可改，恢复默认=NULL”、`project_rel_dir` 的“仅配置保留”按 data-model 实现，不实现项目技能管理。
 - [X] T008 在 `skill-manager/crates/core/src/output.rs` 落实 `specs/002-skill-management/contracts/cli.md` 已修订的统一 result/data/errors、非零部分失败退出码、全局 `--state-dir` 与可执行参数；检查可写本机检查记录或获取缓存，但不应用技能变化、不改本机安装事实，dry-run 不修改目标及业务状态；在 `specs/002-skill-management/quickstart.md` 校核实际参数，不能退回“检查不准写检查状态”的旧表述。
 - [X] T009 在 `skill-manager/crates/core/src/deploy/targets.rs`、`skill-manager/crates/core/assets/agent-catalog.json` 从 `docs/technical-reference/agent-catalog.json` 接入全量 53 项 Agent 资产，按 `agent-integration.md`/`local-runtime-and-shell.md` 核对目标平台当前目录与检测条件；实现目标所属域、路径解析、只检测不启动不部署的基础能力，`shared` 是特殊部署目标，不是管理库。
@@ -116,7 +120,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 - [X] T032 [US2] 在 `skill-manager/crates/core/src/upstream/fetch.rs` 实现来源仓库获取与缓存，通过本机 Git 流式读取真实进度，GUI 取消和 CLI Ctrl-C 均能终止本次获取并如实返回取消；获取失败/取消不将技能登记为已入库。
 - [X] T033 [US2] 在 `skill-manager/crates/core/src/upstream/discover.rs` 实现仓库技能候选扫描与预览，技能名按目录身份保留，旧参考 frontmatter 名称不替代目录名；保留来源子路径，不解析或自动补齐技能依赖；单个候选也列出，默认分类依据来源仓库技能总数而不是本次选择数量。
-- [X] T034 [US2] 在 `skill-manager/crates/core/src/vault/acquire.rs` 实现选定候选复制入域、同名阻止、分类选择与上游管理资料继承，登记技能上游 repo/ref/subpath、实际采用完整提交 OID 与 registered_at；`skipped_version` 是“可选：已跳过的上游版本（含删除类），随库共享”；来源及采用版本属于同一 SkillVault 共享资产，另一电脑拉取不重新入库，不把 SkillVault 远端当成技能上游。
+- [X] T034 [US2] 在 `skill-manager/crates/core/src/vault/acquire.rs` 实现选定候选复制入域、同名阻止、分类选择与上游管理资料继承，登记技能上游 repo/ref/subpath、实际采用完整提交 OID 与 registered_at；`skipped_version` 是“可选：已跳过的上游版本（含删除类），随库共享”；来源及采用版本属于同一 SkillManagerVault 共享资产，另一电脑拉取不重新入库，不把 SkillManagerVault 远端当成技能上游。
 - [X] T035 [US2] 在 `skill-manager/crates/core/src/vault/adopt.rs` 实现 Agent 未受管技能单项/批量收编至对应域，支持逐技能资料输入补充注释/标签/分类/声明/译文并调用 US3 接管原部署，不把同一段注释擅自套给全部技能；不强制来源，同名库技能阻止而不覆盖，不新增其他目标部署。
 - [X] T036 [US2] 在 `skill-manager/crates/core/src/vault/create.rs`、`skill-manager/crates/core/src/vault/copy.rs` 实现自建技能目录及管理资料创建和跨域复制；复制保留原件与来源记录，两份独立维护，创建与复制均不部署；复用 US1 同名与分类校验。
 - [X] T037 [US2] 在 `skill-manager/crates/cli/src/commands/acquire.rs`、`skill-manager/src-tauri/src/commands/acquire.rs` 接入候选发现、`skill import/adopt/create/copy` 与进度/取消事件；所有选择由显式参数传入，不要求 Agent 回 GUI 补裁决，结构化结果与进度输出可区分。
@@ -132,7 +136,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 ### 设计前置
 
-- [X] T039 [US4] 在 `specs/002-skill-management/data-model.md`、`specs/002-skill-management/research.md` 对照既定 §1.3/1.6 与 `specs/002-skill-management/contracts/cli.md` 细化仓库/管理域/子路径拒绝记录、仓库地址去重及完整 OID 比对设计；技能上游绑定来源仓库、另一机同步 SkillVault 不改变来源已明确，不再将两条链路混同为“来源继承冲突”；决定与采用仍保持显式；落实 spec.md 首次未选 C≠后来新增 B 的发现基线，更新已有技能不能让未决定、仍存在的 B 丢失提示。具体基线形式在本任务设计，不先增加历史/候选状态共享系统或 URL 身份体系。
+- [X] T039 [US4] 在 `specs/002-skill-management/data-model.md`、`specs/002-skill-management/research.md` 对照既定 §1.3/1.6 与 `specs/002-skill-management/contracts/cli.md` 细化仓库/管理域/子路径拒绝记录、仓库地址去重及完整 OID 比对设计；技能上游绑定来源仓库、另一机同步 SkillManagerVault 不改变来源已明确，不再将两条链路混同为“来源继承冲突”；决定与采用仍保持显式；落实 spec.md 首次未选 C≠后来新增 B 的发现基线，更新已有技能不能让未决定、仍存在的 B 丢失提示。具体基线形式在本任务设计，不先增加历史/候选状态共享系统或 URL 身份体系。
 
 ### Tests
 
@@ -162,7 +166,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 - [X] T050 [US5] 在 `specs/002-skill-management/data-model.md`、`specs/002-skill-management/contracts/cli.md` 明确 GUI 自动上传既有确认的本机保存方式与首次获得确认的交互、上传失败后用户显式重试和后台只拉取的边界、冲突由 Agent 修复后的继续命令；不增加改动来源跟踪、不把任何 CLI 修改或部署同步当作上传同意。
 - [X] T051 [US5] 在 `skill-manager/crates/core/src/sync/pull.rs`、`skill-manager/crates/core/src/sync/status.rs` 实现复用本机 Git 的状态/拉取/冲突详情与继续路径；无冲突应用库文件后刷新索引、同步已有部署并在指令源变化时刷新本机已有启用指令目标（指令服务于 T069 接通后复验），冲突暂停交用户与 Agent，远端不可用显示未连接而本地操作继续；无克隆修复、断开远端或历史恢复入口。
-- [X] T052 [US5] 在 `skill-manager/crates/core/src/sync/push.rs` 实现上传工作区全部改动并推送自己的 SkillVault，包含非软件产生的修改；仅 GUI 保存已确认策略或 Agent 获明确同意后显式调用可达，失败保留可读原因并支持用户主动重试，不向任何来源仓库提交、不在后台重试推送。
+- [X] T052 [US5] 在 `skill-manager/crates/core/src/sync/push.rs` 实现上传工作区全部改动并推送自己的 SkillManagerVault，包含非软件产生的修改；仅 GUI 保存已确认策略或 Agent 获明确同意后显式调用可达，失败保留可读原因并支持用户主动重试，不向任何来源仓库提交、不在后台重试推送。
 - [X] T053 [US5] 在 `skill-manager/crates/core/src/scheduler.rs`、`skill-manager/crates/core/src/state/settings.rs` 实现启动/手动/定时上游检查和库拉取的统一调度；逐字落实“关闭/30 分钟/1 小时/6 小时/24 小时，默认 1 小时”，存储值“0=关闭/30/60/360/1440，默认 60”；为 US9 登记工具检查入口，三类结果分别表达，关闭定时不禁用手动操作。
 - [X] T054 [US5] 在 `skill-manager/crates/cli/src/commands/sync.rs`、`skill-manager/src-tauri/src/commands/sync.rs` 接入 `sync pull/push/status/conflicts` 与继续路径；GUI 保存事件在部署刷新后按已确认策略调用上传，外部文件监听与 `deploy sync` 不触发上传。
 - [X] T055 [US5] 在 `skill-manager/src/components/SyncStatus.tsx`、`skill-manager/src/pages/SettingsPage.tsx` 接入连接状态、共同检查频率、自动上传确认与上传失败显式重试；分别显示库变化和上游变化，冲突只提示并可复制给 Agent 的定位信息，不加专用合并界面。
@@ -238,7 +242,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 - [X] T075 [US9] 在 `skill-manager/crates/core/src/toolcenter/files.rs`、`skill-manager/crates/core/src/toolcenter/catalog.rs` 实现 `tools/<tool-slug>/tool.yaml` 与 `guide.md` 读写、共享登记/修改、搜索、一级分类与状态筛选；落实“工具 slug（目录名）即工具身份”，`summary` 是卡片短摘要，`intro` 为“概览长简介（可读、多段）”，配套引用 `(domain, name)` 缺失时显示“未入库”，候选来源资料沿用现有入库链路。
 - [X] T076 [US9] 在 `skill-manager/crates/core/src/state/tool_installs.rs`、`skill-manager/crates/core/src/state/tool_checks.rs` 实现已核实本机安装事实与独立检查记录；安装字段“`version, method, path, config_path`”只由 Agent 回写，无安装行显示“未安装”；检查状态“`unchecked` / `checking` / `checked` / `failed` / `no_command`”独立保存，不因检查插入安装行，安装/更新回写后重置检查为 `unchecked`。
 - [X] T077 [US9] 在 `skill-manager/crates/core/src/toolcenter/check.rs` 执行单个登记的上游版本命令、解析最新版本并与安装记录对比，支持单项/全部及共同周期；成功检查记录为 `checked`，已安装且可比较时派生“最新/可更新”，未安装只显示上游版本，未登记命令/失败/未检查分别表达；检查不安装、不更新、不改本机版本，不能比较不冒充确定结论。
-- [X] T078 [US9] 在 `skill-manager/crates/core/src/toolcenter/tasks.rs`、`skill-manager/crates/core/src/vault/tasks.rs` 实现工具与技能维护任务文本生成：工具任务含用户要求、简介、本机资料、检查结果与指南，技能任务支持单项/多选，含用户要求、本机 SkillVault 路径、各技能库内路径、注释/分类/标签/支持声明、译文/覆盖层概况和本机已有部署；两类任务均引用配套维护 Skill 的真实库内路径及“按其规范执行”，引用规范不取消必要事实上下文；缺技能时如实提示未入库，不编造路径或内联另一份规范，不启动 Agent/任务队列、不把任务生成标为完成；在 `skill-manager/src-tauri/src/commands/skill.rs`、`skill-manager/src/pages/LibraryPage.tsx` 接通技能卡片及多选栏的维护任务生成/复制入口，与 CLI 使用同一核心。
+- [X] T078 [US9] 在 `skill-manager/crates/core/src/toolcenter/tasks.rs`、`skill-manager/crates/core/src/vault/tasks.rs` 实现工具与技能维护任务文本生成：工具任务含用户要求、简介、本机资料、检查结果与指南，技能任务支持单项/多选，含用户要求、本机 SkillManagerVault 路径、各技能库内路径、注释/分类/标签/支持声明、译文/覆盖层概况和本机已有部署；两类任务均引用配套维护 Skill 的真实库内路径及“按其规范执行”，引用规范不取消必要事实上下文；缺技能时如实提示未入库，不编造路径或内联另一份规范，不启动 Agent/任务队列、不把任务生成标为完成；在 `skill-manager/src-tauri/src/commands/skill.rs`、`skill-manager/src/pages/LibraryPage.tsx` 接通技能卡片及多选栏的维护任务生成/复制入口，与 CLI 使用同一核心。
 - [X] T079 [US9] 在 `skill-manager/crates/cli/src/commands/tool.rs`、`skill-manager/src-tauri/src/commands/tool.rs`、`skill-manager/crates/cli/src/commands/skill.rs` 接入 `tool list/get/check/register/set/set-install/task/skill-link`、资料修改及技能任务命令；登记与回写均 CLI 可达，所有共享资料变更沿用询问后才上传的规范，生成任务不自动执行安装。
 - [X] T080 [US9] 在 `skill-manager/src/pages/ToolCenterPage.tsx`、`skill-manager/src/components/ToolDetail.tsx` 接入搜索/筛选、未安装条目常驻、可读简介、本机事实、检查状态/结果、指南、配套 Skill 和任务复制；登记/资料维护/安装回写入口生成外部 Agent 任务，Agent 经同一 CLI/core 核实写入，不做自动发现或内置 Agent。
 - [X] T081 [US9] 在 `skill-manager/src/components/ToolSkillCandidates.tsx`、`skill-manager/crates/core/src/toolcenter/skills.rs` 复用 US2 候选获取/选择入库流程，单候选也显示原名/注释/用途/来源/勾选与已选数量，允许补充分类/标签/注释，必须由用户选择，不自动部署；工具版本与 Skill 来源版本各自展示，不复制技能正文进工具资料。
@@ -270,7 +274,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 - [X] T089 在 `specs/002-skill-management/quickstart.md` 固定本项目已配置 Gitea `origin` 的配套 Skill 来源子路径 `skill-manager/assets/skills/skill-manager-maintenance` 与实际命令；将可审阅的代码与技能按用户授权推送 Gitea 后，通过普通 `skill import` 显式选择入库并登记来源，再推进源版本验证普通检查/确认更新；若发布授权或远端访问缺失，保留待完成并说明，不改成专用分发或本地路径假验收，证据写入 `specs/002-skill-management/checklists/m5-report.md` 5.10。
 - [X] T090 对照 FR-050/051 在 `specs/002-skill-management/contracts/cli.md` 逐项核对全部核心 GUI/CLI 操作与真实参数、JSON/退出码、无 GUI 裁决依赖、维护任务 Skill 路径；同步更新 `skill-manager/assets/skills/skill-manager-maintenance/references/cli.md`，运行已要求的 `cargo test --workspace` 与前端构建，GUI 按 quickstart 对原型索引中的页面与交互逐项人工验收、记录实现截图与差异，修复实际失败，不新增兼容路径或仅复述实现的测试。
 - [X] T091 执行 `specs/002-skill-management/quickstart.md` 5.11 的真实完整旅程，对照 `spec.md` US1～US10 和 SC-001～008，补齐 `specs/002-skill-management/checklists/m1-report.md`、`specs/002-skill-management/checklists/m2-report.md`、`specs/002-skill-management/checklists/m3-report.md`、`specs/002-skill-management/checklists/m4-report.md`、`specs/002-skill-management/checklists/m5-report.md` 早期待验项；记录几十至几百技能下扫描/筛选实际耗时与环境，不把未确认的 <1s/微秒级目标作为验收承诺，不凭空声明平台兼容。
-- [X] T092 在 `README.md`、`skill-manager/README.md`、`specs/002-skill-management/plan.md`、`specs/002-skill-management/research.md` 更新实际开发/构建/CLI 入口、SkillVault 与本机状态位置、实现范围及各期结果；保留本轮质检已纠正的 Git 现状、库同步/上游更新边界与单保存指令交互，不恢复失效指引，未过保留原因，不以勾任务代替验收。
+- [X] T092 在 `README.md`、`skill-manager/README.md`、`specs/002-skill-management/plan.md`、`specs/002-skill-management/research.md` 更新实际开发/构建/CLI 入口、SkillManagerVault 与本机状态位置、实现范围及各期结果；保留本轮质检已纠正的 Git 现状、库同步/上游更新边界与单保存指令交互，不恢复失效指引，未过保留原因，不以勾任务代替验收。
 
 ## Phase 14: User Story 10 增量 — 本机运行侧双入口（T093～T099）
 
@@ -315,7 +319,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 规划见 `plan.md` 的"规划补齐：设置页与 Agent 页按原型归位"。
 
 - [X] T109 [P] [US8] 在 `skill-manager/src/pages/SettingsPage.tsx` 与相关组件间完成 Agent 检测区块的迁移：把「支持的 Agent（已检测/内置总数）」摘要、全部启用／全部禁用／重新检测、已检测 Agent 卡片网格（拖动排序、启停、技能目录与项目相对路径行内编辑、恢复默认）与「其他支持的 Agent」折叠区**以可复用组件**接入设置页作为首个区块；不复制实现、不在两处同时渲染。
-- [X] T110 [US8] 按原型区块顺序组织设置页：「支持的 Agent」→「全局配置」→「自己的 SkillVault 同步」→「后台检查与上游更新」→「诊断与日志」；全局配置补只读展示行：部署方式（文件复制）、语言（简体中文）、关闭行为（托盘模式）；后台检查区补「立即检查」（复用既有检查与同步能力，**不新增组合命令**）；保留实现已有的自动上传确认、技能库容量、诊断与运行日志分区。
+- [X] T110 [US8] 按原型区块顺序组织设置页：「支持的 Agent」→「全局配置」→「自己的 SkillManagerVault 同步」→「后台检查与上游更新」→「诊断与日志」；全局配置补只读展示行：部署方式（文件复制）、语言（简体中文）、关闭行为（托盘模式）；后台检查区补「立即检查」（复用既有检查与同步能力，**不新增组合命令**）；保留实现已有的自动上传确认、技能库容量、诊断与运行日志分区。
 - [X] T111 [US3] 在 `skill-manager/src/App.tsx`、`src/pages/AgentPage.tsx` 把「全部 Agents」改为**跨目标部署清单**（FR-057）：标题「全部编码 Agents」、副标题「本机部署清单 · 同一个技能可部署到多个目标」，搜索 + 受管／未受管／本地有变更筛选 + 刷新，卡片按「技能 × 目标」列出并可发起从库部署；Agent 管理不再出现在该页。
 - [X] T112 [P] [US8] 前端测试：设置页首区块为「支持的 Agent」且含摘要与三个动作；只读展示行存在且无可编辑控件；「全部 Agents」渲染的是跨目标部署清单而非 Agent 管理卡片；既有行为（共享目录未设置提示等）不回归。
 - [X] T113 [US8] 执行 GUI 实操取证（从 `.app` 启动）：设置页顶部为 Agent 检测区块、只读行可见、启停与目录编辑可用；「全部 Agents」为部署清单；结果与未过项写入 `specs/002-skill-management/checklists/m6-report.md`（或新增 m7 报告）。
@@ -393,7 +397,7 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 
 ### 最小可验证范围
 
-先完成 Setup + Foundational + US1，以已有 SkillVault 验证文件真值、管理层读写、分类/标签/正文与外部刷新。它是开发检查点；获取、部署、同步、工具与桌面环境都完成并验收后才投入使用。
+先完成 Setup + Foundational + US1，以已有 SkillManagerVault 验证文件真值、管理层读写、分类/标签/正文与外部刷新。它是开发检查点；获取、部署、同步、工具与桌面环境都完成并验收后才投入使用。
 
 ### 增量完成
 
@@ -402,3 +406,5 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 ### 完成判定
 
 所有任务实施完成且实际结果通过规格验收；完整旅程与两个独立本机状态的同步有证据，配套维护 Skill 从 Gitea 走普通入库/更新，全部核心 GUI 操作有 CLI 路径。无法执行的真实远端/桌面/Agent 验证要保留未过及具体原因，不静默降级。提交或发布按当时用户授权执行，任务文件不预设远端写入已经获准。
+
+2026-10-16 部署交互后续修订：历史任务中 dry-run 验收已撤销，预演从全部运行路径移除。GUI 改为读取现有部署、切换选择后保存差量；卡片提供已检测且启用 Agent 的即时部署图标；界面常驻规则说明清理。当前定义见 spec.md FR-014/021/052，实施与验证见 checklists/m6-report.md 第十二节。

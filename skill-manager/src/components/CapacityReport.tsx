@@ -4,7 +4,6 @@
  * 只读 core 的真实扫描结果（排除 `.git`）；空库如实显示 0。只展示，不提供自动清理或排除入口。
  */
 import { useEffect, useState } from "react";
-import { FolderTree } from "lucide-react";
 
 import { capacityReport, type CapacityReport as CapacityReportData } from "../services/client";
 import { Notice } from "./ui";
@@ -73,7 +72,7 @@ export function CapacityReport({ reloadToken }: CapacityReportProps) {
       <p className="break-all font-mono text-[11px] text-faint">{report.vault}</p>
 
       {report.skill_count === 0 ? (
-        <p className="text-[12px] text-faint">当前库还没有技能，占用如实显示为 0。</p>
+        <p className="text-[12px] text-faint">暂无技能。</p>
       ) : (
         <ul className="flex flex-col gap-1.5">
           {report.skills.map((skill) => (
@@ -102,10 +101,6 @@ export function CapacityReport({ reloadToken }: CapacityReportProps) {
         </ul>
       )}
 
-      <p className="flex items-center gap-1.5 text-[12px] text-faint">
-        <FolderTree className="size-3.5 shrink-0" strokeWidth={1.75} />
-        {report.note}
-      </p>
     </div>
   );
 }

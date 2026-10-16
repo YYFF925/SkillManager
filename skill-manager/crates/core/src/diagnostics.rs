@@ -3,7 +3,7 @@
 //! 提供三层可获取事实：**运行日志**（操作/错误与时间）、**崩溃记录**（panic 线索）与
 //! **诊断导出**（版本、平台、有关路径、最近日志与崩溃，写出真实文件供 Agent 排查）。
 //! 边界：由用户主动获取；不自动上传；导出前对 home 路径、URL userinfo、常见凭据参数与
-//! 令牌前缀做替换，减少把真实凭据一起交出的后果。日志落在本机状态目录，不随 SkillVault 同步。
+//! 令牌前缀做替换，减少把真实凭据一起交出的后果。日志落在本机状态目录，不随 SkillManagerVault 同步。
 
 use std::path::{Path, PathBuf};
 
@@ -231,7 +231,7 @@ fn render(report: &DiagnosticsReport) -> String {
     out.push_str(&format!("版本：{}\n", report.version));
     out.push_str(&format!("平台：{} / {}\n", report.os, report.arch));
     out.push_str(&format!(
-        "SkillVault：{}\n",
+        "SkillManagerVault：{}\n",
         report.vault.as_deref().unwrap_or("（尚未接入）")
     ));
     out.push_str(&format!("状态目录：{}\n", report.state_dir));

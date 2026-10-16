@@ -389,7 +389,7 @@ GUI 侧批量部署的 Tauri 命令为逐对调用 `sync_skill_to_tool`（注释
 | overlay 禁止 `SKILL.md` | `skill_render.rs:155`/`:109` | 需求明确允许整份正文替换（[content-composition.md](content-composition.md) 亦已记录旧校验器冲突） |
 | 库间复制清除上游来源 | `commands/skills.rs:5041-5047` | 需求：副本**保留上游来源**；旧版为防"一次更新写两库"而清空来源，语义相反 |
 | 移动分类后修正已部署符号链接 | `commands/skills.rs:1355-1377` | 旧行为 D06 后半，明确不沿用（本项目独立副本，无链接需修） |
-| `.skills-manager` 中央库与 sidecar 双写体系 | `sync_metadata.rs:85-91`、`reindex_from_metadata_unlocked` | 需求 B02：只管理一个 SkillVault 根目录，不另存中央库内容；旧边车/库格式不继承 |
+| `.skills-manager` 中央库与 sidecar 双写体系 | `sync_metadata.rs:85-91`、`reindex_from_metadata_unlocked` | 需求 B02：只管理一个 SkillManagerVault 根目录，不另存中央库内容；旧边车/库格式不继承 |
 | `skills enable/disable` | `skills-manager-cli.rs:3003` | 旧兼容命令，enable 仅修 legacy，disable 是 no-op；本项目以部署/撤销表达启停 |
 | 部署记录写入 sidecar / 随库同步 | （旧版未做，targets 仅在本机 SQLite） | 与本项目一致，**不是**要移除；此处列出以免误以为 targets 随库走 |
 

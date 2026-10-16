@@ -257,29 +257,15 @@ fn same_id_across_domains_is_not_resolved_silently() {
 }
 
 #[test]
-fn preset_deploy_and_undo_support_dry_run() {
+fn removed_preview_flag_is_rejected() {
     let env = TestEnv::new();
     seed(&env);
-    env.cli_json(&["preset", "create", "code", "release"]);
-    env.cli_json(&["preset", "members", "code", "release", "--add", "beta,gamma"]);
-
-    let (code, result) = env.cli_json_raw(&[
-        "deploy", "preset", "code", "release", "--to", "codex", "--dry-run",
-    ]);
-    assert_eq!(code, 0, "{result}");
-    assert_eq!(result["data"]["dry_run"], true);
-    assert!(!target_copy(&env, ".codex/skills", "beta").exists());
-    assert!(env.cli_json(&["deploy", "status"])["deployments"]
-        .as_array()
-        .unwrap()
-        .is_empty());
-
-    env.cli_json(&["deploy", "preset", "code", "release", "--to", "codex"]);
-    let (code, result) = env.cli_json_raw(&[
-        "deploy", "undo-preset", "code", "release", "--from", "codex", "--dry-run",
-    ]);
-    assert_eq!(code, 0, "{result}");
-    assert!(target_copy(&env, ".codex/skills", "beta").exists(), "预演不得删副本");
+    for args in [vec!["deploy", "preset", "code", "release", "--to", "codex", "--dry-run"], vec!["deploy", "undo-preset", "code", "release", "--from", "codex", "--dry-run"]] {
+        let output = env.cli(&args);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("--dry-run"));
+    }
+    assert!(env.cli_json(&["deploy", "status"])["deployments"].as_array().unwrap().is_empty());
 }
 
 #[test]

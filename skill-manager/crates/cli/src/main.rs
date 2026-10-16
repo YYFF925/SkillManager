@@ -24,7 +24,7 @@ struct Cli {
     #[arg(long, global = true)]
     json: bool,
 
-    /// SkillVault 根目录。
+    /// SkillManagerVault 根目录。
     #[arg(long, global = true, value_name = "path")]
     vault: Option<PathBuf>,
 
@@ -48,13 +48,13 @@ enum Command {
     Agent(commands::agent::AgentCommand),
     /// Hermes 档案与技能启用管理。
     Hermes(commands::hermes::HermesCommand),
-    /// SkillVault 跨机同步（拉取/上传/状态/冲突）。
+    /// SkillManagerVault 跨机同步（拉取/上传/状态/冲突）。
     Sync(commands::sync::SyncCommand),
     /// Agent 指令源读取与保存。
     Instruction(commands::instruction::InstructionCommand),
     /// 工具中心：工具资料、版本检查、安装事实回写与维护任务。
     Tool(commands::tool::ToolCommand),
-    /// 本机运行配置与只读报告（设置读取、共享目录/检查频率、诊断与容量）。
+    /// 本机运行配置与只读报告（设置读取、检查频率、诊断与容量）。
     Settings(commands::settings::SettingsCommand),
 }
 

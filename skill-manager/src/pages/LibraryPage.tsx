@@ -34,8 +34,6 @@ import {
   detachSkillTags,
   listSkills,
   moveSkill,
-  sharedDirGet,
-  sharedDirSet,
   skillTask,
   syncPull,
   type AgentView,
@@ -48,7 +46,7 @@ import {
 } from "../services/client";
 import { osLabel, unsupportedDeployReason, unsupportedOs } from "../lib/support";
 import { useUpstream } from "../lib/upstream";
-import { targetLabel } from "../lib/targets";
+import { QuickDeploy } from "../components/QuickDeploy";
 import { TagChip } from "../components/TagChip";
 import { SkillDetail } from "../components/SkillDetail";
 import { DeployDialog } from "../components/DeployDialog";
@@ -148,7 +146,6 @@ export function LibraryPage({
   const [deleteTarget, setDeleteTarget] = useState<string[] | null>(null);
   const [records, setRecords] = useState<DeploymentStatusView[]>([]);
   const [deployFilter, setDeployFilter] = useState<DeployFilter>("all");
-  const [sharedDir, setSharedDir] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [upstreamOpen, setUpstreamOpen] = useState(false);
   const [copyTarget, setCopyTarget] = useState<SkillSummary | null>(null);
@@ -233,11 +230,6 @@ export function LibraryPage({
     void refreshRecords();
   }, [refreshRecords, reloadToken, version, domain]);
 
-  useEffect(() => {
-    void sharedDirGet()
-      .then(setSharedDir)
-      .catch(() => setSharedDir(null));
-  }, [version]);
 
   /**
    * GUI 保存影响库内容的修改后走统一流程：先刷新本机已有部署，再按已确认策略上传
@@ -252,7 +244,7 @@ export function LibraryPage({
       .finally(() => void refreshRecords());
   }, [onLibrarySaved, refreshRecords]);
 
-  /** 手动同步：拉取同一 SkillVault；无冲突静默应用并刷新已有部署。 */
+  /** 手动同步：拉取同一 SkillManagerVault；无冲突静默应用并刷新已有部署。 */
   async function manualSync() {
     setSyncing(true);
     setError(null);
@@ -476,15 +468,6 @@ export function LibraryPage({
     }
   }
 
-  async function changeSharedDir(path: string | null) {
-    const saved = await sharedDirSet(path);
-    setSharedDir(saved);
-    setNotice(
-      saved === null ? "已清除共享目录路径。" : `共享目录已设为 ${saved}，shared 目标可部署。`,
-    );
-    setError(null);
-  }
-
   async function copyTo(skill: SkillSummary, to: Domain, category?: string) {
     try {
       const created = await copySkill(referenceOf(skill), to, {
@@ -506,37 +489,6 @@ export function LibraryPage({
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <span className="text-[12px] text-faint">
-          上游检查只展示变化；更新与入库都需要显式确认，检查不会修改技能库。
-        </span>
-        <div className="flex items-center gap-2.5">
-          <Button compact disabled={upstream.busy} onClick={() => void upstream.checkAll()}>
-            <RefreshCw className="size-3.5" strokeWidth={1.75} />
-            检查全部
-          </Button>
-          <Button
-            compact
-            disabled={syncing}
-            title="拉取同一 SkillVault；无冲突静默应用并刷新已有部署"
-            onClick={() => void manualSync()}
-          >
-            <GitBranch className="size-3.5" strokeWidth={1.75} />
-            {syncing ? "正在同步…" : "同步"}
-          </Button>
-          <Button compact disabled={upstream.busy} onClick={() => setUpstreamOpen(true)}>
-            更新{updateCount > 0 ? ` (${updateCount})` : ""}
-          </Button>
-          <Button compact disabled={upstream.busy} onClick={() => setUpstreamOpen(true)}>
-            新增{candidateCount > 0 ? ` (${candidateCount})` : ""}
-          </Button>
-          <Button compact kind="primary" onClick={() => setImportOpen(true)}>
-            <Upload className="size-3.5" strokeWidth={1.75} />
-            入库
-          </Button>
-        </div>
-      </div>
-
       {upstream.busy && (
         <div className="mb-3.5">
           <FetchProgressLine progress={upstream.progress} />
@@ -564,7 +516,30 @@ export function LibraryPage({
             onChange={(value) => setDeployFilter(value as DeployFilter)}
           />
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center justify-end gap-2.5">
+          <Button compact disabled={upstream.busy} onClick={() => void upstream.checkAll()}>
+            <RefreshCw className="size-3.5" strokeWidth={1.75} />
+            检查全部
+          </Button>
+          <Button
+            compact
+            disabled={syncing}
+            title="拉取同一 SkillManagerVault；无冲突静默应用并刷新已有部署"
+            onClick={() => void manualSync()}
+          >
+            <GitBranch className="size-3.5" strokeWidth={1.75} />
+            {syncing ? "正在同步…" : "同步"}
+          </Button>
+          <Button compact disabled={upstream.busy} onClick={() => setUpstreamOpen(true)}>
+            更新{updateCount > 0 ? ` (${updateCount})` : ""}
+          </Button>
+          <Button compact disabled={upstream.busy} onClick={() => setUpstreamOpen(true)}>
+            新增{candidateCount > 0 ? ` (${candidateCount})` : ""}
+          </Button>
+          <Button compact kind="primary" onClick={() => setImportOpen(true)}>
+            <Upload className="size-3.5" strokeWidth={1.75} />
+            入库
+          </Button>
           <div className="flex h-10 items-center rounded-lg border border-line bg-panel p-[3px]">
             {(
               [
@@ -705,7 +680,7 @@ export function LibraryPage({
             onClick={() => setDeployTarget(selected)}
           >
             <Rocket className="size-3.5" strokeWidth={1.75} />
-            部署 / 撤销…
+            部署…
           </Button>
           <Button
             compact
@@ -733,8 +708,8 @@ export function LibraryPage({
         </div>
       )}
 
-      <div className="flex items-start gap-5">
-        <aside className="w-[152px] shrink-0">
+      <div className="flex items-start gap-4">
+        <aside className="w-[132px] shrink-0">
           <button
             type="button"
             onClick={() => setCategory(null)}
@@ -815,7 +790,7 @@ export function LibraryPage({
                     />
                   ) : (
                     <span
-                      title="已在 SkillVault 管理"
+                      title="已在 SkillManagerVault 管理"
                       className="size-2 shrink-0 rounded-full bg-accent-light shadow-[0_0_0_3px_rgba(5,150,105,0.05)]"
                     />
                   )}
@@ -890,12 +865,12 @@ export function LibraryPage({
                 </div>
 
                 <div
-                  className={`flex min-h-[43px] items-center gap-2.5 px-3.5 py-2.5 ${
+                  className={`flex min-h-[43px] flex-wrap items-center gap-2.5 px-3.5 py-2.5 ${
                     layout === "list" ? "" : "mt-auto border-t border-line-faint"
                   }`}
                 >
                   <span
-                    title={skill.source ? `来源：${skill.source.repo}` : "自建技能：内容在本机 SkillVault 内维护"}
+                    title={skill.source ? `来源：${skill.source.repo}` : "自建技能：内容在本机 SkillManagerVault 内维护"}
                     className="flex max-w-[170px] items-center gap-1 truncate rounded-full border border-line-soft bg-subtle px-2 text-[11px] leading-[18px] text-muted"
                   >
                     {skill.source ? (
@@ -905,15 +880,6 @@ export function LibraryPage({
                     )}
                     <span className="truncate">{sourceLabel(skill)}</span>
                   </span>
-                  {[...(deployedTargets.get(reference) ?? [])].map((targetKey) => (
-                    <span
-                      key={targetKey}
-                      title={`已部署到 ${targetLabel(targetKey, agents)}`}
-                      className="max-w-[150px] truncate rounded-full border border-accent-line bg-accent-soft px-2 text-[11px] leading-[18px] text-accent"
-                    >
-                      {targetLabel(targetKey, agents)}
-                    </span>
-                  ))}
                   {skill.presets.map((preset) => (
                     <span
                       key={preset.id}
@@ -923,6 +889,9 @@ export function LibraryPage({
                       {preset.name}
                     </span>
                   ))}
+                  <QuickDeploy reference={reference} domain={domain} agents={agents} records={records}
+                    unsupportedReason={unsupported ? osReason(skill, os) : null}
+                    onChange={refreshRecords} onError={setError} />
                 </div>
               </article>
             );
@@ -1015,7 +984,7 @@ export function LibraryPage({
             }}
           >
             <Rocket className="size-3.5 text-muted" strokeWidth={1.75} />
-            部署 / 撤销…
+            部署…
           </button>
           <button
             type="button"
@@ -1048,6 +1017,7 @@ export function LibraryPage({
           onDeploy={(reference) => setDeployTarget([reference])}
           onDelete={(reference) => setDeleteTarget([reference])}
           onSyncDeployments={syncDeployments}
+          onDeploymentsChanged={refreshRecords}
         />
       )}
 
@@ -1117,7 +1087,6 @@ export function LibraryPage({
           domain={domain}
           references={deployTarget}
           agents={agents}
-          sharedDir={sharedDir}
           unsupportedReason={unsupportedDeployReason(
             deployTarget.map((reference) => ({
               name: reference,
@@ -1125,8 +1094,7 @@ export function LibraryPage({
             })),
             os,
           )}
-          onSharedDirChange={changeSharedDir}
-          onClose={() => setDeployTarget(null)}
+          onClose={() => { setDeployTarget(null); setVersion((value) => value + 1); }}
           onDone={(message) => {
             setNotice(message);
             setError(null);

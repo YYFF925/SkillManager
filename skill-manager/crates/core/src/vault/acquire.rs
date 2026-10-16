@@ -6,7 +6,7 @@
 //!   单技能仓库不分类）；
 //! - 继承上游自带 `.manager`（tags/translation/comment/agents/oses/overlay；缺声明=域内全支持）；
 //! - 登记 `source.yaml`：repo/ref/subpath/version（实际采用的完整提交 OID）/registered_at；
-//! - 来源与采用版本属同一 SkillVault 共享资产：不把 SkillVault 远端当成技能上游。
+//! - 来源与采用版本属同一 SkillManagerVault 共享资产：不把 SkillManagerVault 远端当成技能上游。
 
 use std::collections::BTreeMap;
 use std::path::Path;

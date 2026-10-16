@@ -48,9 +48,6 @@ pub struct DeployPresetArgs {
     /// 本次同时处理的其他目标（可重复）。
     #[arg(long = "also-target", value_name = "target")]
     pub also_target: Vec<String>,
-    /// 只报告将处理的技能、目标与路径，不修改文件或记录。
-    #[arg(long = "dry-run")]
-    pub dry_run: bool,
 }
 
 #[derive(Args, Debug)]
@@ -65,9 +62,6 @@ pub struct DeployUndoPresetArgs {
     /// 本次同时处理的其他目标（可重复）。
     #[arg(long = "also-target", value_name = "target")]
     pub also_target: Vec<String>,
-    /// 只报告将处理的技能、目标与路径，不修改文件或记录。
-    #[arg(long = "dry-run")]
-    pub dry_run: bool,
 }
 
 #[derive(Args, Debug)]
@@ -81,9 +75,6 @@ pub struct DeployToArgs {
     /// 本次同时处理的其他目标（可重复）。
     #[arg(long = "also-target", value_name = "target")]
     pub also_target: Vec<String>,
-    /// 只报告将处理的技能、目标与路径，不修改文件或记录。
-    #[arg(long = "dry-run")]
-    pub dry_run: bool,
 }
 
 #[derive(Args, Debug)]
@@ -94,8 +85,6 @@ pub struct DeployUndoArgs {
     pub references: Vec<String>,
     #[arg(long = "also-target", value_name = "target")]
     pub also_target: Vec<String>,
-    #[arg(long = "dry-run")]
-    pub dry_run: bool,
     /// 确认丢弃已被外部修改的待清理副本。
     #[arg(long = "discard-local-changes")]
     pub discard_local_changes: bool,
@@ -200,9 +189,9 @@ fn parse_targets(primary: &str, also: &[String]) -> Result<Vec<Target>> {
 fn deploy_to(ctx: &AppContext, args: DeployToArgs) -> Result<(CliResult, String)> {
     let references = parse_refs(&args.references)?;
     let targets = parse_targets(&args.target, &args.also_target)?;
-    let report = with_service(ctx, |service| service.deploy_to(&references, &targets, args.dry_run))?;
+    let report = with_service(ctx, |service| service.deploy_to(&references, &targets))?;
     log_failures(ctx, "deploy", &report);
-    Ok(report_result(report, Some(args.dry_run)))
+    Ok(report_result(report))
 }
 
 // ---------------------------------------------------------------------------
@@ -213,20 +202,20 @@ fn deploy_preset(ctx: &AppContext, args: DeployPresetArgs) -> Result<(CliResult,
     let domain = args.domain.parse::<Domain>()?;
     let targets = parse_targets(&args.to, &args.also_target)?;
     let report = with_service(ctx, |service| {
-        service.deploy_preset(domain, &args.preset_id, &targets, args.dry_run)
+        service.deploy_preset(domain, &args.preset_id, &targets)
     })?;
     log_failures(ctx, "deploy-preset", &report);
-    Ok(report_result(report, Some(args.dry_run)))
+    Ok(report_result(report))
 }
 
 fn undo_preset(ctx: &AppContext, args: DeployUndoPresetArgs) -> Result<(CliResult, String)> {
     let domain = args.domain.parse::<Domain>()?;
     let targets = parse_targets(&args.from, &args.also_target)?;
     let report = with_service(ctx, |service| {
-        service.undo_preset(domain, &args.preset_id, &targets, args.dry_run)
+        service.undo_preset(domain, &args.preset_id, &targets)
     })?;
     log_failures(ctx, "undo-preset", &report);
-    Ok(report_result(report, Some(args.dry_run)))
+    Ok(report_result(report))
 }
 
 // ---------------------------------------------------------------------------
@@ -237,10 +226,10 @@ fn undo(ctx: &AppContext, args: DeployUndoArgs) -> Result<(CliResult, String)> {
     let references = parse_refs(&args.references)?;
     let targets = parse_targets(&args.target, &args.also_target)?;
     let report = with_service(ctx, |service| {
-        service.undo(&references, &targets, args.dry_run, args.discard_local_changes)
+        service.undo(&references, &targets, args.discard_local_changes)
     })?;
     log_failures(ctx, "undo", &report);
-    Ok(report_result(report, Some(args.dry_run)))
+    Ok(report_result(report))
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +249,7 @@ fn sync(ctx: &AppContext, args: DeploySyncArgs) -> Result<(CliResult, String)> {
         service.sync(reference.as_ref(), target.as_ref(), args.overwrite_local)
     })?;
     log_failures(ctx, "deploy-sync", &report);
-    Ok(report_result(report, None))
+    Ok(report_result(report))
 }
 
 // ---------------------------------------------------------------------------
@@ -331,7 +320,7 @@ pub fn delete_skills(ctx: &AppContext, references: &[SkillRef]) -> Result<(CliRe
 // 输出
 // ---------------------------------------------------------------------------
 
-fn report_result(report: DeployReport, dry_run: Option<bool>) -> (CliResult, String) {
+fn report_result(report: DeployReport) -> (CliResult, String) {
     let mut batch = BatchOutcome::default();
     for item in &report.items {
         batch.push_ok(serde_json::to_value(item).unwrap_or(Value::Null));
@@ -340,15 +329,9 @@ fn report_result(report: DeployReport, dry_run: Option<bool>) -> (CliResult, Str
         batch.push_err(error);
     }
 
-    let mut result = batch.into_result("items");
-    if let (Some(dry_run), Value::Object(map)) = (dry_run, &mut result.data) {
-        map.insert("dry_run".to_string(), Value::Bool(dry_run));
-    }
+    let result = batch.into_result("items");
 
     let mut human = String::new();
-    if dry_run == Some(true) {
-        human.push_str("（预演：只报告，不修改文件与本机记录）\n");
-    }
     human.push_str(&format!(
         "处理 {} 项，未完成 {} 项",
         report_items_len(&result),

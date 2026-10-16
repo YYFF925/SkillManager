@@ -4,12 +4,12 @@
 
 ## 前置条件（一次性准备）
 
-- 一个**真实本地 SkillVault**：Git 仓库、已配置远端（可用临时私有远端）；首次启动在 GUI 中选择该目录；
+- 一个**真实本地 SkillManagerVault**：Git 仓库、已配置远端（可用临时私有远端）；首次启动在 GUI 中选择该目录；
 - 一个**测试上游仓库**：含多个技能（其中至少一个带 `.manager/`）+ 后续可制造新提交（改名/删除/管理资料变化各备一个场景）；
 - 本机安装 2 个以上真实 Agent（或以真实目录结构模拟），启用状态已知；
-- **双机模拟**（M4 起）：同一 SkillVault 远端的两个克隆 + 两个独立本机状态目录（分别传 `--vault <clone>` 和 `--state-dir <state-dir>`）。两份克隆代表同一个库，来源记录均指向技能的上游，不把另一份克隆当作技能来源重新入库。
+- **双机模拟**（M4 起）：同一 SkillManagerVault 远端的两个克隆 + 两个独立本机状态目录（分别传 `--vault <clone>` 和 `--state-dir <state-dir>`）。两份克隆代表同一个库，来源记录均指向技能的上游，不把另一份克隆当作技能来源重新入库。
 
-验收总原则：状态表达诚实（未检查/失败/待处理不得显示为最新或完成）。上游/工具检查可以保存本机检查事实与获取缓存，不应用技能变化、不改采用版本、部署或工具安装事实；dry-run 才要求目标文件和业务状态不变化。命令以 `contracts/cli.md` 为准，表中省略的参数不表示允许缺少必要对象。
+验收总原则：状态表达诚实（未检查/失败/待处理不得显示为最新或完成）。上游/工具检查可以保存本机检查事实与获取缓存，不应用技能变化、不改采用版本、部署或工具安装事实。命令以 `contracts/cli.md` 为准，表中省略的参数不表示允许缺少必要对象。
 
 ## GUI 视觉与交互对照（各期适用）
 
@@ -23,7 +23,7 @@
 
 | # | 操作 | 预期（对应场景） |
 |---|---|---|
-| 1.1 | 启动 GUI，首次选择 SkillVault | 直接进入技能库；两域技能、分类、标签、注释可见（US1） |
+| 1.1 | 启动 GUI，首次选择 SkillManagerVault | 直接进入技能库；两域技能、分类、标签、注释可见（US1） |
 | 1.2 | 搜索/按分类+标签组合筛选；选中分类 A 看标签栏 | 标签候选只含 A 内实际标签；"全部分类"恢复全部（US1-3） |
 | 1.3 | 打开带译文的技能详情 | 默认中文、可切原文；无译文技能显示原文（US1-1） |
 | 1.4 | 改分类 A→B（GUI 与 `skill move` 各一次） | 目录实际移动、名字不变、筛选可找到（US1-2） |
@@ -45,11 +45,10 @@
 | 2.7 | `deploy to shared <ref>` | 共享目录获得通用内容（US3-8） |
 | 2.8 | 编码技能直接部署给龙虾目标 | 被管理域边界阻止（US3-9） |
 | 2.9 | `skill delete <ref>` 已部署技能，并另备一个外改副本 | 无外改副本清理成功；外改项库条目删除但副本和定位记录保留，报告清理暂停；用户经 Agent 裁决后显式继续清理（US3-10） |
-| 2.10 | `deploy to ... --dry-run` | 报告技能/目标/路径，文件未变（US3-11） |
 | 2.11 | 部署技能到 `hermes:default` → `hermes enable <p> <name>` → 再 disable | default 可用；档案明确启用才可用；内容更新后启用选择保留（US6-1/2） |
 | 2.12 | 档案独有技能 `skill adopt-hermes` | 进龙虾库+部署 default，原档案启用保持（US6-4） |
 | 2.13 | 支持声明收窄（去掉某 Agent） | 已有部署保留+警告，新部署禁止（US3-4） |
-| 2.14 | GUI 及 `deploy to codex code/a code/b --also-target zcode`，随后同范围批量撤销或预演 | 一次涵盖多技能与多目标，逐组合过滤不适用项/暂停外改副本，其余继续；预演不落文件，撤销保留库技能（FR-021） |
+| 2.14 | GUI 及 `deploy to codex code/a code/b --also-target zcode`，随后同范围批量撤销 | 一次涵盖多技能与多目标，逐组合过滤不适用项/暂停外改副本，其余继续；撤销保留库技能（FR-021） |
 
 ## M3 — 获取与上游更新
 
@@ -134,8 +133,8 @@ skill-manager skill update code/skill-manager-maintenance
 
 | # | 操作 | 预期 |
 |---|---|---|
-| 5.14 | `settings get`（不带参数与带参数各一次） | 返回全部键的**当前生效值**（主题缺省 `system`、检查频率缺省 60、未设置的共享目录为 `null`）；带参数只返回指定键；未设置的键返回 `null`，不省略键、不用空字符串冒充 |
-| 5.15 | 纯 CLI 环境（无 GUI 参与）：`settings set-shared-dir --path <临时目录>` → `deploy to shared <ref>` | 设置后共享目录部署成功；`settings set-shared-dir --clear` 后 `deploy to shared` 如实报"尚未设置共享目录路径" |
+| 5.14 | `settings get`（不带参数与带参数各一次） | 返回全部键的**当前生效值**（主题缺省 `system`、检查频率缺省 60、共享目录为当前用户主目录下的 `.agents/skills`）；带参数只返回指定键；未设置的键返回 `null`，不省略键、不用空字符串冒充 |
+| 5.15 | 纯 CLI 环境（临时 HOME 与独立状态）：`settings get shared_dir` → `deploy to shared <ref>` | 自动定位 `<HOME>/.agents/skills`，不需设置；读取不创建目录，首次部署生成副本；不存在共享路径写入命令 |
 | 5.16 | `settings set-auto-check 0` 与 `settings set-auto-check 30`；再试 `settings set-auto-check 45` | 前两者写入成功并可由 `settings get` 读回；45 被拒绝并给出合法取值（0/30/60/360/1440） |
 | 5.17 | `settings diagnostics`、`settings diagnostics --export`、`settings capacity` | 诊断输出含版本/平台/真实日志路径；`--export` 写出真实文件并返回其路径；容量输出库总占用与较大技能排行，空库返回 0 与空排行 |
 | 5.18 | 按 FR-050 边界核对不允许的写入 | `theme`/`font_scale`/`git_auto_push` **没有** CLI 写入口（命令不存在或明确不支持），只能经 `settings get` 读取；工具安装事实回写仍只有 CLI（GUI 无入口） |
@@ -149,8 +148,10 @@ skill-manager skill update code/skill-manager-maintenance
 
 | # | 操作 | 预期 |
 |---|---|---|
-| 6.1 | 未设置共享目录时：`agent local-skills shared`、`agent delete-local shared <名>`；GUI 打开「共享 Agent」 | CLI 以非 0 退出并如实报"尚未设置共享目录路径"；GUI **保留入口**并提示未设置 + 提供前往设置入口，不显示成空列表、不猜默认路径 |
-| 6.2 | `settings set-shared-dir --path <临时目录>` → `deploy to shared <ref>` → `agent local-skills shared`；GUI 同页 | 列出该目录技能并区分受管（存在 `target=shared` 部署记录）与仅本地；GUI 显示同样三态与筛选 |
+| 6.1 | 共享目录尚不存在：`agent local-skills shared`；GUI 打开「共享 Agent」 | 自动展示 `<HOME>/.agents/skills`，列表为空；不创建目录，不要求前往设置 |
+| 6.2 | 无需路径设置：`deploy to shared <ref>` → `agent local-skills shared`；GUI 同页 | 列出该目录技能并区分受管（存在 `target=shared` 部署记录）与仅本地；GUI 显示同样三态与筛选 |
+| 6.2a | 在临时 HOME 的共享目录放置一个未受管技能，执行 `skill adopt shared <名>`；GUI 从「纳入管理」打开收编对话框 | 技能进入编码库，原共享目标变为受管，不新增其他目标部署；GUI 提供单项及勾选后的批量入口 |
+| 6.2b | 点击本机技能卡片；执行 `agent read-local shared <名> [--file <路径>]` | 展示真实本机副本正文和目录内文件；与库内原文不同也不替换成库内容；勾选、删除和收编按钮不误开详情 |
 | 6.3 | `agent delete-local shared <仅本地名>` 与 `<受管名>` | 前者删除该目录实际文件、不改库；后者按撤销部署规则移除副本并清理记录、库内技能保留 |
 | 6.4 | `agent local-skills codex`（对照） | 行为与本次变更前一致，不受共享目录支持影响 |
 

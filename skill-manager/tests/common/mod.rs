@@ -1,4 +1,4 @@
-//! 集成测试公共设施：临时 SkillVault、Git 上游仓库、Agent 目录与独立状态目录。
+//! 集成测试公共设施：临时 SkillManagerVault、Git 上游仓库、Agent 目录与独立状态目录。
 //!
 //! 每个测试用例得到互不干扰的临时目录；模拟“另一台电脑”时给同一份库配不同状态目录。
 
@@ -14,7 +14,7 @@ use tempfile::TempDir;
 pub struct TestEnv {
     /// 临时根目录，随结构体一起删除。
     pub root: TempDir,
-    /// 本地 SkillVault（Git 仓库）。
+    /// 本地 SkillManagerVault（Git 仓库）。
     pub vault: PathBuf,
     /// 本机状态目录（隔离 SQLite、检查缓存与日志）。
     pub state_dir: PathBuf,
@@ -23,7 +23,7 @@ pub struct TestEnv {
 }
 
 impl TestEnv {
-    /// 建立临时环境：初始化空 SkillVault Git 仓库，并准备状态目录与模拟 home。
+    /// 建立临时环境：初始化空 SkillManagerVault Git 仓库，并准备状态目录与模拟 home。
     pub fn new() -> Self {
         let root = TempDir::new().expect("创建临时目录失败");
         let base = root.path();
@@ -48,22 +48,22 @@ impl TestEnv {
         )
         .expect("写入测试 git 配置失败");
         env.git(&["init", "--quiet", "--initial-branch=main"], &env.vault.clone());
-        env.write("README.md", "# 测试用 SkillVault\n");
+        env.write("README.md", "# 测试用 SkillManagerVault\n");
         env.commit_all("初始化测试库");
         env
     }
 
-    /// 在 SkillVault 内写文件（相对路径，自动创建父目录）。
+    /// 在 SkillManagerVault 内写文件（相对路径，自动创建父目录）。
     pub fn write(&self, rel: &str, content: &str) {
         write_at(&self.vault, rel, content);
     }
 
-    /// 读取 SkillVault 内文件；不存在返回 None。
+    /// 读取 SkillManagerVault 内文件；不存在返回 None。
     pub fn read(&self, rel: &str) -> Option<String> {
         std::fs::read_to_string(self.vault.join(rel)).ok()
     }
 
-    /// SkillVault 内路径。
+    /// SkillManagerVault 内路径。
     pub fn path(&self, rel: &str) -> PathBuf {
         self.vault.join(rel)
     }
@@ -210,7 +210,7 @@ impl TestEnv {
         String::from_utf8_lossy(&output.stdout).into_owned()
     }
 
-    /// 提交 SkillVault 当前全部改动。
+    /// 提交 SkillManagerVault 当前全部改动。
     pub fn commit_all(&self, message: &str) {
         let vault = self.vault.clone();
         self.git(&["add", "-A"], &vault);

@@ -437,8 +437,7 @@ export function UpstreamDialog({
     </>
   ) : (
     <>
-      <span className="text-[12px] text-faint">检查只展示变化，不会修改技能库。</span>
-      <div className="flex gap-2.5">
+      <div className="ml-auto flex gap-2.5">
         <Button disabled={upstream.busy} onClick={() => setSkippedOpen(true)}>
           已跳过版本
         </Button>
@@ -705,7 +704,6 @@ function RepoCard({
       )}
 
       <div className="mt-3 flex items-center gap-3">
-        <span className="text-[12px] text-faint">检查不会修改技能库</span>
         <span className="flex-1" />
         <Button compact onClick={onOpen}>
           查看并决定

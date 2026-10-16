@@ -8,7 +8,7 @@
 
 | 场景号 | 预期 | 实际 | 结论 |
 |---|---|---|---|
-| 4.1 机 A：GUI 保存修改 | 自动提交推送自己的库；来源仓库无变化 | GUI 保存指令源后：**先刷新已有部署**（结果行"已刷新 Codex → …/AGENTS.md"）→ 首次弹出"保存后自动上传本机 SkillVault？"→ 确认后 `git log` 出现"更新 SkillVault（Skill Manager 上传）"并已推送远端；无改动时如实显示"没有需要上传的改动，已是最新"（截图 `win_instruction_saved.png`、`win_a_after_upload.png`） | 通过 |
+| 4.1 机 A：GUI 保存修改 | 自动提交推送自己的库；来源仓库无变化 | GUI 保存指令源后：**先刷新已有部署**（结果行"已刷新 Codex → …/AGENTS.md"）→ 首次弹出"保存后自动上传本机 SkillManagerVault？"→ 确认后 `git log` 出现"更新 SkillManagerVault（Skill Manager 上传）"并已推送远端；无改动时如实显示"没有需要上传的改动，已是最新"（截图 `win_instruction_saved.png`、`win_a_after_upload.png`） | 通过 |
 | 4.2 机 A：Agent 修改 → `sync push`；已同意上传失败后主动重试 | 仅获同意才上传；主动重试可继续；后台不提交不推送 | CLI 实测：上传失败保留可读原因、用户主动重试成功；`push_commits_all_workspace_changes_to_own_vault_only` 断言工作区**全部**改动进入提交且来源仓库 HEAD 不变；`background_and_readonly_paths_do_not_push` 断言 `deploy sync`/`sync status` 不推送 | 通过 |
 | 4.3 机 B：`sync pull`（无冲突） | 静默应用 + 已有部署刷新；库内新增技能**不**自动部署 | 拉取后 B 的已有部署被刷新，**新增技能只入库、未部署**；内存索引重建 | 通过 |
 | 4.4 制造双端冲突 → pull | 同步暂停+提示，`sync conflicts` 输出详情；修复后继续 | `sync pull` 返回 `partial` 并给出未合并路径；Git 现场保留；处理后再次 `sync pull` **完成继续**（不新增合并界面） | 通过 |
@@ -31,8 +31,8 @@
 |---|---|---|
 | 全局指令 14 / Cursor 专属 15 | `win_instruction_global.png`、`win_instruction_codex.png` | 通过：左列"全局指令"固定第一项并默认选中、右侧单编辑区、底部单保存按钮、合成预览 |
 | 切换工具保留草稿（原型 README 第 8 条） | `win_draft_codex.png`、`win_draft_back_global.png` | 通过：无专属时显示"仅使用全局指令"，切回全局后未保存草稿仍在，保存后弹窗保持打开 |
-| 设置页 19 | 设置页截图 | 部分通过：共同检查频率分段按钮（关闭/30 分钟/1 小时/6 小时/24 小时，默认 1 小时，注明三项共用）、自动上传确认状态、SkillVault 路径、共享技能目录行内修改、同步状态分区，分区行与分段按钮样式一致。**差异**：本期未放主题/字号（属 M5 T083）；Agent 检测分区在 Agent 页（M2 已有），不重复 |
-| Agent 询问上传 29 | `win_instruction_saved.png` | 通过：首次保存后询问"保存后自动上传本机 SkillVault？"，确认后沿用 |
+| 设置页 19 | 设置页截图 | 部分通过：共同检查频率分段按钮（关闭/30 分钟/1 小时/6 小时/24 小时，默认 1 小时，注明三项共用）、自动上传确认状态、SkillManagerVault 路径、共享技能目录行内修改、同步状态分区，分区行与分段按钮样式一致。**差异**：本期未放主题/字号（属 M5 T083）；Agent 检测分区在 Agent 页（M2 已有），不重复 |
+| Agent 询问上传 29 | `win_instruction_saved.png` | 通过：首次保存后询问"保存后自动上传本机 SkillManagerVault？"，确认后沿用 |
 
 **未取得界面证据、记为未验证**：**"未连接"状态**与**冲突提示**的界面渲染（本次远端始终可达、未制造界面级冲突；两种状态的渲染已实现，并有 core/CLI 层面的覆盖）；并发多保存未串行化（可能并发触发 deploySync/push 并出现 `index.lock`），按"影响可见、可恢复"接受，未额外加锁。
 

@@ -44,7 +44,7 @@
 | S4 | `agent_5dc0d272-…` | CLI 命令面、机器可读输出、GUI-only 缺口、dry-run、Agent 调用可用性（J01/J02、B13、D05） | `cli-capability-map.md` |
 | S5 | `agent_687bfa9b-…` | 工具中心资料数据契约、模块分工、容错校验、与新需求缺口（J03/J05） | `tool-center-data-model.md` |
 | S6 | `agent_1e57b731-…` | Agent 检测与目录配置、指令源与分发、外部修改自动刷新、偏好与托盘（G01–G06、A11、J06/J07） | `local-runtime-and-shell.md` |
-| S7 | `agent_856d95ed-…` | SkillVault 跨机同步、Git 提交/推送/拉取、冲突条件、上传授权、并发与容量（I01–I12） | `vault-git-sync.md` |
+| S7 | `agent_856d95ed-…` | SkillManagerVault 跨机同步、Git 提交/推送/拉取、冲突条件、上传授权、并发与容量（I01–I12） | `vault-git-sync.md` |
 | S8 | `agent_c7ce9488-…` | 预设存储与排序、增量/互斥部署、Hermes 管理器侧状态、库浏览与详情（E01–E07、H01/H02、A04/A05/A07/A08） | `presets-hermes-and-browsing.md` |
 | S9 | `agent_793651a1-…` | 技能识别谓词、递归短路、技能名派生、外部格式约定（B05/B06/B08、A01） | `skill-detection.md` |
 
@@ -64,7 +64,7 @@ S9 是主代理整合时**因发现覆盖缺口而追加**的子代理（技能�
 | `cli-capability-map.md` | 286 | 旧 7 分组命令树 → 旧能力编号 → 新需求状态表、JSON 信封与退出码、GUI-only 缺口、`--skills-root` 副作用、dry-run 范式、脚本桥 |
 | `tool-center-data-model.md` | 308 | 工具资料目录契约（`tool.yaml`/`state.yaml`/`overview.md`/`operations.md`…）、四组冻结枚举、`hasUpdate` 直读、模块分工、fixture 容错预期、四类信息缺口 |
 | `local-runtime-and-shell.md` | 239 | 检测=路径存在性、配置落本机 SQLite、改目录的部署协调、指令源与分发范围、A11 去抖/自写抑制、偏好默认值、托盘检查更新 |
-| `vault-git-sync.md` | 396 | 旧"SkillVault"≠新 SkillVault 的澄清、同步时序、提交/推送/拉取、冲突条件表、上传授权缺失、`repo_lock`/原子写、容量报告、凭据系统、剥离清单 |
+| `vault-git-sync.md` | 396 | 旧"SkillManagerVault"≠新 SkillManagerVault 的澄清、同步时序、提交/推送/拉取、冲突条件表、上传授权缺失、`repo_lock`/原子写、容量报告、凭据系统、剥离清单 |
 | `presets-hermes-and-browsing.md` | 456 | 预设真值/镜像、成员与排序、增量(E05) vs 互斥(E04)、跨域名称唯一冲突、Hermes 候选池/启用名单/文本手术、搜索筛选、分类-标签联动旧无先例、文件清单与差异查看 |
 | `skill-detection.md` | 153 | 识别谓词 `is_dir() && SKILL.md\|skill.md`、递归短路、技能名派生、`sanitize_skill_name` 剥离项、外部格式约定（历史观察） |
 
@@ -95,7 +95,7 @@ S9 是主代理整合时**因发现覆盖缺口而追加**的子代理（技能�
 | 技能部署（独立副本、dry-run、共享目录、域边界、库间复制） | 合成、记录、撤销、本地变更、资格判断 | `sync_engine.rs`、`tool_adapters.rs:245` | S2 | 已交付：D04 行为反转、本地变更闸门缺失 |
 | Agent 接入与本地技能（检测、目录、指令、删除） | 检测条件、配置存储、指令分发、刷新 | `tool_adapters.rs:222/1077`、`agent_instructions.rs:109`、`file_watcher.rs:154` | S6 | 已交付：检测=路径存在性；指令源需改库内位置 |
 | Hermes 档案（重点功能） | 候选池、启用名单、配置写入 | `hermes_profile.rs:424/461/517` | S8 + `hermes-integration.md` | 已交付：一次挂载后自动可见的旧策略不沿用；外部配置协议需由适配层处理，档案独有收编旧无完整实现 |
-| SkillVault 跨电脑同步（区分上游、冲突、上传询问） | 同步链路、冲突条件、上传授权 | `auto_backup.rs:200`、`merge/decision.rs:121` | S7 | 已交付：旧无上传同意判断；已查同步回调未直接刷新部署，启动另有旧预设部署路径 |
+| SkillManagerVault 跨电脑同步（区分上游、冲突、上传询问） | 同步链路、冲突条件、上传授权 | `auto_backup.rs:200`、`merge/decision.rs:121` | S7 | 已交付：旧无上传同意判断；已查同步回调未直接刷新部署，启动另有旧预设部署路径 |
 | 操作入口与 CLI（核心操作可达、Agent 为主） | 命令面、输出、缺口、dry-run | `bin/skills-manager-cli.rs:108`、`cli_bridge.rs:47` | S4 | 已交付：7 分组映射表；Hermes/差异/GUI-only 缺口 |
 | 配套管理操作 Skill（普通技能、开发时同步） | 旧 manage-skills 与 CLI 的一致性 | `FeiSkillDock/skills/manage-skills/SKILL.md`、`AGENTS.md` | S4/S5 | 已交付：漂移是真实历史问题，须靠开发时同步 |
 | 工具中心（已确认需求，8 子节） | 资料契约、版本检查、配套 Skill 状态 | `tool_center/*.rs`、`src/tool-center/data/*`、`fixtures/**` | S5 | 已交付：资料内容骨架与读错误隔离可参考，完整旧契约不继承；软件不检查版本是主要缺口 |
@@ -135,7 +135,7 @@ OS 支持声明与"当前系统不适用"灰显、部署期注入中文注释的
 |---|---|---|
 | 中文注释放入库内 `SKILL.md` frontmatter（`skills.rs:4261`、`installer.rs:192`） | 「中文注释与原始内容的边界」：注释部署时加入，库内原件原样 | 保留 `set_description_prefix_in_content` 的文本变换算法作部署期注入参考；**剥离"保存即回写库内"调用链** |
 | 上游更新整目录替换、只搬 `comment`（`skills.rs:2918`） | 「上游更新的保留边界」：上游不带则保留本地、同项用上游值 | 不能照搬整目录替换或只搬 comment；需**逐项合并**（格式另定） |
-| 旧 SkillVault 来源禁止本地改 `.manager`（`skills.rs:4068` VAULT-05） | 统一在 SkillVault 维护，本地资料是维护成果 | 剥离来源相关只读门 |
+| 旧 SkillManagerVault 来源禁止本地改 `.manager`（`skills.rs:4068` VAULT-05） | 统一在 SkillManagerVault 维护，本地资料是维护成果 | 剥离来源相关只读门 |
 | 未受管同名目标默认**拒绝覆盖**（`sync_engine.rs:130` NoClobber） | D04：直接覆盖并接管，不做冲突检查 | 行为反转；可保留 `UserConfirmed` 接管路径语义 |
 | 库间复制**清除上游来源**（`skills.rs:5041`） | 副本保留上游来源、两份独立维护 | 来源字段处理须反转；保留"拒绝+removed_paths"呈现思路 |
 | 自动备份无授权门，任何库内变化 120s 后 `commit+push`（`file_watcher.rs:362`、`auto_backup.rs:200`） | I03/I04：Agent 改动每次询问、未同意不上传 | 剥离"变化即 commit+push"链路；本地 commit 与 push 本已分离，可保留分离 |
@@ -201,7 +201,7 @@ OS 支持声明与"当前系统不适用"灰显、部署期注入中文注释的
 - Hermes 外部协议、各 Agent 目录与第三方技能约定均为历史线索，未核对当前安装或当前一手实现。
 - 未运行旧应用或旧测试，未实际触发更新、同步或部署；上游资料的最终保留结果还受后续镜像写回影响，不能把局部未搬运等同所有字段最终必然丢失。如需试验，用隔离合成资料，不要求用户真实库。
 
-下列内容**不是待用户重做裁决**：可选 dry-run 包含目标路径、Hermes 核心 CLI 覆盖、指令源进 SkillVault、
+下列内容**不是待用户重做裁决**：可选 dry-run 包含目标路径、Hermes 核心 CLI 覆盖、指令源进 SkillManagerVault、
 默认跟随系统、关窗收托盘及不沿用跨库预设名称唯一限制。具体实现细节不冒充新产品问题。
 
 ## 八、签发方第二轮复查（2026-10-15）
@@ -250,6 +250,6 @@ OS 支持声明与"当前系统不适用"灰显、部署期注入中文注释的
 
 已回查普通 Git 更新哈希与替换分支、自动备份前置条件和推送、管理层结构、部署替换策略、
 同步重建索引与监听回调、GUI 启动预设部署、分类取段、Agent 检测、工具状态派生源码。
-未运行旧应用、CLI 或旧测试，未联网或改写旧仓库、SkillVault、Agent 安装目录。
+未运行旧应用、CLI 或旧测试，未联网或改写旧仓库、SkillManagerVault、Agent 安装目录。
 
 最终静态检查：技术参考内相对路径链接无断开；Agent 清单 53 项、Agent 图标 50 个、预设图标 31 项，均与说明一致。JSON 可解析。九份新增参考由首轮合计 2990 行精简为约 1835 行；行数只说明清理幅度，不作为质量指标。

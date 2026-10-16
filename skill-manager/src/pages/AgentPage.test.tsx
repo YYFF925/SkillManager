@@ -1,8 +1,7 @@
 /**
  * Agent 页面（T105/T106/T111）：跨目标部署清单，以及单个目标（共享 Agent 页）复用的本地技能列表视图。
  *
- * 只验证界面与 core 输出之间的接线：未设置共享目录路径时保留页面并如实提示、给出前往设置入口
- * （不猜路径、不显示成“没有技能”）；已设置时按受管／仅本地／本地有变更三态渲染并提供删除入口；
+ * 验证直接读取自动定位的共享目录，无需前往设置；按受管／仅本地／本地有变更三态渲染并提供删除入口；
  * 「全部 Agents」渲染部署记录，不再出现 Agent 管理入口（FR-057）。
  */
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -14,7 +13,7 @@ import type { AgentView, DeploymentStatusView, LocalSkillView } from "../service
 /** 受管（已同步）。 */
 const managed: LocalSkillView = {
   name: "agent-skill-deployment",
-  path: "/tmp/shared-skills/agent-skill-deployment",
+  path: "/tmp/home/.agents/skills/agent-skill-deployment",
   managed: true,
   status: "managed",
   target: "shared",
@@ -26,7 +25,7 @@ const managed: LocalSkillView = {
 /** 受管但本地有变更：按撤销与暂停规则处理。 */
 const paused: LocalSkillView = {
   name: "spec-kit-cli",
-  path: "/tmp/shared-skills/spec-kit-cli",
+  path: "/tmp/home/.agents/skills/spec-kit-cli",
   managed: true,
   status: "paused_local_change",
   target: "shared",
@@ -37,17 +36,17 @@ const paused: LocalSkillView = {
 /** 未受管：直接删除实际文件。 */
 const localOnly: LocalSkillView = {
   name: "local-only",
-  path: "/tmp/shared-skills/local-only",
+  path: "/tmp/home/.agents/skills/local-only",
   managed: false,
   status: "local",
   target: "shared",
   library_exists: false,
 };
 
-/** 共享目录已设置时的目录内容。 */
+/** 自动识别的共享目录内容。 */
 const skillsFixture = {
   agent: "shared",
-  skills_dir: "/tmp/shared-skills",
+  skills_dir: "/tmp/home/.agents/skills",
   skills: [managed, paused, localOnly],
   managed: 2,
   total: 3,
@@ -86,7 +85,7 @@ const deployRecords: DeploymentStatusView[] = [
   {
     skill: "code/agent-skill-deployment",
     target: "shared",
-    target_path: "/tmp/shared-skills/agent-skill-deployment",
+    target_path: "/tmp/home/.agents/skills/agent-skill-deployment",
     status: "paused_local_change",
     source_hash: "a",
     deployed_hash: "b",
@@ -96,10 +95,16 @@ const deployRecords: DeploymentStatusView[] = [
 ];
 
 vi.mock("../services/client", () => ({
-  // 共享目录未设置时为 null；各用例按需覆盖。
-  sharedDirGet: vi.fn(async () => "/tmp/shared-skills"),
-  sharedDirSet: vi.fn(async () => "/tmp/shared-skills"),
   agentLocalSkills: vi.fn(async () => skillsFixture),
+  agentReadLocal: vi.fn(async (_target: string, name: string, file?: string) => ({
+    name,
+    path: `/tmp/home/.agents/skills/${name}`,
+    file: file ?? "SKILL.md",
+    text: file ? "辅助文件内容" : "本机副本正文",
+    size: 18,
+    files: ["SKILL.md", "references/usage.md"],
+  })),
+  adoptSkills: vi.fn(async () => ({ adopted: 1, items: [], errors: [] })),
   agentDeleteLocal: vi.fn(async () => ({ removed: [], errors: [] })),
   copySkill: vi.fn(),
   // 部署清单与「从库部署」；默认无记录，用例按需覆盖。
@@ -114,69 +119,55 @@ vi.mock("../services/client", () => ({
   deployUndo: vi.fn(),
 }));
 
-import { agentDeleteLocal, agentLocalSkills, deployStatus, sharedDirGet } from "../services/client";
+import { agentDeleteLocal, agentLocalSkills, agentReadLocal, deployStatus } from "../services/client";
 
 const noop = () => {};
 
 afterEach(() => {
   vi.clearAllMocks();
-  vi.mocked(sharedDirGet).mockResolvedValue("/tmp/shared-skills");
   vi.mocked(agentLocalSkills).mockResolvedValue(skillsFixture);
   vi.mocked(deployStatus).mockResolvedValue([]);
 });
 
-function renderShared() {
+function renderShared(onMeta = vi.fn()) {
   return render(
     <AgentPage
       domain="code"
       selectedTarget="shared"
       agents={[]}
-      onSelectTarget={noop}
+      onMeta={onMeta}
+      onOpenInLibrary={noop}
       onNotice={noop}
-      onOpenSettings={noop}
     />,
   );
 }
 
 describe("AgentPage · 共享 Agent", () => {
-  it("未设置共享目录路径时保留页面，如实提示并给出前往设置入口", async () => {
-    vi.mocked(sharedDirGet).mockResolvedValue(null);
-    const onOpenSettings = vi.fn();
-    render(
-      <AgentPage
-        domain="code"
-        selectedTarget="shared"
-        agents={[]}
-        onSelectTarget={noop}
-        onNotice={noop}
-        onOpenSettings={onOpenSettings}
-      />,
-    );
-
-    // 页面保留（共享 Agent 视图与返回入口仍在），并如实提示未设置路径。
+  it("直接读取自动识别的共享目标，无需前往设置", async () => {
+    const onMeta = vi.fn();
+    renderShared(onMeta);
+    await waitFor(() => expect(agentLocalSkills).toHaveBeenCalledWith("shared"));
     await waitFor(() =>
-      expect(
-        screen.getByText("尚未设置共享目录路径（共享目录是编码 Agent 的部署目标），因此无法列出技能。"),
-      ).toBeTruthy(),
+      expect(onMeta).toHaveBeenLastCalledWith({
+        count: 3,
+        subtitle: "/tmp/home/.agents/skills · 2 个受管理",
+      }),
     );
-    expect(screen.getByText("共享 Agent")).toBeTruthy();
-
-    // 不显示成“没有技能”、也不显示筛选后的空结果（该文案见第三个用例，确为界面真实文案）。
-    expect(screen.queryByText("共享技能目录下没有技能（尚未部署）。")).toBeNull();
-    expect(screen.queryByText("没有符合筛选条件的技能。")).toBeNull();
-    // 不猜默认路径：未设置时不列举目录。
-    expect(agentLocalSkills).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "前往设置" }));
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "前往设置" })).toBeNull();
   });
 
-  it("已设置时按三态渲染技能，并提供删除入口", async () => {
-    renderShared();
+  it("按三态渲染共享技能，并提供删除入口", async () => {
+    const onMeta = vi.fn();
+    renderShared(onMeta);
 
     await waitFor(() => expect(screen.getByText("agent-skill-deployment")).toBeTruthy());
     expect(agentLocalSkills).toHaveBeenCalledWith("shared");
-    expect(screen.getByText(/\/tmp\/shared-skills · 2 个受管理/)).toBeTruthy();
+    await waitFor(() =>
+      expect(onMeta).toHaveBeenLastCalledWith({
+        count: 3,
+        subtitle: "/tmp/home/.agents/skills · 2 个受管理",
+      }),
+    );
 
     // 三态在卡片上分别表达；筛选控件用的是“仅本地/有变更”，故按卡片断言。
     const managedCard = screen.getByText("agent-skill-deployment").closest("article")!;
@@ -187,8 +178,7 @@ describe("AgentPage · 共享 Agent", () => {
     expect(within(localCard).getByText("仅本地")).toBeTruthy();
     expect(within(managedCard).getByText("受管 · code/agent-skill-deployment")).toBeTruthy();
 
-    // 共享目录是部署产物，不提供收编入口。
-    expect(screen.queryByTitle(/收编 /)).toBeNull();
+    expect(screen.getByTitle("收编 local-only 到技能库并接管原部署")).toBeTruthy();
 
     // 未受管项提供删除入口，删除按目标传参。
     fireEvent.click(screen.getByTitle("删除本机副本 local-only"));
@@ -197,22 +187,48 @@ describe("AgentPage · 共享 Agent", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "删除" }));
     await waitFor(() => expect(agentDeleteLocal).toHaveBeenCalledWith("shared", ["local-only"]));
+    expect(agentReadLocal).not.toHaveBeenCalled();
   });
 
-  it("已设置但目录为空时按空目录提示，与未设置路径的提示区分", async () => {
+  it("目录为空时保持空白，不显示空状态或底部说明", async () => {
     vi.mocked(agentLocalSkills).mockResolvedValue({
       agent: "shared",
-      skills_dir: "/tmp/shared-skills",
+      skills_dir: "/tmp/home/.agents/skills",
       skills: [],
       managed: 0,
       total: 0,
     });
-    renderShared();
+    const onMeta = vi.fn();
+    renderShared(onMeta);
 
     await waitFor(() =>
-      expect(screen.getByText("共享技能目录下没有技能（尚未部署）。")).toBeTruthy(),
+      expect(onMeta).toHaveBeenLastCalledWith({
+        count: 0,
+        subtitle: "/tmp/home/.agents/skills · 0 个受管理",
+      }),
     );
-    expect(screen.queryByText(/尚未设置共享目录路径/)).toBeNull();
+    expect(screen.queryByText(/没有技能|没有符合筛选条件|仅本地：/)).toBeNull();
+    expect(screen.queryByRole("article")).toBeNull();
+  });
+
+  it("点击卡片阅读本机正文与文件，勾选框不打开详情", async () => {
+    renderShared();
+    const title = await screen.findByText("local-only");
+    const card = title.closest("article")!;
+    fireEvent.click(screen.getByRole("button", { name: "多选" }));
+    fireEvent.click(within(card).getByRole("checkbox"));
+    expect(agentReadLocal).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "取消多选" }));
+    fireEvent.click(card);
+    await screen.findByText("本机副本正文");
+    expect(agentReadLocal).toHaveBeenCalledWith("shared", "local-only", undefined);
+    fireEvent.click(screen.getByRole("button", { name: "文件" }));
+    fireEvent.click(screen.getByRole("button", { name: "references/usage.md" }));
+    await screen.findByText("辅助文件内容");
+    fireEvent.click(screen.getByText("关闭", { selector: "button" }));
+    fireEvent.click(screen.getByTitle("收编 local-only 到技能库并接管原部署"));
+    await screen.findByText("收编本机技能");
+    expect(screen.queryByText("本机副本正文")).toBeNull();
   });
 });
 
@@ -224,9 +240,9 @@ describe("AgentPage · 全部编码 Agents（跨目标部署清单）", () => {
         domain="code"
         selectedTarget={null}
         agents={[codex]}
-        onSelectTarget={noop}
+        onMeta={noop}
+        onOpenInLibrary={noop}
         onNotice={noop}
-        onOpenSettings={noop}
       />,
     );
 
@@ -254,9 +270,9 @@ describe("AgentPage · 全部编码 Agents（跨目标部署清单）", () => {
         domain="code"
         selectedTarget={null}
         agents={[codex]}
-        onSelectTarget={noop}
+        onMeta={noop}
+        onOpenInLibrary={noop}
         onNotice={noop}
-        onOpenSettings={noop}
       />,
     );
     await waitFor(() => expect(screen.getAllByText("agent-skill-deployment")).toHaveLength(2));

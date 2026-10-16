@@ -9,56 +9,25 @@ export const SHARED_TARGET = "shared";
 export const HERMES_DEFAULT_TARGET = "hermes:default";
 
 export interface TargetOption {
-  /** 目标标识：Agent key、`shared` 或 `hermes:default`。 */
+  /** Agent key。 */
   value: string;
   label: string;
-  domain: Domain;
-  /** 本机检测目录存在（Agent 目标）；共享目录与 Hermes default 视为可用。 */
-  detected: boolean;
   /** 品牌图标文件名（相对 public/）。 */
   icon: string | null;
   invertInDark: boolean;
-  isAgent: boolean;
 }
 
-/** 某管理域可用的部署目标：共享目录 / Hermes default + 内置 Agent 名单。 */
+/** 某管理域可用的部署目标：已检测且启用的 Agent。 */
 export function targetOptions(domain: Domain, agents: AgentView[]): TargetOption[] {
-  const specials: TargetOption[] =
-    domain === "code"
-      ? [
-          {
-            value: SHARED_TARGET,
-            label: "共享目录",
-            domain: "code",
-            detected: true,
-            icon: null,
-            invertInDark: false,
-            isAgent: false,
-          },
-        ]
-      : [
-          {
-            value: HERMES_DEFAULT_TARGET,
-            label: "Hermes default 档案",
-            domain: "lobster",
-            detected: true,
-            icon: null,
-            invertInDark: false,
-            isAgent: false,
-          },
-        ];
   const agentOptions = agents
-    .filter((agent) => agent.domain === domain)
+    .filter((agent) => agent.domain === domain && agent.detected && agent.enabled)
     .map((agent) => ({
       value: agent.key,
       label: agent.display_name,
-      domain: agent.domain,
-      detected: agent.detected,
       icon: agent.icon,
       invertInDark: agent.invert_in_dark,
-      isAgent: true,
     }));
-  return [...specials, ...agentOptions];
+  return agentOptions;
 }
 
 /**

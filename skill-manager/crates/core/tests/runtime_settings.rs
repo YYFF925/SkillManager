@@ -17,6 +17,17 @@ use skill_manager_core::{AppContext, StateStore};
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
+fn shared_directory_is_derived_from_home_and_ignores_obsolete_setting() {
+    let state_dir = tempfile::TempDir::new().unwrap();
+    let ctx = AppContext::open(Some(state_dir.path().to_path_buf())).unwrap();
+    ctx.state().set_setting("shared_dir", "/tmp/obsolete-shared-path").unwrap();
+    let expected = ctx.home().unwrap().join(".agents").join("skills");
+    assert_eq!(ctx.shared_dir().unwrap(), expected);
+    let resolved = ctx.target_resolver().unwrap().resolve(&Target::Shared).unwrap();
+    assert_eq!(PathBuf::from(resolved.path), expected);
+}
+
+#[test]
 fn hermes_root_follows_env_var_and_ignores_settings_key() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
 

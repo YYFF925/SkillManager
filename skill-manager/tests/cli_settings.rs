@@ -3,7 +3,7 @@
 //! 全程使用 `TestEnv` 的临时 HOME + `--vault` + `--state-dir`，不触碰真实 `~/.codex`
 //! /`~/.zcode`/`~/.hermes`/`~/.agents` 与真实 Application Support。
 //!
-//! 覆盖：`settings get` 的默认值推导与 null 语义；共享目录两个写入口与 `shared` 部署联动；
+//! 覆盖：`settings get` 的默认值推导与 null 语义；共享目录自动识别与 `shared` 部署联动；
 //! 自动检查频率取值校验；主题/字号/上传授权无 CLI 写入口；诊断导出真实文件；容量空库排行。
 
 mod common;
@@ -37,8 +37,8 @@ fn get_returns_effective_values_with_null_for_unset() {
     assert_eq!(data["theme"], "system");
     assert_eq!(data["font_scale"], "default");
     assert_eq!(data["auto_check_minutes"], 60);
-    // 未设置的共享目录是 null，不是空字符串。
-    assert!(data["shared_dir"].is_null(), "{data}");
+    // 共享目录始终按临时 HOME 自动解析，不依赖可写设置。
+    assert_eq!(data["shared_dir"], env.home.join(".agents/skills").to_string_lossy().as_ref());
     assert_eq!(data["git_auto_push"], false);
     assert!(data["last_sync_at"].is_null(), "{data}");
     assert!(data["last_check_at"].is_null(), "{data}");
@@ -53,7 +53,7 @@ fn get_with_keys_returns_only_requested_keys() {
     let object = data.as_object().expect("应为对象");
     assert_eq!(object.len(), 2, "{data}");
     assert_eq!(data["theme"], "system");
-    assert!(data["shared_dir"].is_null());
+    assert_eq!(data["shared_dir"], env.home.join(".agents/skills").to_string_lossy().as_ref());
 }
 
 #[test]
@@ -65,31 +65,18 @@ fn get_does_not_return_removed_keys() {
 }
 
 #[test]
-fn set_shared_dir_enables_and_clear_disables_shared_deploy() {
+fn shared_deploy_uses_home_without_path_configuration() {
     let env = TestEnv::new();
     env.write_skill("code", None, "alpha", "# alpha\n");
-    env.commit_all("加入编码技能");
-
-    let shared = env.root.path().join("shared-skills");
-    std::fs::create_dir_all(&shared).unwrap();
-    let shared_arg = shared.to_str().unwrap().to_string();
-
-    let data = env.cli_json(&["settings", "set-shared-dir", "--path", &shared_arg]);
-    assert_eq!(data["shared_dir"], shared_arg);
-
-    // 纯 CLI 环境下，设置共享目录后即可部署到 shared。
+    let shared = env.home.join(".agents/skills");
+    let data = env.cli_json(&["settings", "get", "shared_dir"]);
+    assert_eq!(data["shared_dir"], shared.to_string_lossy().as_ref());
+    assert!(!shared.exists(), "reading settings must not create the directory");
     let deployed = env.cli_json(&["deploy", "to", "shared", "code/alpha"]);
-    assert_eq!(deployed["items"].as_array().map(Vec::len), Some(1), "{deployed}");
-    assert!(shared.join("alpha").join("SKILL.md").exists(), "共享目录未生成副本");
-
-    // 清除后，shared 部署如实报“尚未设置共享目录路径”。
-    let cleared = env.cli_json(&["settings", "set-shared-dir", "--clear"]);
-    assert!(cleared["shared_dir"].is_null(), "{cleared}");
-
-    let (code, value) = env.cli_json_raw(&["deploy", "to", "shared", "code/alpha"]);
-    assert_eq!(code, 1, "{value}");
-    let message = value["errors"][0]["message"].as_str().unwrap_or("");
-    assert!(message.contains("尚未设置共享目录路径"), "{value}");
+    assert_eq!(deployed["items"].as_array().map(Vec::len), Some(1));
+    assert!(shared.join("alpha/SKILL.md").exists());
+    let removed = env.cli(&["settings", "set-shared-dir", "--clear"]);
+    assert_eq!(removed.status.code(), Some(2), "obsolete write command must be removed");
 }
 
 #[test]

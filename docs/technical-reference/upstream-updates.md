@@ -123,7 +123,7 @@ CLI 侧 `skills check --all --domain <域>` 逐个域检查（`skills-manager-cl
 却未复制新管理资料。这是静态调用链结论，未运行样例。新项目不能直接用“部署内容没变”
 判断“管理资料无需更新”，否则用户自己的上游管理资料无法随更新进入库。
 
-### 4.3 旧 SkillVault 来源模型：vault 覆盖 `.manager`、拒绝软件直接编辑
+### 4.3 旧 SkillManagerVault 来源模型：vault 覆盖 `.manager`、拒绝软件直接编辑
 
 这是与"上游同项值优先"最相关的一段历史成因：
 
@@ -134,7 +134,7 @@ CLI 侧 `skills check --all --domain <域>` 逐个域检查（`skills-manager-cl
   "whole-directory replace, `.manager` included — no separate update branch"（`skill_vault.rs:666-668`）。
   vault 刷新时 `source_revision = head_revision`（行 717）。
 - `ensure_manager_writable`（`src-tauri/src/commands/skills.rs:4064-4075`）：`source_type == "skillvault"`
-  时任何中文名/简介/正文写入都被后端拒绝（"管理信息由 SkillVault 管理，请在 skill-vault 仓库修改"）。
+  时任何中文名/简介/正文写入都被后端拒绝（"管理信息由 SkillManagerVault 管理，请在 skill-vault 仓库修改"）。
 
 ### 4.4 旧行为 vs 新要求（冲突点，必须剥离）
 
@@ -161,7 +161,7 @@ CLI 侧 `skills check --all --domain <域>` 逐个域检查（`skills-manager-cl
 - 最接近"记住看到过什么"的表是 `discovered_skills`（`migrations.rs:108-116`，字段 `fingerprint`、
   `imported_skill_id`），但它是 **Agent 本地目录扫描**（旧 B08/F01）用的，记录的是 Agent 已安装的
   未受管技能及其导入状态，与"上游仓库新增候选"不是一回事（用法见 `src-tauri/src/commands/scan.rs:34-87`）。
-- 旧动词"新增/fresh"只出现在 vault 对账里（`skill_vault.rs` 的 `fresh` 计数 / `SkillVaultCheckCounts`），
+- 旧动词"新增/fresh"只出现在 vault 对账里（`skill_vault.rs` 的 `fresh` 计数 / `SkillManagerVaultCheckCounts`），
   指"vault 里有、中央库没有的技能"，且是**每次检查现算**，不持久记住用户"不入库"的决定。
 
 结论：新要求的"上游新增候选 + 不入库决定随库同步、其他电脑不重复提示"在旧侧没有载体可参照；

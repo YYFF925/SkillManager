@@ -117,7 +117,7 @@ export function InstructionEditor({ agents, onClose, onSaved }: InstructionEdito
   return (
     <Dialog
       title="Agent 指令文件"
-      subtitle="指令源保存在 SkillVault 中并随库同步；保存后按“全局在前、专属在后”覆盖本机已启用目标。"
+      subtitle="指令源保存在 SkillManagerVault 中并随库同步；保存后按“全局在前、专属在后”覆盖本机已启用目标。"
       width="w-[880px]"
       onClose={onClose}
       footer={
