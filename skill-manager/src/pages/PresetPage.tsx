@@ -43,6 +43,7 @@ import {
 } from "../services/client";
 import { PRESET_ICON_OPTIONS, presetIconOption } from "../lib/presetIcons";
 import { reorderVisible } from "../lib/presetOrder";
+import { unsupportedDeployReason } from "../lib/support";
 import { DeployDialog } from "../components/DeployDialog";
 import { PresetDeployDialog } from "../components/PresetDeployDialog";
 import { SkillDetail } from "../components/SkillDetail";
@@ -291,6 +292,9 @@ export function PresetPage({
   }, [all]);
 
   const selectedSkills = skills.filter((skill) => selected.includes(referenceOf(skill)));
+  const missingMemberCount = preset
+    ? preset.members.filter((member) => member.missing).length
+    : 0;
 
   function referenceOf(skill: SkillSummary): string {
     return `${skill.domain}/${skill.name}`;
@@ -514,6 +518,9 @@ export function PresetPage({
                   </span>
                   <span className="text-[12px] text-faint">
                     成员 {preset.members.length} 个
+                    {missingMemberCount > 0 && (
+                      <span className="text-warn">（{missingMemberCount} 个缺失）</span>
+                    )}
                   </span>
                 </div>
                 {(preset.missing_members?.length ?? 0) > 0 && (
@@ -883,6 +890,16 @@ export function PresetPage({
           preset={preset}
           agents={agents}
           sharedMembers={sharedMembers}
+          unsupportedReason={unsupportedDeployReason(
+            preset.members.map((member) => ({
+              name: member.name,
+              oses:
+                all?.skills.find(
+                  (skill) => skill.name.toLowerCase() === member.name.toLowerCase(),
+                )?.oses ?? null,
+            })),
+            os,
+          )}
           onClose={() => setDeployOpen(false)}
           onDone={(message) => {
             setNotice(message);

@@ -60,3 +60,30 @@ export function unsupportedOs(
   }
   return !oses.includes(current);
 }
+
+/**
+ * 本次选中的技能是否全部不受当前系统支持：全部不支持时返回可读原因，否则 null。
+ * 用于部署入口的阻止；撤销不受支持声明约束，因此不在此判定内。
+ */
+export function unsupportedDeployReason(
+  entries: { name: string; oses: string[] | null }[],
+  current: EnvironmentOs | null,
+): string | null {
+  if (entries.length === 0) {
+    return null;
+  }
+  if (entries.some((entry) => !unsupportedOs(entry.oses, current))) {
+    return null;
+  }
+  const system = current === null ? "未知" : osLabel(current);
+  if (entries.length === 1) {
+    const oses = entries[0].oses ?? [];
+    if (oses.length === 0) {
+      return `该技能声明不支持任何系统，当前系统 ${system} 无法新增部署；撤销不受影响。`;
+    }
+    return `该技能声明支持 ${oses.map(osLabel).join("、")}，当前系统 ${system} 不在其中；新增部署会被拒绝，撤销不受影响。`;
+  }
+  return `所选 ${entries.length} 项（${entries
+    .map((entry) => entry.name)
+    .join("、")}）均不支持当前系统 ${system}；新增部署会被拒绝，撤销不受影响。`;
+}

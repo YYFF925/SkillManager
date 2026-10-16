@@ -196,7 +196,18 @@ export function SkillDetail({
               <Trash2 className="size-3.5" strokeWidth={1.75} />
               删除技能
             </Button>
-            <Button kind="primary" onClick={() => onDeploy(reference)}>
+            <Button
+              kind="primary"
+              disabled={unsupported}
+              title={
+                unsupported
+                  ? `${declaredOsText(skill?.oses ?? null)}当前系统 ${
+                      os === null ? "未知" : osLabel(os)
+                    }，不能部署；撤销不受影响。`
+                  : undefined
+              }
+              onClick={() => onDeploy(reference)}
+            >
               部署
             </Button>
           </div>

@@ -46,7 +46,7 @@ import {
   type SkillListResult,
   type SkillSummary,
 } from "../services/client";
-import { osLabel, unsupportedOs } from "../lib/support";
+import { osLabel, unsupportedDeployReason, unsupportedOs } from "../lib/support";
 import { useUpstream } from "../lib/upstream";
 import { targetLabel } from "../lib/targets";
 import { TagChip } from "../components/TagChip";
@@ -1118,6 +1118,13 @@ export function LibraryPage({
           references={deployTarget}
           agents={agents}
           sharedDir={sharedDir}
+          unsupportedReason={unsupportedDeployReason(
+            deployTarget.map((reference) => ({
+              name: reference,
+              oses: all?.skills.find((skill) => referenceOf(skill) === reference)?.oses ?? null,
+            })),
+            os,
+          )}
           onSharedDirChange={changeSharedDir}
           onClose={() => setDeployTarget(null)}
           onDone={(message) => {

@@ -49,6 +49,11 @@ export interface DeployDialogProps {
   sharedDir: string | null;
   /** 默认勾选的目标（例如从某个 Agent 页面发起）。 */
   initialTargets?: string[];
+  /**
+   * 本次选中技能全部不受当前系统支持时的原因；只阻止新增部署，撤销不受影响。
+   * 为空表示可正常发起部署。
+   */
+  unsupportedReason?: string | null;
   onSharedDirChange: (path: string | null) => Promise<void>;
   onClose: () => void;
   onDone: (message: string) => void;
@@ -60,6 +65,7 @@ export function DeployDialog({
   agents,
   sharedDir,
   initialTargets,
+  unsupportedReason,
   onSharedDirChange,
   onClose,
   onDone,
@@ -78,6 +84,7 @@ export function DeployDialog({
   const [sharedBusy, setSharedBusy] = useState(false);
 
   const needsShared = domain === "code" && targets.includes("shared") && !sharedDir;
+  const deployBlocked = mode === "deploy" && !!unsupportedReason;
 
   function toggleTarget(value: string) {
     setTargets((current) =>
@@ -199,7 +206,12 @@ export function DeployDialog({
           </span>
           <div className="flex gap-2.5">
             <Button onClick={onClose}>关闭</Button>
-            <Button kind="primary" disabled={busy || targets.length === 0} onClick={run}>
+            <Button
+              kind="primary"
+              disabled={busy || deployBlocked || targets.length === 0}
+              title={deployBlocked ? unsupportedReason ?? undefined : undefined}
+              onClick={run}
+            >
               {busy ? "正在处理…" : dryRun ? "预演" : mode === "deploy" ? "部署" : "撤销"}
             </Button>
           </div>
@@ -228,6 +240,8 @@ export function DeployDialog({
         </div>
 
         {error && <Notice tone="danger">{error}</Notice>}
+
+        {deployBlocked && <Notice tone="warn">{unsupportedReason}</Notice>}
 
         {renderTargetGroup("已检测", detected, detected.length)}
         {renderTargetGroup("其他支持项", others, others.length)}

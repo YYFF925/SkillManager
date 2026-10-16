@@ -40,6 +40,11 @@ export interface PresetDeployDialogProps {
   agents: AgentView[];
   /** 同时属于其他预设的成员名（用于如实说明撤销影响范围）。 */
   sharedMembers: string[];
+  /**
+   * 本次选中的成员全部不受当前系统支持时的原因；只阻止新增部署，撤销不受影响。
+   * 为空表示可正常发起组合部署。
+   */
+  unsupportedReason?: string | null;
   onClose: () => void;
   onDone: (message: string) => void;
 }
@@ -49,6 +54,7 @@ export function PresetDeployDialog({
   preset,
   agents,
   sharedMembers,
+  unsupportedReason,
   onClose,
   onDone,
 }: PresetDeployDialogProps) {
@@ -64,6 +70,7 @@ export function PresetDeployDialog({
 
   const members = preset.members.map((member) => member.name);
   const missing = preset.members.filter((member) => member.missing).map((m) => m.name);
+  const deployBlocked = mode === "deploy" && !!unsupportedReason;
 
   function toggleTarget(value: string) {
     setTargets((current) =>
@@ -146,7 +153,12 @@ export function PresetDeployDialog({
           </span>
           <div className="flex gap-2.5">
             <Button onClick={onClose}>关闭</Button>
-            <Button kind="primary" disabled={busy || targets.length === 0} onClick={run}>
+            <Button
+              kind="primary"
+              disabled={busy || deployBlocked || targets.length === 0}
+              title={deployBlocked ? unsupportedReason ?? undefined : undefined}
+              onClick={run}
+            >
               {busy ? "正在处理…" : dryRun ? "预演" : mode === "deploy" ? "叠加部署" : "撤销"}
             </Button>
           </div>
@@ -175,6 +187,8 @@ export function PresetDeployDialog({
         </div>
 
         {error && <Notice tone="danger">{error}</Notice>}
+
+        {deployBlocked && <Notice tone="warn">{unsupportedReason}</Notice>}
 
         {mode === "undo" && sharedMembers.length > 0 && (
           <Notice tone="warn">

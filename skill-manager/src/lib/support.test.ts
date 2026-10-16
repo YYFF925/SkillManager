@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSupportArg, declarationIncludes, unsupportedOs } from "./support";
+import { buildSupportArg, declarationIncludes, unsupportedDeployReason, unsupportedOs } from "./support";
 
 describe("buildSupportArg", () => {
   it("未声明时保存为 all（删除限制键）", () => {
@@ -43,5 +43,49 @@ describe("unsupportedOs", () => {
     expect(unsupportedOs([], "macos")).toBe(true);
     expect(unsupportedOs(["macos"], null)).toBe(false);
     expect(unsupportedOs(["macos"], "unknown")).toBe(false);
+  });
+});
+
+describe("unsupportedDeployReason", () => {
+  it("空列表不阻止", () => {
+    expect(unsupportedDeployReason([], "macos")).toBeNull();
+  });
+
+  it("单项全部不受支持时给出原因并说明撤销不受影响", () => {
+    const reason = unsupportedDeployReason([{ name: "demo", oses: ["linux"] }], "macos");
+    expect(reason).toContain("Linux");
+    expect(reason).toContain("macOS");
+    expect(reason).toContain("撤销不受影响");
+  });
+
+  it("部分支持时不阻止（交给逐项结果报告）", () => {
+    expect(
+      unsupportedDeployReason(
+        [
+          { name: "a", oses: ["macos"] },
+          { name: "b", oses: ["linux"] },
+        ],
+        "macos",
+      ),
+    ).toBeNull();
+  });
+
+  it("系统未知或未声明时不阻止", () => {
+    const entries = [{ name: "a", oses: ["linux"] }];
+    expect(unsupportedDeployReason(entries, null)).toBeNull();
+    expect(unsupportedDeployReason(entries, "unknown")).toBeNull();
+  });
+
+  it("多项全部不受支持时给出项数与各技能名", () => {
+    const reason = unsupportedDeployReason(
+      [
+        { name: "a", oses: ["linux"] },
+        { name: "b", oses: [] },
+      ],
+      "macos",
+    );
+    expect(reason).toContain("2");
+    expect(reason).toContain("a");
+    expect(reason).toContain("b");
   });
 });
