@@ -309,6 +309,18 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 - [X] T107 [US3] 在 `specs/002-skill-management/quickstart.md` 增加共享目录浏览场景，并执行验证（含 GUI 实操取证：从 `.app` 启动、设置共享目录、列出、删除未受管项），结果写入 `specs/002-skill-management/checklists/m6-report.md`；未取得证据的项保持未过并写明原因。
 - [X] T108 收尾：同步 `skill-manager/README.md` 与 `skill-manager/assets/skills/skill-manager-maintenance/references/cli.md` 的 CLI 参考；运行 `cargo test --workspace`、`npm test`、前端构建；把 `m5-report.md` 第六节第 9 条状态更新为"已按链条补齐"。
 
+## Phase 17: 增量 — 设置页与 Agent 页按原型归位（T109～T114）
+
+来源：用户核对原型设置页指出实现缺内容；规格依据 FR-041（补位置）、FR-056（设置页分组与只读行）、FR-057（「全部 Agents」＝跨目标部署清单）；
+规划见 `plan.md` 的"规划补齐：设置页与 Agent 页按原型归位"。
+
+- [ ] T109 [P] [US8] 在 `skill-manager/src/pages/SettingsPage.tsx` 与相关组件间完成 Agent 检测区块的迁移：把「支持的 Agent（已检测/内置总数）」摘要、全部启用／全部禁用／重新检测、已检测 Agent 卡片网格（拖动排序、启停、技能目录与项目相对路径行内编辑、恢复默认）与「其他支持的 Agent」折叠区**以可复用组件**接入设置页作为首个区块；不复制实现、不在两处同时渲染。
+- [ ] T110 [US8] 按原型区块顺序组织设置页：「支持的 Agent」→「全局配置」→「自己的 SkillVault 同步」→「后台检查与上游更新」→「诊断与日志」；全局配置补只读展示行：部署方式（文件复制）、语言（简体中文）、关闭行为（托盘模式）；后台检查区补「立即检查」（复用既有检查与同步能力，**不新增组合命令**）；保留实现已有的自动上传确认、技能库容量、诊断与运行日志分区。
+- [ ] T111 [US3] 在 `skill-manager/src/App.tsx`、`src/pages/AgentPage.tsx` 把「全部 Agents」改为**跨目标部署清单**（FR-057）：标题「全部编码 Agents」、副标题「本机部署清单 · 同一个技能可部署到多个目标」，搜索 + 受管／未受管／本地有变更筛选 + 刷新，卡片按「技能 × 目标」列出并可发起从库部署；Agent 管理不再出现在该页。
+- [ ] T112 [P] [US8] 前端测试：设置页首区块为「支持的 Agent」且含摘要与三个动作；只读展示行存在且无可编辑控件；「全部 Agents」渲染的是跨目标部署清单而非 Agent 管理卡片；既有行为（共享目录未设置提示等）不回归。
+- [ ] T113 [US8] 执行 GUI 实操取证（从 `.app` 启动）：设置页顶部为 Agent 检测区块、只读行可见、启停与目录编辑可用；「全部 Agents」为部署清单；结果与未过项写入 `specs/002-skill-management/checklists/m6-report.md`（或新增 m7 报告）。
+- [ ] T114 收尾：同步 `skill-manager/README.md` 的页面说明；运行 `cargo test --workspace`、`npm test`、构建；把 `visual-comparison.md` 的 B6/B7 与第二节 19 行结论更新为已对齐，并记录刻意未做的三项（打开文件夹、托盘开关、更改目录）。
+
 ## Dependencies & Execution Order（依赖与执行顺序）
 
 ### 故事依赖图
