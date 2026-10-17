@@ -23,3 +23,55 @@ it("combines actual deployment, preset and text filters through the existing que
   fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
   await waitFor(() => expect(listSkills).toHaveBeenLastCalledWith({ domain: "code" }));
 });
+
+it("puts skills unsupported on the current OS after supported ones", async () => {
+  vi.mocked(listSkills).mockResolvedValue({
+    skills: [
+      {
+        deployment_blocks: {},
+        domain: "code",
+        name: "linux-only",
+        category: "家庭运维",
+        comment: "不支持当前系统",
+        tags: [],
+        description: "仅 Linux",
+        agents: null,
+        oses: ["linux"],
+        has_translation: false,
+        translation_stale: false,
+        vault_rel_dir: "code/家庭运维/linux-only",
+        path: "/tmp/linux-only",
+        entry_file: "SKILL.md",
+        source: null,
+        manager_error: null,
+        presets: [],
+      },
+      {
+        deployment_blocks: {},
+        domain: "code",
+        name: "macos-ready",
+        category: "家庭运维",
+        comment: "自建",
+        tags: [],
+        description: "当前系统可用",
+        agents: null,
+        oses: null,
+        has_translation: false,
+        translation_stale: false,
+        vault_rel_dir: "code/家庭运维/macos-ready",
+        path: "/tmp/macos-ready",
+        entry_file: "SKILL.md",
+        source: null,
+        manager_error: null,
+        presets: [],
+      },
+    ],
+    total: 2,
+    tag_candidates: [],
+    categories: ["家庭运维"],
+  });
+  render(<LibraryPage domain="code" os="macos" agents={[]} reloadToken={0} onCount={vi.fn()} />);
+  const linux = await screen.findByRole("button", { name: "linux-only" });
+  const macos = screen.getByRole("button", { name: "macos-ready" });
+  expect(macos.compareDocumentPosition(linux) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});

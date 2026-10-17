@@ -283,14 +283,19 @@ export function LibraryPage({
 
   const skills = useMemo(() => {
     const base = filtered?.skills ?? [];
-    if (deployFilter === "all") {
-      return base;
-    }
-    return base.filter((skill) => {
-      const deployed = (deployedTargets.get(referenceOf(skill))?.size ?? 0) > 0;
-      return deployFilter === "deployed" ? deployed : !deployed;
+    const visible =
+      deployFilter === "all"
+        ? base
+        : base.filter((skill) => {
+            const deployed = (deployedTargets.get(referenceOf(skill))?.size ?? 0) > 0;
+            return deployFilter === "deployed" ? deployed : !deployed;
+          });
+    return [...visible].sort((left, right) => {
+      const leftUnsupported = unsupportedOs(left.oses, os) ? 1 : 0;
+      const rightUnsupported = unsupportedOs(right.oses, os) ? 1 : 0;
+      return leftUnsupported - rightUnsupported;
     });
-  }, [filtered, deployFilter, deployedTargets]);
+  }, [filtered, deployFilter, deployedTargets, os]);
   const deployedOptions = useMemo(() => [...new Set(records
     .filter((record) => record.skill.startsWith(`${domain}/`))
     .map((record) => record.target))], [records, domain]);
