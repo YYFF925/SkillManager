@@ -172,13 +172,13 @@ pub fn now_rfc3339() -> String {
 fn shell_command(command: &str) -> Command {
     #[cfg(windows)]
     {
-        let mut cmd = Command::new("cmd");
+        let mut cmd = crate::process::command("cmd");
         cmd.arg("/C").arg(command);
         cmd
     }
     #[cfg(not(windows))]
     {
-        let mut cmd = Command::new("sh");
+        let mut cmd = crate::process::command("sh");
         cmd.arg("-c").arg(command);
         cmd
     }

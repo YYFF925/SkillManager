@@ -11,6 +11,7 @@ pub mod hermes;
 pub mod manager;
 pub mod output;
 pub mod preset;
+pub mod process;
 pub mod scheduler;
 pub mod state;
 pub mod sync;

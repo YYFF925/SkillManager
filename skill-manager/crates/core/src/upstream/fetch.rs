@@ -218,7 +218,7 @@ mod tests {
         let repo = dir.path().join("repo");
         std::fs::create_dir_all(&repo).unwrap();
         let git = |args: &[&str]| {
-            std::process::Command::new("git")
+            crate::process::command("git")
                 .args(args)
                 .current_dir(&repo)
                 .env("HOME", dir.path())
