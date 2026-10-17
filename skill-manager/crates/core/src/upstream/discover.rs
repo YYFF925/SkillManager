@@ -127,9 +127,9 @@ fn make(dir: &Path, subpath: &str) -> Result<Candidate> {
 ///
 /// 仅用于多技能仓库的默认分类；不推断来源身份。
 pub fn repo_name(repo: &str) -> String {
-    let trimmed = repo.trim().trim_end_matches('/');
+    let trimmed = repo.trim().trim_end_matches(['/', '\\']);
     let last = trimmed
-        .rsplit(['/', ':'])
+        .rsplit(['/', ':', '\\'])
         .find(|segment| !segment.is_empty())
         .unwrap_or(trimmed);
     last.strip_suffix(".git").unwrap_or(last).to_string()
@@ -178,6 +178,8 @@ mod tests {
         assert_eq!(repo_name("https://host/u/repo.git"), "repo");
         assert_eq!(repo_name("git@host:u/repo.git"), "repo");
         assert_eq!(repo_name("/tmp/x/skills/"), "skills");
+        assert_eq!(repo_name(r"C:\Users\fei\Temp\upstream"), "upstream");
+        assert_eq!(repo_name(r"C:\Users\fei\Temp\upstream.git"), "upstream");
     }
 
     #[test]
