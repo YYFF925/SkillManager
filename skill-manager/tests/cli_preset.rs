@@ -84,6 +84,29 @@ fn preset_deploy_stacks_and_undo_removes_members_only() {
 }
 
 #[test]
+fn preset_can_deploy_to_shared_and_undo_only_its_members() {
+    let env = TestEnv::new();
+    seed(&env);
+    env.cli_json(&["deploy", "to", "shared", "code/alpha"]);
+    env.cli_json(&["preset", "create", "code", "release"]);
+    env.cli_json(&["preset", "members", "code", "release", "--add", "beta,gamma"]);
+
+    let (code, report) = env.cli_json_raw(&["deploy", "preset", "code", "release", "--to", "shared"]);
+    assert_eq!(code, 0, "{report}");
+    for name in ["alpha", "beta", "gamma"] {
+        assert!(target_copy(&env, ".agents/skills", name).join("SKILL.md").exists());
+    }
+
+    let (code, report) = env.cli_json_raw(&["deploy", "undo-preset", "code", "release", "--from", "shared"]);
+    assert_eq!(code, 0, "{report}");
+    assert!(target_copy(&env, ".agents/skills", "alpha").exists());
+    for name in ["beta", "gamma"] {
+        assert!(!target_copy(&env, ".agents/skills", name).exists());
+        assert!(env.path(&format!("code/{name}/SKILL.md")).exists());
+    }
+}
+
+#[test]
 fn undo_preset_removes_members_shared_with_other_presets() {
     let env = TestEnv::new();
     seed(&env);

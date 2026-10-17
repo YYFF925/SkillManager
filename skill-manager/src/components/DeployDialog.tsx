@@ -4,7 +4,7 @@ import {
   deployStatus, deployTo, deployUndo, getSkill,
   type AgentView, type DeployReportView, type Domain,
 } from "../services/client";
-import { normalizeTarget, targetLabel, targetOptions } from "../lib/targets";
+import { normalizeTarget, SHARED_TARGET, targetLabel, targetOptions, type TargetOption } from "../lib/targets";
 import { AgentIcon } from "./QuickDeploy";
 import { Button, Dialog, Notice } from "./ui";
 
@@ -24,7 +24,9 @@ const pairKey = (reference: string, target: string) => `${reference}:${normalize
 export function DeployDialog({
   domain, references, agents, title, removalWarning, unsupportedReason, onClose, onDone,
 }: DeployDialogProps) {
-  const options = targetOptions(domain, agents);
+  const options: TargetOption[] = domain === "code"
+    ? [{ value: SHARED_TARGET, label: "共享 Agent", icon: null, invertInDark: false }, ...targetOptions(domain, agents)]
+    : targetOptions(domain, agents);
   const [baseline, setBaseline] = useState<Set<string>>(new Set());
   const [blocks, setBlocks] = useState<Record<string, Record<string, string>>>({});
   const [choices, setChoices] = useState<Record<string, boolean>>({});
@@ -45,7 +47,10 @@ export function DeployDialog({
     return () => { cancelled = true; };
   }, [references.join("\n")]);
 
-  const canAdd = (reference: string, target: string) => !blocks[reference]?.[target.includes(":") ? target : `agent:${target}`];
+  const blockReason = (reference: string, target: string) => blocks[reference]?.[
+    target === SHARED_TARGET || target.includes(":") ? target : `agent:${target}`
+  ];
+  const canAdd = (reference: string, target: string) => !blockReason(reference, target);
 
   const changes = options.flatMap((option) => references.flatMap((reference) => {
     const before = baseline.has(pairKey(reference, option.value));
@@ -56,7 +61,7 @@ export function DeployDialog({
   const blocked = !!unsupportedReason && changes.some((change) => change.deploy);
   const filtered = options.flatMap((option) => choices[option.value] === true ? references.flatMap((reference) => {
     if (baseline.has(pairKey(reference, option.value)) || canAdd(reference, option.value)) return [];
-    return [`${reference} → ${option.label}：${blocks[reference][`agent:${option.value}`]}`];
+    return [`${reference} → ${option.label}：${blockReason(reference, option.value)}`];
   }) : []);
 
   async function save() {
@@ -125,7 +130,7 @@ export function DeployDialog({
                 <button
                   key={option.value}
                   type="button"
-                  title={!count && !allowed ? references.map((ref) => blocks[ref]?.[`agent:${option.value}`]).filter(Boolean).join("\n") : undefined}
+                  title={!count && !allowed ? references.map((ref) => blockReason(ref, option.value)).filter(Boolean).join("\n") : undefined}
                   disabled={busy || !!error || (!count && !allowed) || (!count && !!unsupportedReason)}
                   aria-pressed={mixed ? "mixed" : active}
                   onClick={() => setChoices((current) => ({

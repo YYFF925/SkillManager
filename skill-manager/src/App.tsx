@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Bot, Blocks, FileText, FolderTree, Layers, Settings, Share2, Wrench } from "lucide-react";
+import { Bot, Blocks, FileText, FolderTree, Layers, RefreshCw, Settings, Share2, Wrench } from "lucide-react";
 
 import { AppShell, type NavGroup, type NavItem } from "./components/AppShell";
 import { LibraryPage } from "./pages/LibraryPage";
@@ -10,6 +10,7 @@ import { PresetPage } from "./pages/PresetPage";
 import { ToolCenterPage } from "./pages/ToolCenterPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { InstructionEditor } from "./components/InstructionEditor";
+import { FastTooltip } from "./components/FastTooltip";
 import { Button, Notice } from "./components/ui";
 import { useAppearance } from "./lib/appearance";
 import { useLibrarySaveFlow } from "./lib/librarySave";
@@ -23,6 +24,7 @@ import {
   onVaultChanged,
   openVault,
   settingsGet,
+  syncPull,
   type AgentView,
   type Domain,
   type EnvironmentOs,
@@ -121,6 +123,7 @@ export function App() {
   const [os, setOs] = useState<EnvironmentOs | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeKey, setActiveKey] = useState<ViewKey>("library-code");
@@ -262,6 +265,25 @@ export function App() {
     }
   }, []);
 
+  async function pullVault() {
+    setPulling(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const report = await syncPull();
+      setReloadToken((value) => value + 1);
+      if ((report.outcome === "pulled" || report.outcome === "up_to_date") && !report.errors.length) {
+        setNotice(report.message);
+      } else {
+        setError(report.message);
+      }
+    } catch (err) {
+      setError(`拉取 SkillManagerVault 失败：${String(err)}`);
+    } finally {
+      setPulling(false);
+    }
+  }
+
   const groups: NavGroup[] = useMemo(() => {
     const agentItems = (domain: Domain, allKey: string, allLabel: string): NavItem[] => [
       { key: allKey, label: allLabel, icon: Bot },
@@ -341,6 +363,18 @@ export function App() {
       headerExtra={
         <>
           {notice && <span className="text-[12px] text-muted">{notice}</span>}
+          <FastTooltip label={pulling ? "正在拉取 SkillManagerVault…" : "检查并拉取 SkillManagerVault"}>
+            <button
+              type="button"
+              aria-label="检查并拉取 SkillManagerVault"
+              aria-busy={pulling}
+              disabled={pulling}
+              onClick={() => void pullVault()}
+              className="grid size-8 place-items-center rounded-lg border border-line bg-panel text-muted transition-colors hover:bg-hover hover:text-accent disabled:opacity-60"
+            >
+              <RefreshCw className={`size-4 ${pulling ? "animate-spin" : ""}`} strokeWidth={1.75} />
+            </button>
+          </FastTooltip>
           <button
             type="button"
             title="Agent 指令"

@@ -9,7 +9,7 @@ vi.mock("../services/client", () => ({ deployStatus: vi.fn(), deployTo: vi.fn(),
 const agent = (key: string, extra = {}): AgentView => ({ key, display_name: key, domain: "code", detected: true, enabled: true, order: 0, skills_dir: `/tmp/${key}/skills`, skills_dir_custom: false, skills_dir_default: `/tmp/${key}/skills`, project_rel_dir: null, project_rel_dir_default: null, instructions_target: "/tmp/AGENTS.md", icon: null, invert_in_dark: false, ...extra });
 const agents = [agent("codex"), agent("claude"), agent("disabled", { enabled: false }), agent("undetected", { detected: false })];
 const record = (skill: string, target: string): DeploymentStatusView => ({ deployment_blocks: {}, skill, target: `agent:${target}`, target_path: `/tmp/${target}/${skill}`, status: "ok", source_hash: null, deployed_hash: null, synced_at: null, library_exists: true });
-const result = (target: string, refs: string[], action: string) => ({ items: refs.map((skill) => ({ deployment_blocks: {}, skill, target: `agent:${target}`, path: `/tmp/${target}/${skill}`, action, status: "ok" as const })), errors: [] });
+const result = (target: string, refs: string[], action: string) => ({ items: refs.map((skill) => ({ deployment_blocks: {}, skill, target: target === "shared" ? target : `agent:${target}`, path: `/tmp/${target}/${skill}`, action, status: "ok" as const })), errors: [] });
 
 const skillDetail = (reference: string, blocks: Record<string, string> = {}): Awaited<ReturnType<typeof getSkill>> => ({
   skill: { domain: "code", name: reference.split('/')[1], deployment_blocks: blocks, category: null, comment: null, tags: [], description: null, agents: null, oses: null, has_translation: false, translation_stale: false, vault_rel_dir: reference, path: `/tmp/${reference}`, entry_file: 'SKILL.md', source: null, manager_error: null, presets: [] },
@@ -32,6 +32,7 @@ async function renderDialog(props = {}) {
 describe("部署选择与保存", () => {
   it("载入实际状态，只列检测且启用的 Agent，取消预演与模式切换", async () => {
     await renderDialog();
+    expect(screen.getByRole("button", { name: "共享 Agent" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "codex" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "claude" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByText("disabled")).toBeNull();
@@ -100,13 +101,52 @@ describe("部署选择与保存", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(deployUndo).toHaveBeenCalledExactlyOnceWith("codex", ["code/alpha"]));
   });
+  it("编码预设没有已检测 Agent 时也能批量部署到共享目录", async () => {
+    render(<PresetDeployDialog domain="code" preset={{ domain: "code", id: "pack", name: "组合", order: 0, members: [{ name: "alpha", missing: false }, { name: "beta", missing: false }] }} agents={[]} sharedMembers={[]} onClose={vi.fn()} onDone={vi.fn()} />);
+    const shared = await screen.findByRole("button", { name: "共享 Agent" });
+    fireEvent.click(shared);
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(deployTo).toHaveBeenCalledExactlyOnceWith("shared", ["code/alpha", "code/beta"]));
+    expect(deployUndo).not.toHaveBeenCalled();
+  });
+  it("共享目录部分部署时亮显数量，补齐只处理缺失且受支持的成员", async () => {
+    vi.mocked(deployStatus).mockResolvedValue([{ ...record("code/alpha", "shared"), target: "shared" }]);
+    vi.mocked(getSkill).mockImplementation(async (reference) => skillDetail(reference, reference === "code/gamma" ? { shared: "仅支持 Codex，不能共享" } : {}));
+    await renderDialog({ references: ["code/alpha", "code/beta", "code/gamma"] });
+    const shared = screen.getByRole("button", { name: "共享 Agent 1/3" });
+    expect(shared).toHaveAttribute("aria-pressed", "mixed");
+    fireEvent.click(shared);
+    expect(screen.getByText("已过滤：code/gamma → 共享 Agent：仅支持 Codex，不能共享")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(deployTo).toHaveBeenCalledExactlyOnceWith("shared", ["code/beta"]));
+    expect(deployUndo).not.toHaveBeenCalled();
+  });
+  it("共享支持范围收窄后仍能撤销已有部署", async () => {
+    vi.mocked(deployStatus).mockResolvedValue([{ ...record("code/alpha", "shared"), target: "shared" }]);
+    vi.mocked(getSkill).mockImplementation(async (reference) => skillDetail(reference, { shared: "不支持共享目录" }));
+    await renderDialog();
+    const shared = screen.getByRole("button", { name: "共享 Agent" });
+    expect(shared).toHaveAttribute("aria-pressed", "true");
+    expect(shared).toBeEnabled();
+    fireEvent.click(shared);
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(deployUndo).toHaveBeenCalledExactlyOnceWith("shared", ["code/alpha"]));
+    expect(deployTo).not.toHaveBeenCalled();
+  });
+  it("龙虾库不显示编码共享目录", async () => {
+    await renderDialog({ domain: "lobster", references: ["lobster/omega"], agents: [] });
+    expect(screen.queryByRole("button", { name: /共享 Agent/ })).not.toBeInTheDocument();
+    expect(screen.getByText("没有已检测且启用的 Agent。")).toBeInTheDocument();
+  });
 });
 
 describe("支持声明", () => {
   it("禁止新增不支持目标，但已有部署仍可撤销", async () => {
-    vi.mocked(getSkill).mockImplementation(async (reference) => skillDetail(reference, { 'agent:claude': '仅支持 codex', 'agent:codex': '已收窄' }));
+    vi.mocked(getSkill).mockImplementation(async (reference) => skillDetail(reference, { shared: '仅支持 codex', 'agent:claude': '仅支持 codex', 'agent:codex': '已收窄' }));
     await renderDialog();
     expect(screen.getByRole('button', { name: 'claude' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '共享 Agent' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '共享 Agent' })).toHaveAttribute('title', '仅支持 codex');
     expect(screen.getByRole('button', { name: 'codex' })).not.toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'codex' }));
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
