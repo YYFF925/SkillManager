@@ -24,6 +24,19 @@ pub struct TestEnv {
 
 impl TestEnv {
     /// 建立临时环境：初始化空 SkillManagerVault Git 仓库，并准备状态目录与模拟 home。
+    ///
+    /// 只在 Unix 可用：模拟 home 靠 `HOME` 生效，而 Windows 的 `dirs` 读 `FOLDERID_Profile`，
+    /// 模拟无效会让测试改写真实用户目录里的 Agent 技能目录与指令文件；该后果不可接受。
+    #[cfg(windows)]
+    pub fn new() -> Self {
+        panic!(
+            "集成测试在 Windows 上会写入真实用户目录（无法模拟 home）。请在 macOS/Linux 运行，\
+             或只用不依赖模拟 home 的用例，例如 `cargo test -p skill-manager-core --lib`。"
+        );
+    }
+
+    /// 建立临时环境：初始化空 SkillManagerVault Git 仓库，并准备状态目录与模拟 home。
+    #[cfg(not(windows))]
     pub fn new() -> Self {
         let root = TempDir::new().expect("创建临时目录失败");
         let base = root.path();
