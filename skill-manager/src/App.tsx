@@ -44,7 +44,7 @@ const VIEWS: Record<string, { title: string; pending?: string }> = {
   },
   hermes: { title: "Hermes 档案" },
   tools: { title: "工具中心" },
-  "presets-code": { title: "预设" },
+  presets: { title: "预设" },
   "agents-code": {
     title: "全部编码 Agents",
   },
@@ -283,11 +283,8 @@ export function App() {
           { key: "library-lobster", label: "龙虾技能库", icon: Layers },
           { key: "hermes", label: "Hermes 档案", icon: Bot },
           { key: "tools", label: "工具中心", icon: Wrench },
+          { key: "presets", label: "预设", icon: Blocks },
         ],
-      },
-      {
-        title: "编码预设",
-        items: [{ key: "presets-code", label: "全部预设", icon: Blocks }],
       },
       {
         title: "编码 Agent",
@@ -393,7 +390,7 @@ export function App() {
           onCount={setCount}
           onLibrarySaved={saveFlow.afterSave}
         />
-      ) : activeKey === "presets-code" ? (
+      ) : activeKey === "presets" ? (
         <PresetPage
           os={os}
           agents={agents}

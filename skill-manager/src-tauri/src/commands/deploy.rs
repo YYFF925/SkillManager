@@ -115,33 +115,35 @@ pub fn deploy_undo(
 
 /// 同步已有部署（不新增目标）。
 #[tauri::command]
-pub fn deploy_sync(
-    state: tauri::State<'_, AppState>,
+pub async fn deploy_sync(
+    app: tauri::AppHandle,
     reference: Option<String>,
     target: Option<String>,
     overwrite_local: Option<bool>,
 ) -> Result<DeployReportView, String> {
-    let ctx = state.get()?;
-    let root = ctx.vault().map_err(|err| err.to_string())?.root().to_path_buf();
-    let resolver = ctx.target_resolver().map_err(|err| err.to_string())?;
-    let service = DeploymentService::new(root, &resolver, ctx.state());
+    super::background(app, move |ctx| {
+        let root = ctx.vault().map_err(|err| err.to_string())?.root().to_path_buf();
+        let resolver = ctx.target_resolver().map_err(|err| err.to_string())?;
+        let service = DeploymentService::new(root, &resolver, ctx.state());
 
-    let reference = match reference {
-        Some(raw) => Some(SkillRef::parse(&raw).map_err(|err| err.to_string())?),
-        None => None,
-    };
-    let target = match target {
-        Some(raw) => Some(parse_target_arg(&raw).map_err(|err| err.to_string())?),
-        None => None,
-    };
-    let report = service
-        .sync(reference.as_ref(), target.as_ref(), overwrite_local.unwrap_or(false))
-        .map_err(|err| err.to_string())?;
-    log_failures(&ctx, "deploy-sync", &report);
-    Ok(DeployReportView {
-        items: report.items,
-        errors: report.failures,
+        let reference = match reference {
+            Some(raw) => Some(SkillRef::parse(&raw).map_err(|err| err.to_string())?),
+            None => None,
+        };
+        let target = match target {
+            Some(raw) => Some(parse_target_arg(&raw).map_err(|err| err.to_string())?),
+            None => None,
+        };
+        let report = service
+            .sync(reference.as_ref(), target.as_ref(), overwrite_local.unwrap_or(false))
+            .map_err(|err| err.to_string())?;
+        log_failures(ctx, "deploy-sync", &report);
+        Ok(DeployReportView {
+            items: report.items,
+            errors: report.failures,
+        })
     })
+    .await
 }
 
 /// 本机部署记录；`paused` 只列出被外部修改而暂停的项。

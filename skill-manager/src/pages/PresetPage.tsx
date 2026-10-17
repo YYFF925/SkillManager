@@ -17,7 +17,6 @@ import {
   Plus,
   Rocket,
   Search,
-  Share2,
   Square,
   Trash2,
 } from "lucide-react";
@@ -45,14 +44,8 @@ import {
 import { PRESET_ICON_OPTIONS, presetIconOption } from "../lib/presetIcons";
 import { reorderVisible } from "../lib/presetOrder";
 import { unsupportedDeployReason } from "../lib/support";
-import {
-  normalizeTarget,
-  SHARED_TARGET,
-  targetOptions,
-  type TargetOption,
-} from "../lib/targets";
 import { DeployDialog } from "../components/DeployDialog";
-import { AgentIcon, QuickDeploy } from "../components/QuickDeploy";
+import { QuickDeploy } from "../components/QuickDeploy";
 import { PresetDeployDialog } from "../components/PresetDeployDialog";
 import { SkillDetail } from "../components/SkillDetail";
 import { TagChip } from "../components/TagChip";
@@ -66,18 +59,6 @@ type MemberFilter = "all" | "in" | "out";
 
 function lower(value: string): string {
   return value.toLowerCase();
-}
-
-/** 预设总览的本机目标：编码库额外显示共享目录。 */
-function presetTargets(domain: Domain, agents: AgentView[]): TargetOption[] {
-  const targets = targetOptions(domain, agents);
-  if (domain !== "code") {
-    return targets;
-  }
-  return [
-    { value: SHARED_TARGET, label: "共享 Agent", icon: null, invertInDark: false },
-    ...targets,
-  ];
 }
 
 /** 预设成员开关：开=已加入，关=未加入；只修改组合定义。 */
@@ -206,22 +187,15 @@ export function PresetPage({
     () => presets.find((item) => item.id === selectedId) ?? null,
     [presets, selectedId],
   );
-  const visiblePresets = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return presets.filter((item) => q === "" || item.name.toLowerCase().includes(q));
-  }, [presets, query]);
-
   useEffect(() => {
-    onTitle(preset?.name ?? (domain === "code" ? "编码预设" : "龙虾预设"));
-    onCount(preset?.members.length ?? visiblePresets.length);
+    onTitle(preset?.name ?? "预设");
+    onCount(preset?.members.length ?? 0);
   }, [
-    domain,
     onCount,
     onTitle,
     preset?.id,
     preset?.members.length,
     preset?.name,
-    visiblePresets.length,
   ]);
 
   // 搜索去抖：core 每次查询都会重扫库文件。
@@ -235,7 +209,7 @@ export function PresetPage({
       const list = await listPresets(domain);
       setPresets(list);
       setSelectedId((current) =>
-        current && list.some((item) => item.id === current) ? current : null,
+        current && list.some((item) => item.id === current) ? current : list[0]?.id ?? null,
       );
       setError(null);
     } catch (err) {
@@ -488,10 +462,9 @@ export function PresetPage({
     memberFilter !== "all";
 
   return (
-    <div className="flex items-start gap-5">
+    <div className="flex items-start gap-4">
       {/* 左侧预设列表 */}
-      {preset && (
-      <aside className="w-[240px] shrink-0">
+      <aside className="w-[180px] shrink-0">
         <div className="mb-2 flex items-center justify-between px-1">
           <Segmented
             options={[
@@ -563,11 +536,6 @@ export function PresetPage({
               </div>
             );
           })}
-          {presets.length === 0 && (
-            <p className="px-2 py-3 text-[12px] text-faint">
-              该管理域还没有预设；新建后可组合成员并叠加部署。
-            </p>
-          )}
         </div>
         <button
           type="button"
@@ -578,7 +546,6 @@ export function PresetPage({
           新建预设
         </button>
       </aside>
-      )}
 
       {/* 右侧成员浏览 */}
       <div className="min-w-0 flex-1">
@@ -594,148 +561,9 @@ export function PresetPage({
         )}
 
         {!preset ? (
-          <div>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <label className="flex h-10 w-[280px] items-center gap-2.5 rounded-lg border border-line bg-panel px-3 text-faint">
-                  <Search className="size-4 shrink-0" strokeWidth={1.75} />
-                  <input
-                    value={query}
-                    placeholder="搜索预设名称…"
-                    onChange={(event) => setQuery(event.target.value)}
-                    className="w-full border-0 bg-transparent text-[13px] text-ink-3 outline-0 placeholder:text-faint"
-                  />
-                </label>
-                <Segmented
-                  options={[
-                    { value: "code", label: "编码" },
-                    { value: "lobster", label: "龙虾" },
-                  ]}
-                  value={domain}
-                  onChange={(value) => setDomain(value as Domain)}
-                />
-              </div>
-              <Button kind="primary" onClick={() => setCreateOpen(true)}>
-                <Plus className="size-4" strokeWidth={1.75} />
-                新建预设
-              </Button>
-            </div>
-
-            {visiblePresets.length === 0 ? (
-              <div className="rounded-xl border border-line-soft bg-panel p-6 text-[13px] text-muted">
-                {presets.length === 0
-                  ? "该管理域还没有预设；新建后可组合成员并叠加部署。"
-                  : "没有符合搜索条件的预设。"}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {visiblePresets.map((item) => {
-                  const option = presetIconOption(item.icon);
-                  const Icon = option.icon;
-                  const targets = presetTargets(domain, agents);
-                  return (
-                    <article
-                      key={item.id}
-                      className="overflow-hidden rounded-xl border border-line bg-panel shadow-card"
-                    >
-                      <div className="p-5">
-                        <div className="flex items-center gap-3">
-                          <span
-                            className="grid size-[38px] shrink-0 place-items-center rounded-[10px] border"
-                            style={{
-                              borderColor: `${option.color}33`,
-                              backgroundColor: `${option.color}18`,
-                              color: option.color,
-                            }}
-                          >
-                            <Icon className="size-[18px]" strokeWidth={1.75} />
-                          </span>
-                          <div className="min-w-0">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedId(item.id)}
-                              className="max-w-full truncate text-left text-[16px] font-semibold hover:text-accent"
-                            >
-                              {item.name}
-                            </button>
-                            <div className="mt-1 text-[12px] text-faint">
-                              {item.members.length} 个技能 · {domain === "code" ? "编码" : "龙虾"}组合
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap gap-1.5">
-                          {item.members.slice(0, 6).map((member) => (
-                            <button
-                              key={member.name}
-                              type="button"
-                              onClick={() => setSelectedId(item.id)}
-                              className={`rounded-md border border-line-soft bg-subtle px-2 py-1 text-[11px] ${
-                                member.missing ? "text-warn" : "text-muted"
-                              }`}
-                            >
-                              {member.name}
-                            </button>
-                          ))}
-                          {item.members.length > 6 && (
-                            <span className="px-1 py-1 text-[11px] text-faint">
-                              +{item.members.length - 6}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px] text-faint">
-                          <span>本机：</span>
-                          {targets.map((target) => {
-                            const deployed = item.members.filter((member) =>
-                              records.some(
-                                (record) =>
-                                  record.skill === `${domain}/${member.name}` &&
-                                  normalizeTarget(record.target) === target.value,
-                              ),
-                            ).length;
-                            return (
-                              <button
-                                key={target.value}
-                                type="button"
-                                onClick={() => setSelectedId(item.id)}
-                                className="flex items-center gap-1.5 rounded-md border border-line-soft bg-panel px-2 py-1 text-[11px] text-muted hover:bg-hover"
-                              >
-                                {target.value === SHARED_TARGET ? (
-                                  <Share2 className="size-3.5" strokeWidth={1.75} />
-                                ) : (
-                                  <AgentIcon option={target} />
-                                )}
-                                {target.label} {deployed}/{item.members.length}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between border-t border-line-faint px-5 py-3">
-                        <span className="text-[11px] text-faint">组合已随库保存</span>
-                        <div className="flex gap-2.5">
-                          <Button compact onClick={() => setSelectedId(item.id)}>
-                            查看成员
-                          </Button>
-                          <Button
-                            compact
-                            kind="primary"
-                            onClick={() => {
-                              setSelectedId(item.id);
-                              setDeployOpen(true);
-                            }}
-                          >
-                            部署预设
-                          </Button>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <p className="px-4 py-8 text-[13px] text-muted">
+            该管理域还没有预设，请从左侧新建预设。
+          </p>
         ) : (
           <>
             <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
@@ -936,7 +764,7 @@ export function PresetPage({
               <div
                 className={
                   layout === "grid"
-                    ? "grid min-w-0 flex-1 grid-cols-2 gap-3 min-[1301px]:grid-cols-3"
+                    ? "grid min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(min(100%,400px),1fr))] gap-3"
                     : "grid min-w-0 flex-1 grid-cols-1 gap-3"
                 }
               >
@@ -960,7 +788,7 @@ export function PresetPage({
                     >
                       <div
                         className={`flex items-center gap-2.5 ${
-                          layout === "list" ? "px-3 py-3" : "h-9 px-3.5 pt-2.5"
+                          layout === "list" ? "px-3 py-3" : "min-h-9 px-3.5 pt-2.5"
                         }`}
                       >
                         {multi ? (
@@ -996,12 +824,12 @@ export function PresetPage({
                             type="button"
                             title={skill.name}
                             onClick={() => setDetail(reference)}
-                            className="truncate text-[14px] leading-5 font-semibold group-hover:text-accent"
+                            className="max-w-full shrink-0 text-left text-[14px] leading-5 font-semibold [overflow-wrap:anywhere] group-hover:text-accent"
                           >
                             {skill.name}
                           </button>
                           {skill.comment && (
-                            <span className="shrink-0 text-[11px] font-normal text-faint">
+                            <span title={skill.comment} className="min-w-0 truncate text-[11px] font-normal text-faint">
                               （{skill.comment}）
                             </span>
                           )}

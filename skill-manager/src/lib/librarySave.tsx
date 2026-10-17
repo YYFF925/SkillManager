@@ -24,7 +24,7 @@ export interface LibrarySaveFlowOptions {
 }
 
 export interface LibrarySaveFlow {
-  /** 保存库内修改后调用；返回的 Promise 在整条流程（含上传）结束后 resolve。 */
+  /** 保存库内修改后提交后台同步；不等待部署刷新或上传结束，结果由通知与 failure 表达。 */
   afterSave: () => Promise<void>;
   /** 未确认自动上传时的确认弹窗；渲染到页面任意位置。 */
   dialog: ReactNode;
@@ -74,7 +74,8 @@ export function useLibrarySaveFlow({
     }
   }, [onNotice, onError]);
 
-  const afterSave = useCallback(async () => {
+  const synchronize = useCallback(async () => {
+    onNotice("已保存，正在后台同步…");
     // 1. 先刷新本机已有部署（deploy sync 自身不触发上传）。
     let paused = 0;
     try {
@@ -110,6 +111,10 @@ export function useLibrarySaveFlow({
     onNotice(`${deployNote}；正在上传…`);
     await upload();
   }, [upload, askUpload, onNotice, onError]);
+
+  const afterSave = useCallback(async () => {
+    void synchronize();
+  }, [synchronize]);
 
   const retry = useCallback(async () => {
     await upload();

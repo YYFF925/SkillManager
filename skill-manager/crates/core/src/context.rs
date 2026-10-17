@@ -83,6 +83,16 @@ impl AppContext {
         &self.state
     }
 
+    /// 后台任务复用当前库与本机状态，单独打开 SQLite 连接；不改变记住的库路径。
+    /// 耗时操作持有自己的上下文，避免让界面读取一直等待全局上下文锁。
+    pub fn fork(&self) -> Result<Self> {
+        Ok(Self {
+            vault: self.vault.clone(),
+            state: StateStore::open(self.state.dir())?,
+            catalog: self.catalog,
+        })
+    }
+
     pub fn catalog(&self) -> &'static AgentCatalog {
         self.catalog
     }
@@ -159,6 +169,27 @@ mod tests {
 
         let reopened = AppContext::open(Some(state_dir.path().to_path_buf())).unwrap();
         assert!(reopened.state().vault_path().unwrap().is_some());
+    }
+
+    #[test]
+    fn worker_context_keeps_vault_snapshot_and_shares_state_without_changing_selection() {
+        let state_dir = tempfile::TempDir::new().unwrap();
+        let vault_a = tempfile::TempDir::new().unwrap();
+        let vault_b = tempfile::TempDir::new().unwrap();
+        for dir in [&vault_a, &vault_b] {
+            crate::sync::Git::new(dir.path())
+                .ok(&["init", "--quiet", "--initial-branch=main"])
+                .unwrap();
+        }
+        let mut ctx = AppContext::open_with_vault(vault_a.path(), Some(state_dir.path().to_path_buf())).unwrap();
+        let worker = ctx.fork().unwrap();
+        ctx.attach_vault(vault_b.path()).unwrap();
+        worker.state().set_setting(setting_key::THEME, "dark").unwrap();
+
+        assert_eq!(worker.vault().unwrap().root(), vault_a.path().canonicalize().unwrap());
+        assert_eq!(ctx.state().theme().unwrap(), "dark");
+        assert_eq!(worker.state().vault_path().unwrap(), ctx.state().vault_path().unwrap());
+        assert_eq!(ctx.vault().unwrap().root(), vault_b.path().canonicalize().unwrap());
     }
 
     #[test]
