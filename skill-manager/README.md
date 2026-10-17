@@ -50,7 +50,7 @@ npm run tauri dev          # 启动桌面应用（开发模式；默认窗口 17
 cargo run -p skill-manager-cli -- --help   # CLI
 ```
 
-Tauri 打包：`npm run tauri build`（`bundle.targets` 为 `app`）。
+Tauri 打包：`npm run tauri build`（`bundle.targets` 为 `app` 与 `dmg`）。
 macOS 本机打包使用 ad hoc（临时签名，`bundle.macOS.signingIdentity = "-"`），
 使签名标识与应用标识 `com.fei.skillmanager` 一致。实际验证中，未绑定应用信息的链接器签名下，
 系统本地网络开关虽已开启，GUI 的 Git SSH 仍报 `No route to host`；应用包签名并重启后连接成功。
