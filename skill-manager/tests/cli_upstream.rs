@@ -348,3 +348,21 @@ fn paused_copy_is_not_overwritten_by_update() {
     let status = env.cli_json(&["deploy", "status", "--paused"]);
     assert_eq!(status["deployments"].as_array().unwrap().len(), 1);
 }
+
+#[test]
+fn agents_skills_addition_is_not_listed_as_new_candidate() {
+    let env = TestEnv::new();
+    let up = repo(&env);
+    import(&env, &up, "tools/alpha", "code");
+
+    up.skill(Some(".agents/skills"), "speckit", "---\nname: speckit\n---\nspeckit\n");
+    up.commit("add speckit under .agents/skills");
+
+    let report = check_all(&env);
+    let candidates = report["candidates"].as_array().unwrap();
+    assert!(
+        !candidates.iter().any(|c| c["subpath"].as_str().unwrap().starts_with(".agents/skills")),
+        "来源 .agents/skills/ 下的技能不得出现在新增候选：{report}"
+    );
+}
+

@@ -56,7 +56,7 @@ skill rejected [--repo <url>] [--domain <domain>]
 skill skip <ref> [--version <commit-oid>] | skill unskip <ref> | skill skipped
 ```
 
-- 来源候选按上游子路径选择，保留其技能原名；多技能仓库默认分类按仓库总技能数决定，CLI 由 Agent 与用户确认分类后传入；单技能仓库默认不分类。`--uncategorized` 可显式选择不分类。
+- 来源候选按上游子路径选择，保留其技能原名；`preview` / `import` / 上游新增列出的候选均已跳过相对仓库根 `.agents/skills/`（FR-058），该路径下的技能不出现在输出中。多技能仓库默认分类按**跳过之后**的候选数量决定，CLI 由 Agent 与用户确认分类后传入；只剩一个候选时默认不分类。`--uncategorized` 可显式选择不分类。指定 `--skills` 若落在该排除路径下，按不是技能报错，不回退仓库根。
 - `preview/import` 显示真实 Git 进度，Ctrl-C 取消本次获取；`--json` 的最终结果在标准输出，进度在标准错误，Tauri 使用同一核心的进度事件。
 - `adopt` 的 `<target>` 接受内置 Agent key 或 `shared`；管理域由目标所属域决定，共享目标进入编码库并接管原共享部署。批量不同资料使用 `--metadata-file`，按技能名给各自管理资料，公共参数只能表示用户明确要求的共用值。收编不强制来源，不新增其他目标的首次部署。
 - 来源/采用版本记录随唯一 SkillManagerVault 跨机共享。另一机 `sync pull` 不重新执行 import；`skill check/update` 依据技能来源检查和获取上游 B。

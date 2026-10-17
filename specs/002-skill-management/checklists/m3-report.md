@@ -20,11 +20,13 @@
 | 3.10 `skill skip` 当前版本 → 仓库批量更新 | 提示移除且批量更新尊重跳过；`skipped` 可查看/恢复 | 跳过当前版本后待更新计数移除；`skipped` 列出；"恢复提醒"与"采用此版本"（`update --to`）可用；仓库批量更新尊重跳过（截图 `54`～`57`） | 通过 |
 | 3.11 技能内文件删除 / 整个技能删除 / 改名 | 单文件删除只移除对应文件、技能与部署继续；整技能删除经确认才清库+部署；改名=删除+新增 | delta 的 `notes.md` 被上游删除 → 仅移除该文件、技能与部署保留；beta 整个技能删除 → 经显式单项确认后移除库条目并清理部署；上游改名呈现为"删除旧技能 + 新增候选"（`upstream_missing` + 新候选 `is_new=true`）（截图 `59`/`65`～`67`） | 通过 |
 | 3.12 首次入库 A、未选 C；之后新增 B，再更新 A | C 不冒充后来新增、不被记作拒绝；仍存在的 B 保持新增候选提示；更新 A 不等于处理 B；手动预览仍可选 C | 首次未选的 beta 未被当作"后来新增"；delta/epsilon 标记"后来新增"；被拒项不再出现；未决定候选保持提示；`seen_subpaths` 基线只建一次、从不自动扩充 | 通过 |
+| 3.13 来源含常规技能与 `.agents/skills/` 下技能：`preview`；再只在该路径新增后 `check` | 预览候选不含 `.agents/skills/`；后来只在该路径新增时，新增提示也不出现 | `discover.rs` 单元测试跳过该路径并保留常规技能；`cli_acquire.rs::preview_and_import_skip_repo_agents_skills` 预览只有 `tools/alpha`、指定该路径 import 失败且不入库；`cli_upstream.rs::agents_skills_addition_is_not_listed_as_new_candidate` 检查不把该路径列为新增。未做 GUI 点按取证（与 CLI 共用 `scan_repo`） | 通过 |
 
 ## 二、SC-007 / SC-008 核对
 
 - **SC-007（上游更新保留规则）**：分类保留、上游未提供的资料未丢失、明确拒绝的新增不再提示——三项均有 `upstream_merge.rs`（6 项）与 `cli_upstream.rs`（9 项）断言 + GUI 截图证据。**通过**。
 - **SC-008（较大仓库获取场景）**：**通过**。CLI 原有 287 MB 证据保留；2026-10-17 T123 已补齐真实 GUI 的进度、取消、失败与成功入库证据，详见末节。
+- **SC-009（来源发现跳过 `.agents/skills/`）**：**通过**（CLI/单元测试）。预览不含该路径下技能；指定该路径入库失败且不入库；后来只在该路径新增时检查不列为新增。未做 GUI 点按取证。
 
 ## 三、GUI 视觉与交互对照
 
@@ -96,3 +98,7 @@
 前端按 `jobId` 匹配，导致进度被忽略。现在事件统一按 camelCase（驼峰命名）序列化，
 `progress_event_matches_client_job_id` 检查实际序列化结果，重新构建后取得上述在屏证据。
 本次证据覆盖 macOS arm64 的实际运行，不宣称其他平台已验证。
+
+## T130～T132：来源发现跳过 `.agents/skills/`（2026-10-17）
+
+`preview` / `import` / 上游新增共用 `discover::scan_repo`。相对仓库根 `.agents/skills` 及其子路径不再作为候选、也不再向下扫描。本机共享部署目录不受影响。证据见 3.13 与 SC-009。

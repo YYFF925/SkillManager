@@ -10,7 +10,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 **Input**：本目录的 `spec.md`、`plan.md`、`research.md`、`data-model.md`、`contracts/cli.md`、`quickstart.md`；约束依据 `.specify/memory/constitution.md` v2.0.2。
 
-**范围**：全部 10 个 User Story（用户故事）与 FR-001～054；构建真实桌面应用与 CLI（命令行接口），不把 `001` 原型的模拟行为当作实现。所有源文件路径均相对仓库根目录，正式产品代码位于 `skill-manager/`。
+**范围**：全部 10 个 User Story（用户故事）与 FR-001～058；构建真实桌面应用与 CLI（命令行接口），不把 `001` 原型的模拟行为当作实现。所有源文件路径均相对仓库根目录，正式产品代码位于 `skill-manager/`。
 
 **组织**：按故事优先级分阶段；同为 P1 的 US3 在 US2 前，先实现部署与接管能力，再接入获取链路。阶段是工作归属，不强制按文档顺序串行；实际执行按末尾 M1～M5 与依赖关系安排。阶段检查用于确认方向，**全部功能完成后才投入使用**，不把 MVP（最小可验证范围）作为提前交付承诺。
 
@@ -119,7 +119,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 ### Implementation
 
 - [X] T032 [US2] 在 `skill-manager/crates/core/src/upstream/fetch.rs` 实现来源仓库获取与缓存，通过本机 Git 流式读取真实进度，GUI 取消和 CLI Ctrl-C 均能终止本次获取并如实返回取消；获取失败/取消不将技能登记为已入库。
-- [X] T033 [US2] 在 `skill-manager/crates/core/src/upstream/discover.rs` 实现仓库技能候选扫描与预览，技能名按目录身份保留，旧参考 frontmatter 名称不替代目录名；保留来源子路径，不解析或自动补齐技能依赖；单个候选也列出，默认分类依据来源仓库技能总数而不是本次选择数量。
+- [X] T033 [US2] 在 `skill-manager/crates/core/src/upstream/discover.rs` 实现仓库技能候选扫描与预览，技能名按目录身份保留，旧参考 frontmatter 名称不替代目录名；保留来源子路径，不解析或自动补齐技能依赖；单个候选也列出，默认分类依据来源仓库技能总数而不是本次选择数量。来源发现跳过 `.agents/skills/` 由 Phase 19 / T130～T132 补齐，不在本项重开。
 - [X] T034 [US2] 在 `skill-manager/crates/core/src/vault/acquire.rs` 实现选定候选复制入域、同名阻止、分类选择与上游管理资料继承，登记技能上游 repo/ref/subpath、实际采用完整提交 OID 与 registered_at；`skipped_version` 是“可选：已跳过的上游版本（含删除类），随库共享”；来源及采用版本属于同一 SkillManagerVault 共享资产，另一电脑拉取不重新入库，不把 SkillManagerVault 远端当成技能上游。
 - [X] T035 [US2] 在 `skill-manager/crates/core/src/vault/adopt.rs` 实现 Agent 未受管技能单项/批量收编至对应域，支持逐技能资料输入补充注释/标签/分类/声明/译文并调用 US3 接管原部署，不把同一段注释擅自套给全部技能；不强制来源，同名库技能阻止而不覆盖，不新增其他目标部署。
 - [X] T036 [US2] 在 `skill-manager/crates/core/src/vault/create.rs`、`skill-manager/crates/core/src/vault/copy.rs` 实现自建技能目录及管理资料创建和跨域复制；复制保留原件与来源记录，两份独立维护，创建与复制均不部署；复用 US1 同名与分类校验。
@@ -357,6 +357,7 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 | M1 底座 | Phase 1/2 + US1；复用现有 Git，不重复初始化 | `checklists/m1-report.md`；获取入口同名、部署位置等依赖项明确待后续回验 |
 | M2 部署 | US3 + US6 + US8 的 Agent 配置/本地技能管理任务与页面部分 | `checklists/m2-report.md`，SC-003；预设入口 M5 回验 |
 | M3 获取/上游 | US2 + US4；补验 M1 各入口同名与译文原文变化 | `checklists/m3-report.md`，SC-007/008 |
+| M3 补充（2026-10-17） | 来源发现跳过 `.agents/skills/`（FR-058） | `checklists/m3-report.md` 增补 3.13；SC-009 |
 | M4 同步/指令 | US5 + US8 指令部分/跨机验收 | `checklists/m4-report.md`，SC-005/006 |
 | M5 预设/工具/环境 | US7 + US9 + US10 + 配套 Skill 与跨故事收尾 | `checklists/m5-report.md`，全部场景与 SC-001～008 |
 | M5 补充（2026-10-16 规划补齐） | 本机运行侧双入口：`settings` 命令组、诊断/容量的 CLI 入口、两处无写入点配置的清理 | 更新 `checklists/m5-report.md` 的 5.14～5.19 与 `contracts/cli.md` T090 表中 `settings` 行 |
@@ -364,7 +365,7 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 
 1. M1：T001～T020。
 2. M2：T021～T029 → T067、T068、T071（Agent 管理）及 T056～T061（Hermes）；T061 在这些任务全部验证后收尾。
-3. M3：T030～T049；T049 回验 M1 获取入口约束。
+3. M3：T030～T049；T049 回验 M1 获取入口约束。M3 补充 FR-058：T130（测试先行）→ T131（`discover.rs`）→ T132（指定排除路径报错与 3.13 验收，串行）。
 4. M4：T050～T055 → T069、T070、T072、T073（指令与双机验收）。
 5. M5：T062～T066（预设）、T074～T081（工具核心）、T083～T087（环境）；T082 工具真实任务路径验收等待 T088～T089 配套 Skill 普通入库后完成，最终执行 T090～T092 整体核对。
 6. M5 补充：T093、T094（测试先写并确认失败，两项可并行）→ T095、T096（`settings` 命令实现，两项都改同一文件，串行）→ T097（清理无写入点配置，与 T095/T096 不同文件可并行）→ T098（公共入口注册，串行）→ T099（场景验证与 T090 表更新）；T100 收尾同步文档。T095/T096 与 T100 都会改配套 Skill 的 CLI 参考，**串行合入**。
@@ -429,3 +430,14 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 - [X] T127 [US3] [F13] MEDIUM 修复 `skill-manager/src/App.tsx` 只向龙虾库传递 `libraryFocus` 的导航遗漏，使编码 Agent 与共享目录详情的“前往技能库管理”能在正确管理域打开对应技能详情；沿用现有 `focusReference/onFocusConsumed`，不增加导航状态体系 per FR-042/055、T105 (partial)
 - [X] T128 [US10] [F14] MEDIUM 在既有诊断链补记手动获取失败和直接返回的部署文件错误：核对 `skill-manager/crates/cli/src/commands/acquire.rs`、`skill-manager/src-tauri/src/commands/acquire.rs`、部署入口与 `skill-manager/crates/core/src/diagnostics.rs` 的记录调用，确保诊断获取/导出包含实际操作、发生时间及可定位原因。实测 preview 来源不存在后日志为空，部署入口的提前返回错误也绕过现有逐项日志；复用现有脱敏与日志写入，不新增日志系统或自动上传 per FR-053、US10/AC3、T085 (partial)
 - [X] T129 [US1] [F15] MEDIUM 在 `skill-manager/src/pages/LibraryPage.tsx` 补齐指定已部署 Agent 与所属预设的组合筛选入口，并通过 `skill-manager/src/services/client.ts` 传入既有 core 查询条件；当前只有“本机已部署/未部署”二分与预设归属文本，不能与分类/标签/搜索组合按指定目标或预设筛选。复用现有真实部署记录与预设定义，不另建索引或复制筛选业务 per FR-009/025、T019/029/065 (partial)
+
+
+## Phase 19: 增量 — 来源发现跳过 `.agents/skills/`（T130～T132）
+
+**目标**：从来源仓库识别可入库技能时，默认不去找 `.agents/skills/` 里的技能（FR-058）。这是发现范围，不是排除清单，也不改本机共享部署目录。
+
+**独立验收**：来源同时含常规技能与 `.agents/skills/` 下技能时，`skill preview` 候选不含后者；后来只在该路径新增时，`skill check` 新增提示也不出现这些技能（quickstart 3.13、US2-8、US4-11、SC-009）。
+
+- [X] T130 [P] [US2] 在 `skill-manager/crates/core/src/upstream/discover.rs` 先写失败测试：相对仓库根 `.agents/skills/` 及其子路径下的技能不进入 `scan_repo` 结果；同仓常规目录技能仍列出；只剩一个常规技能时候选数量为 1。不测本机共享部署目录。
+- [X] T131 [US2] 在 `skill-manager/crates/core/src/upstream/discover.rs` 让 `scan_repo` 跳过相对路径 `.agents/skills` 及其子路径，不再向下扫描；`preview`、`import`、上游新增候选共用该结果。默认分类按跳过之后的候选数计算（已由调用方 `candidates.len()` 决定）。不新增 CLI 开关、排除文件或 `rejected_subpaths` 写入。指定 `--skills` 落在该路径下时按不是技能报错，不回退仓库根。本机 `<home>/.agents/skills` 部署与浏览不受本项影响。
+- [X] T132 [US4] 用 `skill-manager/tests/cli_acquire.rs` 或现有上游检查测试覆盖：预览不含 `.agents/skills/` 候选；对该路径执行 `import --skills` 失败且不入库；已登记来源只在该路径新增技能时检查不把它列为新增。将 quickstart 3.13 结果写入 `specs/002-skill-management/checklists/m3-report.md`。不把未扫描写成用户拒绝。

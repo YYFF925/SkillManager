@@ -5,6 +5,7 @@
 //! - 技能名按**目录身份**保留（不采用 frontmatter 的 `name` 替代）；
 //! - 候选携带仓库内相对子路径，跨平台统一用 `/`；
 //! - 排除 `.git`、`node_modules` 等无关范围，限制递归深度，避免链接环扫描不结束；
+//! - 相对仓库根 `.agents/skills/` 及其子路径不是可入库候选，也不再向下扫描（FR-058）；
 //! - 单个候选也列出；默认分类依据**来源仓库技能总数**，由调用者据此决定。
 
 use std::path::{Path, PathBuf};
@@ -16,6 +17,8 @@ use crate::vault::scan;
 
 /// 递归扫描时跳过的目录名。
 pub const SKIP_DIRS: [&str; 3] = [".git", "node_modules", "__pycache__"];
+/// 来源发现主动排除的仓库内路径（FR-058）。相对仓库根，`/` 分隔。
+pub const EXCLUDED_PREFIX: &str = ".agents/skills";
 /// 递归深度上限（防止意外深层/链接环导致的长时间扫描）。
 pub const MAX_DEPTH: usize = 8;
 
@@ -77,6 +80,9 @@ fn collect(root: &Path, dir: &Path, depth: usize, out: &mut Vec<Candidate>) -> R
             continue;
         }
         let path = entry.path();
+        if excluded_from_discovery(root, &path) {
+            continue;
+        }
         if scan::is_skill_dir(&path) {
             let subpath = path
                 .strip_prefix(root)
@@ -88,6 +94,14 @@ fn collect(root: &Path, dir: &Path, depth: usize, out: &mut Vec<Candidate>) -> R
         collect(root, &path, depth + 1, out)?;
     }
     Ok(())
+}
+
+fn excluded_from_discovery(root: &Path, path: &Path) -> bool {
+    let Ok(rel) = path.strip_prefix(root) else {
+        return false;
+    };
+    let rel = rel.to_string_lossy().replace('\\', "/");
+    rel == EXCLUDED_PREFIX || rel.starts_with(&format!("{EXCLUDED_PREFIX}/"))
 }
 
 fn make(dir: &Path, subpath: &str) -> Result<Candidate> {
@@ -164,5 +178,34 @@ mod tests {
         assert_eq!(repo_name("https://host/u/repo.git"), "repo");
         assert_eq!(repo_name("git@host:u/repo.git"), "repo");
         assert_eq!(repo_name("/tmp/x/skills/"), "skills");
+    }
+
+    #[test]
+    fn skips_repo_root_agents_skills_and_keeps_regular_skills() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path();
+        write(&root.join("tools/alpha/SKILL.md"), "a");
+        write(&root.join(".agents/skills/speckit/SKILL.md"), "不应入库");
+        write(
+            &root.join(".agents/skills/nested/other/SKILL.md"),
+            "也不应入库",
+        );
+        write(&root.join(".agents/other/keep/SKILL.md"), "仍应出现");
+
+        let candidates = scan_repo(root).unwrap();
+        let paths: Vec<&str> = candidates.iter().map(|c| c.subpath.as_str()).collect();
+        assert_eq!(paths, vec![".agents/other/keep", "tools/alpha"]);
+    }
+
+    #[test]
+    fn remaining_regular_skill_count_is_one_when_agents_skills_is_skipped() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path();
+        write(&root.join("solo/SKILL.md"), "s");
+        write(&root.join(".agents/skills/speckit/SKILL.md"), "x");
+
+        let candidates = scan_repo(root).unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].subpath, "solo");
     }
 }

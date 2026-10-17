@@ -202,3 +202,34 @@ fn adopt_single_and_batch_take_over_existing_deployment_only() {
     assert!(entry.contains("收编注释"), "{entry}");
     assert!(!copy.join(".manager").exists());
 }
+
+#[test]
+fn preview_and_import_skip_repo_agents_skills() {
+    let env = TestEnv::new();
+    let up = env.upstream("upstream");
+    up.skill(Some("tools"), "alpha", "---\nname: alpha\n---\nalpha\n");
+    up.skill(Some(".agents/skills"), "speckit", "---\nname: speckit\n---\nspeckit\n");
+    up.commit("初始");
+
+    let preview = env.cli_json(&["skill", "preview", &up.url()]);
+    let subpaths: Vec<&str> = preview["candidates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["subpath"].as_str().unwrap())
+        .collect();
+    assert_eq!(subpaths, vec!["tools/alpha"], "{preview}");
+    assert_eq!(preview["skill_count"], 1);
+    assert_eq!(preview["default_category"], Value::Null, "跳过后只剩一个候选则不自动分类");
+
+    let (code, result) = env.cli_json_raw(&[
+        "skill", "import", &up.url(),
+        "--domain", "code",
+        "--skills", ".agents/skills/speckit",
+    ]);
+    assert_ne!(code, 0, "{result}");
+    assert_eq!(result["items"].as_array().map(|v| v.len()).unwrap_or(0), 0);
+    assert!(!skill_exists(&env, "code/speckit"));
+    assert!(!skill_exists(&env, "code/upstream/speckit"));
+}
+
