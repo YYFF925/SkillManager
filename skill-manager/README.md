@@ -51,9 +51,17 @@ cargo run -p skill-manager-cli -- --help   # CLI
 ```
 
 Tauri 打包：`npm run tauri build`（`bundle.targets` 为 `app` 与 `dmg`）。
+Windows 由平台覆盖配置 `src-tauri/tauri.windows.conf.json` 把 target 改为 `nsis`，
+产物为 `target/release/bundle/nsis/Skill Manager_0.1.0_x64-setup.exe`（默认按当前用户安装，
+WebView2 用官方下载引导）。
 macOS 本机打包使用 ad hoc（临时签名，`bundle.macOS.signingIdentity = "-"`），
 使签名标识与应用标识 `com.fei.skillmanager` 一致。实际验证中，未绑定应用信息的链接器签名下，
 系统本地网络开关虽已开启，GUI 的 Git SSH 仍报 `No route to host`；应用包签名并重启后连接成功。
+
+**`cargo test --workspace` 只在 macOS/Linux 运行**：集成测试用 `HOME` 模拟用户 home，
+Windows 的 `dirs` 读 `FOLDERID_Profile`，模拟无效，测试会改写真实用户目录里的
+Agent 技能目录与 `AGENTS.md`。`TestEnv::new()` 在 Windows 上直接 panic 阻止这类写入；
+Windows 上先跑 `cargo test -p skill-manager-core --lib`。
 
 ## CLI 入口
 
@@ -119,7 +127,13 @@ skill-manager agent read-local shared <name>
    GUI 与 CLI 一致地只能补充分类，标签/注释继承上游 `.manager`；入库后可用 `skill set` 补充。
 2. **Hermes 档案独有技能**已可在 GUI 或 `hermes read <profile> <name> [--file <path>]` 只读查看正文与文件；阅读不收编，不改变启用名单。
 3. **平台兼容**：本机仅在 macOS（arm64）实际运行验证；其他平台未验证，不声明兼容。
-   Hermes 启用用符号链接实现，Windows 下的链接行为未验证。
+   Windows（x86_64-msvc）已能在本机编译、打包并启动 GUI（2026-10-17 冒烟），
+   但集成测试无法在该平台运行（见上文测试说明），因此 Windows 行为仍属未验证；
+   Windows 上已修两处：本地路径来源（`C:\...`）被 `repo_name` 按 URL 规则切分，
+   导致 `skill import <本地路径>` 报「分类名不合法」；子进程（`git`/`cmd`）未设
+   `CREATE_NO_WINDOW`，GUI 每次调用都会弹出控制台窗口（现统一经 `crates/core/src/process.rs` 创建）。
+   Hermes 启用用符号链接实现：Windows 上创建目录符号链接需要开发者模式或管理员权限，
+   未满足时如实报错，不降级为复制。
 4. **未取得人工界面证据的交互**：卡片三点菜单/多选批量栏/入库与部署弹窗的部分点按流程、
    "未连接"的完整界面复核等，按各期报告如实保留。
 

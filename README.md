@@ -15,6 +15,13 @@ Gitea（代码托管服务），并在隔离验收库完成真实来源入库与
 [CLI 双入口核对](specs/002-skill-management/contracts/cli.md#t090-双入口核对fr-0500512026-10-15)，
 本轮验收结果见 [M5 报告第十二节](specs/002-skill-management/checklists/m5-report.md#十二phase-18-查漏补缺实施与验收2026-10-17)。
 
+**Windows 打包（2026-10-17）**：新增平台覆盖配置 `skill-manager/src-tauri/tauri.windows.conf.json`
+（target 改为 `nsis`），本机按 `cargo test` 之外的全部流程打包成功，
+产物 `target/release/bundle/nsis/Skill Manager_0.1.0_x64-setup.exe`，GUI 已在本机启动冒烟通过。
+同时修掉本地路径来源被当 URL 切分的 Windows 缺陷（`skill import C:\...` 报“分类名不合法”），
+并在 Windows 上阻止会写真实用户目录的集成测试。Windows 行为仍不作兼容声明，依据与限制见
+[skill-manager/README.md](skill-manager/README.md)。
+
 **初始统一库（2026-10-16）**：名称统一为 **SkillManagerVault（统一技能库）**；本机目录为
 `/Users/fei/Projects/workspace/SkillManagerVault`，对应 [Gitea 私有仓库](http://192.168.200.7:3000/yfpoyuas/SkillManagerVault)。
 按正式数据模型初始化两管理域、空预设、空指令源与工具目录，不携带测试数据；通过既有 `--vault` 接入，
