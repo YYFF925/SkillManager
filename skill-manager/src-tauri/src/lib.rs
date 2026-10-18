@@ -62,6 +62,7 @@ pub fn run() {
             commands::skill::skill_tag_rename,
             commands::skill::skill_tag_remove,
             commands::skill::skill_move,
+            commands::skill::skill_category_rename,
             commands::skill::skill_translation_get,
             commands::skill::skill_translation_set,
             commands::skill::skill_translation_remove,

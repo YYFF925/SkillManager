@@ -19,6 +19,7 @@ skill create <ref> [--category <c> | --uncategorized] [--comment <text>] [--tags
 skill set <ref> [--comment <text>] [--tags <csv>] [--agents all|none|<csv>] [--oses all|none|<csv>]
 skill tag add <ref>... --tags <csv> | skill tag detach <ref>... --tags <csv>
 skill tag rename <old> <new> | skill tag remove <tag>        # 两域统一治理；remove 只解除关联
+skill category rename --domain <domain> <old> <new>          # 重命名一级分类目录，该分类下全部技能一并移动
 skill move <ref> (--category <c> | --uncategorized)          # 移目录、不改名
 skill copy <ref> --to <domain> [--category <c> | --uncategorized]
 skill delete <ref>...                                       # 删库并清理；本地外改副本暂停
@@ -200,7 +201,7 @@ settings capacity
 | 新增拒绝/版本跳过与恢复 | skill reject-new/rejected/skip/unskip/skipped，update --to | 明确拒绝、查看跳过及恢复/采用 |
 | 部署/撤销/同步/暂停处置 | deploy to/undo/sync/status | 同一核心；暂停后交 Agent/用户裁决 |
 | 预设 | preset *（含 reorder/reorder-members），deploy preset/undo-preset | 定义/两种显示排序与部署分开 |
-| 标签/分类/注释/支持范围 | skill tag/set/move | 同一核心资料维护 |
+| 标签/分类/注释/支持范围 | skill tag/set/move、skill category rename | 同一核心资料维护 |
 | 译文/覆盖层维护 | skill translation * / overlay * | 同一管理资料入口 |
 | Hermes | hermes *，skill adopt-hermes | 只读详情/明确启停/收编 |
 | 技能维护任务 | skill task <ref>... | 单项/多选，保留事实上下文，规范引用维护 Skill |
@@ -227,7 +228,7 @@ settings capacity
 | 新增拒绝/跳过与恢复 | `skill reject-new/rejected/skip/unskip/skipped`，`update --to` | 实际执行 | 通过 |
 | 部署/撤销/同步/暂停处置 | `deploy to/preset/undo/undo-preset/sync/status` | 实际执行 | 通过 |
 | 预设 | `preset list/get/create/delete/members/rename/icon/reorder/reorder-members` | 实际执行；两种排序校验全量排列 | 通过 |
-| 标签/分类/注释/支持范围 | `skill tag add/detach/rename/remove`、`skill set`、`skill move` | 实际执行；`--agents all/none/csv` 写回核对 | 通过 |
+| 标签/分类/注释/支持范围 | `skill tag add/detach/rename/remove`、`skill set`、`skill move`、`skill category rename` | 实际执行；`--agents all/none/csv` 写回核对 | 通过 |
 | 译文/覆盖层维护 | `skill translation get/set/remove`、`skill overlay list/get/set/remove` | 实际执行；`set` 缺 `--file/--stdin` 报错退出 1 | 通过 |
 | Hermes | `hermes profiles/list/enable/disable`，`skill adopt-hermes` | 实际执行（假根 + 具名档案） | 通过 |
 | 技能维护任务 | `skill task <ref>... [--requirement <text>]` | 实际执行；任务引用维护 Skill **真实库内路径** | 通过 |

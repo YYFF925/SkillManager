@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   List,
   MoreHorizontal,
+  Pencil,
   Plus,
   RefreshCw,
   Rocket,
@@ -35,6 +36,7 @@ import {
   listSkills,
   listPresets,
   moveSkill,
+  renameCategory,
   skillTask,
   syncPull,
   type CheckReportView,
@@ -60,6 +62,7 @@ import {
   CopyToDomainDialog,
   ManageTagsDialog,
   MoveCategoryDialog,
+  RenameCategoryDialog,
   TagPickerDialog,
   summarizeManageItems,
 } from "../components/SkillDialogs";
@@ -147,6 +150,7 @@ export function LibraryPage({
     { mode: "add" | "remove"; targets: string[] } | null
   >(null);
   const [moveTarget, setMoveTarget] = useState<SkillSummary | null>(null);
+  const [renameCategoryTarget, setRenameCategoryTarget] = useState<string | null>(null);
   const [manageTags, setManageTags] = useState(false);
   const [deployTarget, setDeployTarget] = useState<string[] | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string[] | null>(null);
@@ -443,6 +447,22 @@ export function LibraryPage({
     }
   }
 
+  async function renameRailCategory(from: string, to: string) {
+    try {
+      const result = await renameCategory(domain, from, to);
+      setNotice(`已将分类「${result.from}」重命名为「${result.to}」，涉及 ${result.affected} 个技能。`);
+      setError(null);
+      if (category === from) {
+        setCategory(result.to);
+      }
+      setRenameCategoryTarget(null);
+      setVersion((value) => value + 1);
+      void syncDeployments();
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
   async function move(reference: string, target: string | undefined) {
     try {
       await moveSkill(reference, target);
@@ -672,24 +692,16 @@ export function LibraryPage({
 
       {multi && (
         <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
-          <label className="flex items-center gap-1.5 text-[13px]">
-            <input
-              type="checkbox"
-              className="selectbox"
-              ref={(element) => {
-                if (element) {
-                  element.indeterminate = selected.length > 0 && !allVisibleSelected;
-                }
-              }}
-              checked={allVisibleSelected}
-              onChange={(event) =>
-                setSelected(
-                  event.target.checked ? skills.map((skill) => referenceOf(skill)) : [],
-                )
-              }
-            />
-            全选当前结果
-          </label>
+          <Button
+            compact
+            disabled={skills.length === 0 || allVisibleSelected}
+            onClick={() => setSelected(skills.map((skill) => referenceOf(skill)))}
+          >
+            全选
+          </Button>
+          <Button compact disabled={selected.length === 0} onClick={() => setSelected([])}>
+            全不选
+          </Button>
           <span className="text-[13px] text-muted">已选择 {selected.length}</span>
           <Button
             compact
@@ -757,20 +769,36 @@ export function LibraryPage({
             </span>
           </button>
           {railCategories.named.map(([name, count]) => (
-            <button
+            <div
               key={name}
-              type="button"
-              title={name}
-              onClick={() => setCategory(name)}
-              className={`mb-0.5 flex h-[35px] w-full items-center gap-1.5 rounded-md px-2.5 text-left text-[14px] ${
+              className={`group mb-0.5 flex h-[35px] w-full items-center gap-0.5 rounded-md px-2.5 text-[14px] ${
                 category === name ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
               }`}
             >
-              <span className="truncate">{name}</span>
-              <span className="ml-auto grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
+              <button
+                type="button"
+                title={name}
+                onClick={() => setCategory(name)}
+                className="min-w-0 flex-1 truncate text-left"
+              >
+                {name}
+              </button>
+              <button
+                type="button"
+                title="重命名"
+                aria-label={`重命名分类 ${name}`}
+                onClick={() => {
+                  setCategory(name);
+                  setRenameCategoryTarget(name);
+                }}
+                className="grid size-5 shrink-0 place-items-center rounded-[5px] text-faint opacity-0 hover:bg-hover hover:text-accent group-hover:opacity-100 group-focus-within:opacity-100"
+              >
+                <Pencil className="size-3.5" strokeWidth={1.75} />
+              </button>
+              <span className="grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
                 {count}
               </span>
-            </button>
+            </div>
           ))}
           {railCategories.uncategorized > 0 && (
             <button
@@ -1088,6 +1116,14 @@ export function LibraryPage({
           confirmLabel="移除"
           onCancel={() => setTagDialog(null)}
           onConfirm={(result) => runTagBatch("remove", result.tags)}
+        />
+      )}
+
+      {renameCategoryTarget && (
+        <RenameCategoryDialog
+          current={renameCategoryTarget}
+          onCancel={() => setRenameCategoryTarget(null)}
+          onConfirm={(next) => void renameRailCategory(renameCategoryTarget, next)}
         />
       )}
 

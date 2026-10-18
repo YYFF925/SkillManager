@@ -42,6 +42,9 @@ pub enum SkillAction {
     /// 标签治理：批量增删与全库重命名/删除。
     #[command(subcommand)]
     Tag(TagCommand),
+    /// 分类治理：重命名一级分类目录。
+    #[command(subcommand)]
+    Category(CategoryCommand),
     /// 移动到一级分类（不改变技能名）。
     Move(MoveArgs),
     /// 删除库内技能并清理其受管部署（本地外改副本暂停）。
@@ -185,6 +188,20 @@ pub struct SetArgs {
 }
 
 #[derive(Subcommand, Debug)]
+pub enum CategoryCommand {
+    /// 重命名一级分类（移动实际目录，该分类下全部技能一并移动，技能名不变）。
+    Rename {
+        /// 管理域。
+        #[arg(long, value_name = "code|lobster")]
+        domain: String,
+        #[arg(value_name = "old")]
+        old: String,
+        #[arg(value_name = "new")]
+        new: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 pub enum TagCommand {
     /// 批量添加标签（只增减目标标签）。
     Add(TagBatchArgs),
@@ -321,6 +338,7 @@ fn dispatch(
         SkillAction::Read(args) => read(ctx, args),
         SkillAction::Set(args) => set(ctx, args),
         SkillAction::Tag(command) => tag(ctx, command),
+        SkillAction::Category(command) => category(ctx, command),
         SkillAction::Move(args) => move_skill(ctx, args),
         SkillAction::Delete(args) => delete(ctx, args),
         SkillAction::Translation(command) => translation(ctx, command),
@@ -728,6 +746,27 @@ fn set(ctx: &AppContext, args: SetArgs) -> Result<(CliResult, String)> {
 // ---------------------------------------------------------------------------
 // tag
 // ---------------------------------------------------------------------------
+
+fn category(ctx: &AppContext, command: CategoryCommand) -> Result<(CliResult, String)> {
+    let root = vault_root(ctx)?;
+    match command {
+        CategoryCommand::Rename { domain, old, new } => {
+            let domain = Domain::from_str(&domain)?;
+            let affected = manage::rename_category(&root, domain, &old, &new)?;
+            let data = json!({
+                "domain": domain.as_str(),
+                "from": old,
+                "to": new,
+                "affected": affected,
+            });
+            let human = format!(
+                "已将分类「{old}」重命名为「{new}」，涉及 {affected} 个技能（{}）",
+                domain.label()
+            );
+            Ok((CliResult::from_data(&data), human))
+        }
+    }
+}
 
 fn tag(ctx: &AppContext, command: TagCommand) -> Result<(CliResult, String)> {
     let root = vault_root(ctx)?;

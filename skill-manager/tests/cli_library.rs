@@ -357,6 +357,35 @@ fn move_category_moves_directory_and_stays_findable() {
     assert!(env.path("code/运维/alpha/.manager/source.yaml").exists());
 }
 
+#[test]
+fn rename_category_moves_all_skills_in_the_domain() {
+    let env = TestEnv::new();
+    seed(&env);
+
+    let data = env.cli_json(&[
+        "skill",
+        "category",
+        "rename",
+        "--domain",
+        "code",
+        "工具",
+        "脚本",
+    ]);
+    assert_eq!(data["domain"], "code");
+    assert_eq!(data["from"], "工具");
+    assert_eq!(data["to"], "脚本");
+    assert_eq!(data["affected"], 2);
+
+    assert!(env.path("code/脚本/alpha/SKILL.md").exists());
+    assert!(env.path("code/脚本/beta/SKILL.md").exists());
+    assert!(!env.path("code/工具/alpha").exists());
+    assert!(env.path("code/gamma/SKILL.md").exists());
+    assert!(env.path("lobster/alpha/SKILL.md").exists());
+
+    let found = env.cli_json(&["skill", "list", "--domain", "code", "--category", "脚本"]);
+    assert_eq!(names(&found), vec!["code/alpha".to_string(), "code/beta".to_string()]);
+}
+
 // ---------------------------------------------------------------------------
 // 1.5 / 1.6 管理资料写入
 // ---------------------------------------------------------------------------

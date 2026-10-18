@@ -3,6 +3,7 @@
 //! JSON 字段与 CLI 的同名操作保持一致，前端只调用这里。
 
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use skill_manager_core::domain::{Domain, SkillRef, names_equal};
@@ -85,6 +86,15 @@ pub struct TagRenameResult {
 #[derive(Clone, Debug, Serialize)]
 pub struct TagRemoveResult {
     pub tag: String,
+    pub affected: usize,
+}
+
+/// 分类重命名结果。
+#[derive(Clone, Debug, Serialize)]
+pub struct CategoryRenameResult {
+    pub domain: String,
+    pub from: String,
+    pub to: String,
     pub affected: usize,
 }
 
@@ -484,6 +494,26 @@ pub fn skill_move(
     manage::move_to_category(&root, &reference, category.as_deref())
         .map_err(|err| err.to_string())?;
     summary_of(&root, &reference)
+}
+
+/// 重命名一级分类目录（该分类下全部技能一并移动，技能名不变）。
+#[tauri::command]
+pub fn skill_category_rename(
+    state: tauri::State<'_, AppState>,
+    domain: String,
+    old: String,
+    new: String,
+) -> Result<CategoryRenameResult, String> {
+    let ctx = state.get()?;
+    let root = root_of(&ctx)?;
+    let domain = Domain::from_str(&domain).map_err(|err| err.to_string())?;
+    let affected = manage::rename_category(&root, domain, &old, &new).map_err(|err| err.to_string())?;
+    Ok(CategoryRenameResult {
+        domain: domain.to_string(),
+        from: old,
+        to: new,
+        affected,
+    })
 }
 
 // ---------------------------------------------------------------------------

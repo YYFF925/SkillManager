@@ -1,4 +1,4 @@
-//! 库内维护操作：分类移动、标签增删与全库治理、管理资料保存。
+//! 库内维护操作：分类移动与重命名、标签增删与全库治理、管理资料保存。
 //!
 //! 所有操作只改库内文件（SkillManagerVault 是共享内容真值），不写本机状态、不部署。
 
@@ -116,6 +116,48 @@ pub fn move_to_category(
     }
     std::fs::rename(&source, &target).map_err(|err| CoreError::io(target.clone(), err))?;
     Ok(target)
+}
+
+/// 重命名一级分类目录：该分类下全部技能一并移动，技能名与部署名不变（FR-003）。
+///
+/// 目标分类已存在时拒绝合并；同名不改动。
+pub fn rename_category(root: &Path, domain: Domain, from: &str, to: &str) -> Result<usize> {
+    let from = from.trim();
+    let to = to.trim();
+    validate_category_name(from)?;
+    validate_category_name(to)?;
+    if from == to {
+        return Ok(0);
+    }
+
+    let source = root.join(domain.dir_name()).join(from);
+    let target = root.join(domain.dir_name()).join(to);
+    if !source.is_dir() {
+        return Err(CoreError::other(format!(
+            "分类「{from}」不存在（{}）",
+            domain.label()
+        )));
+    }
+    if target.exists() && !same_path(&source, &target) {
+        return Err(CoreError::other(format!(
+            "目标分类「{to}」已存在，未重命名"
+        )));
+    }
+
+    std::fs::rename(&source, &target).map_err(|err| CoreError::io(target.clone(), err))?;
+
+    let index = SkillIndex::build(root)?;
+    Ok(index
+        .all()
+        .iter()
+        .filter(|entry| {
+            entry.domain == domain
+                && entry
+                    .category
+                    .as_deref()
+                    .is_some_and(|category| names_equal(category, to))
+        })
+        .count())
 }
 
 fn blocked_move(reference: &SkillRef, target: &Path) -> CoreError {

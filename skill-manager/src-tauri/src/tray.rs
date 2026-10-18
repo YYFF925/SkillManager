@@ -1,15 +1,15 @@
 //! 系统托盘与关窗行为（T084，FR-052）。
 //!
 //! 正常关窗只隐藏窗口并继续后台运行；托盘提供「重新打开窗口 / 检查上游更新 / 退出」，
-//! 只有「退出」才终止进程。业务检查仍调用 core 的统一调度（与启动/定时同一入口），
+//! 只有「退出」才终止进程。左键点击图标显示或隐藏主窗口，右键展开菜单。
+//! 业务检查仍调用 core 的统一调度（与启动/定时同一入口），
 //! 不恢复旧版的托盘预设子菜单，也不新增托盘专属业务规则。
 //!
 //! 采用 Tauri 2 官方 API：`tauri::tray::TrayIconBuilder`、`tauri::menu::*` 与
-//! `WebviewWindow::on_window_event`（核对 tauri 2.12）。托盘菜单是唯一入口：左键点击图标
-//! 即展开菜单（Tauri 2 默认），不另建左键快速恢复等额外分支。
+//! `WebviewWindow::on_window_event`（核对 tauri 2.12）。
 
 use tauri::menu::MenuBuilder;
-use tauri::tray::TrayIconBuilder;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Runtime, WindowEvent};
 
 /// 托盘菜单项标识。
@@ -31,8 +31,19 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
     let mut builder = TrayIconBuilder::with_id("skill-manager-tray")
         .menu(&menu)
+        .show_menu_on_left_click(false)
         .tooltip("Skill Manager")
-        .on_menu_event(|app, event| handle_menu(app, event.id().0.as_str()));
+        .on_menu_event(|app, event| handle_menu(app, event.id().0.as_str()))
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                toggle_main_window(tray.app_handle());
+            }
+        });
 
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
@@ -62,9 +73,24 @@ fn handle_menu<R: Runtime>(app: &AppHandle<R>, id: &str) {
     }
 }
 
+/// 左键点击托盘：窗口可见则隐藏，否则显示并聚焦。
+fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
+    let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
+        return;
+    };
+    let visible = window.is_visible().unwrap_or(false);
+    let minimized = window.is_minimized().unwrap_or(false);
+    if visible && !minimized {
+        let _ = window.hide();
+        return;
+    }
+    show_main_window(app);
+}
+
 /// 显示并聚焦主窗口。
 fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+        let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
     }

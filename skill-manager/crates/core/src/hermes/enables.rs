@@ -1,9 +1,9 @@
 //! Hermes 档案技能：发现、列表、明确启用/禁用与批量操作（T058）。
 //!
-//! 外部启用协议（research.md §五）：
-//! - default 档案 = 根自身，技能来自 `hermes:default` 部署记录（共享副本 `<root>/skills`）。
-//! - 具名档案“明确启用”= 在该档案 `skills/` 下建立指向 default 共享副本的**符号链接**；
-//!   不使用 `external_dirs` 整目录挂载（那会让新增技能自动可见，违反 FR-026）。
+//! 列表与安装分开：
+//! - 各档案的技能列表共用一份候选池——已从龙虾库安装进 Hermes 的技能。
+//! - 安装（部署）把副本放进 default；列表不按部署记录标识过滤。
+//! - 具名档案“明确启用”才把该技能装进该档案（指向 default 共享副本的符号链接）。
 //! - 禁用 = 移除该链接并删除本机启用名单条目；不改用户 `config.yaml`，只读其 `skills.disabled`。
 //! - 域与支持声明沿用 US3 的 `deploy::policy`（龙虾域；`hermes` Agent 维度）。
 
@@ -314,9 +314,9 @@ impl<'a> HermesService<'a> {
                 .any(|(d, n)| *d == domain && names_equal(n, name))
         };
 
-        let pool = pool_references(self.state);
         let default_dir = self.default_skills_dir();
         let scanned = scan_skill_dirs(&info.skills_dir);
+        let pool = installed_hermes_skills(self.state);
 
         let mut out: Vec<ProfileSkillView> = Vec::new();
         let mut covered: Vec<String> = Vec::new();
@@ -437,11 +437,8 @@ impl<'a> HermesService<'a> {
                 "管理资料读取失败，拒绝变更启用：{reason}"
             )));
         }
-        if self
-            .state
-            .deployment(Domain::Lobster, name, &Target::HermesDefault.as_str())?
-            .is_none()
-        {
+        let copy = default_dir.join(name);
+        if !copy.is_dir() {
             return Err(CoreError::other(format!(
                 "技能尚未部署到 default 档案：{reference}（其他档案共用 default 的库内容）"
             )));
@@ -452,7 +449,6 @@ impl<'a> HermesService<'a> {
             .state
             .hermes_enabled(&info.name, Domain::Lobster, name)?;
         let link = info.skills_dir.join(name);
-        let copy = default_dir.join(name);
 
         if enabled {
             if let Some(reason) = disabled.error() {
@@ -548,20 +544,33 @@ fn count_default_enabled(root: &Path, disabled: &DisabledState) -> usize {
         .count()
 }
 
-/// default 候选池：deployed to `hermes:default` 的龙虾技能引用。
-fn pool_references(state: &StateStore) -> Vec<SkillRef> {
+/// 部署目标是否表示「已安装进 Hermes」。
+/// Agent `hermes` 与 `hermes:default` 是同一次安装的记录名，不是两套列表。
+fn is_hermes_install(target: &str) -> bool {
+    match target.parse::<Target>() {
+        Ok(Target::HermesDefault) => true,
+        Ok(Target::Agent { key }) => key == HERMES_AGENT_KEY,
+        _ => false,
+    }
+}
+
+/// 各档案共用的候选池：已从龙虾库安装进 Hermes 的技能。
+fn installed_hermes_skills(state: &StateStore) -> Vec<SkillRef> {
     let mut references = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
     let Ok(records) = state.deployments() else {
         return references;
     };
     for record in records {
-        if record.target != Target::HermesDefault.as_str() {
+        if record.domain != Domain::Lobster || !is_hermes_install(&record.target) {
             continue;
         }
-        if record.domain != Domain::Lobster {
+        let reference = record.reference();
+        if seen.iter().any(|existing| names_equal(existing, &reference.name)) {
             continue;
         }
-        references.push(record.reference());
+        seen.push(reference.name.clone());
+        references.push(reference);
     }
     references
 }
@@ -838,7 +847,7 @@ mod tests {
             tag_candidates(&[view], &CategoryFilter::Named("运维".to_string())),
             vec!["net".to_string(), "ops".to_string()]
         );
-        let _ = pool_references(&StateStore::open_in_memory().unwrap());
+        let _ = installed_hermes_skills(&StateStore::open_in_memory().unwrap());
     }
 
     #[test]

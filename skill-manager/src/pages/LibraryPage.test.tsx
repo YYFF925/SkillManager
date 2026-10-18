@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { LibraryPage } from "./LibraryPage";
-import { listSkills } from "../services/client";
+import { listSkills, renameCategory, type SkillSummary } from "../services/client";
 
 vi.mock("../services/client", async (importOriginal) => ({
   ...await importOriginal<typeof import("../services/client")>(),
   listSkills: vi.fn(async () => ({ skills: [], total: 0, tag_candidates: [], categories: [] })),
   listPresets: vi.fn(async () => [{ domain: "code", id: "daily", name: "日常维护", order: 0, members: [] }]),
   deployStatus: vi.fn(async () => [{ skill: "code/alpha", target: "agent:codex" }]),
+  renameCategory: vi.fn(async () => ({ domain: "code", from: "家庭运维", to: "脚本", affected: 1 })),
 }));
 
 it("combines actual deployment, preset and text filters through the existing query", async () => {
@@ -23,7 +24,6 @@ it("combines actual deployment, preset and text filters through the existing que
   fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
   await waitFor(() => expect(listSkills).toHaveBeenLastCalledWith({ domain: "code" }));
 });
-
 it("puts skills unsupported on the current OS after supported ones", async () => {
   vi.mocked(listSkills).mockResolvedValue({
     skills: [
@@ -74,4 +74,45 @@ it("puts skills unsupported on the current OS after supported ones", async () =>
   const linux = await screen.findByRole("button", { name: "linux-only" });
   const macos = screen.getByRole("button", { name: "macos-ready" });
   expect(macos.compareDocumentPosition(linux) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+function summary(name: string, category: string | null): SkillSummary {
+  return {
+    deployment_blocks: {},
+    domain: "code",
+    name,
+    category,
+    comment: null,
+    tags: [],
+    description: name,
+    agents: null,
+    oses: null,
+    has_translation: false,
+    translation_stale: false,
+    vault_rel_dir: category ? `code/${category}/${name}` : `code/${name}`,
+    path: `/tmp/${name}`,
+    entry_file: "SKILL.md",
+    source: null,
+    manager_error: null,
+    presets: [],
+  };
+}
+
+it("shows a rename control on named categories like presets", async () => {
+  vi.mocked(listSkills).mockResolvedValue({
+    skills: [summary("alpha", "家庭运维"), summary("beta", null)],
+    total: 2,
+    tag_candidates: [],
+    categories: ["家庭运维"],
+  });
+  render(<LibraryPage domain="code" os="macos" agents={[]} reloadToken={0} onCount={vi.fn()} />);
+  expect(await screen.findByRole("button", { name: "重命名分类 家庭运维" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "重命名分类 未分类" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "重命名分类 全部分类" })).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: "重命名分类 家庭运维" }));
+  const input = await screen.findByDisplayValue("家庭运维");
+  fireEvent.change(input, { target: { value: "脚本" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存" }));
+  await waitFor(() => expect(renameCategory).toHaveBeenCalledWith("code", "家庭运维", "脚本"));
 });

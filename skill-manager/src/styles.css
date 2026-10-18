@@ -304,17 +304,13 @@ textarea:focus-visible {
     line-height: 20px;
   }
 
-  /* 即时悬浮提示：不等待系统 title 延迟。 */
+  /* 即时悬浮提示：挂到 body，避免被卡片 overflow 或窗口边缘裁切。 */
   .fast-tooltip {
-    position: relative;
     display: inline-flex;
   }
   .fast-tooltip-label {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
+    position: fixed;
     z-index: 80;
-    transform: translateX(-50%);
     border-radius: 6px;
     background: var(--c-ink);
     padding: 3px 7px;
@@ -322,14 +318,13 @@ textarea:focus-visible {
     box-shadow: 0 3px 10px rgba(24, 24, 27, 0.2);
     font-size: 11px;
     line-height: 18px;
-    white-space: nowrap;
+    max-width: min(360px, calc(100vw - 16px));
+    pointer-events: none;
     opacity: 0;
     visibility: hidden;
-    pointer-events: none;
     transition: opacity 60ms ease;
   }
-  .fast-tooltip:hover > .fast-tooltip-label,
-  .fast-tooltip:focus-within > .fast-tooltip-label {
+  .fast-tooltip-label.is-open {
     opacity: 1;
     visibility: visible;
   }

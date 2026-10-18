@@ -41,6 +41,7 @@ skill tag add <ref>... --tags <csv>
 skill tag detach <ref>... --tags <csv>
 skill tag rename <old> <new>
 skill tag remove <tag>
+skill category rename --domain <domain> <old> <new>
 skill move <ref> (--category <c> | --uncategorized)
 skill delete <ref>...
 skill translation get <ref>
@@ -59,6 +60,7 @@ skill task <ref>... [--requirement <text>]
 - `--agents`：`all` 删除限制键（= 全支持）、`none` 写显式空集合、其余为逗号分隔名单；
   `--oses` 同规则。`--tags` 是替换集合，空字符串清空。`--comment` 空字符串清除。
 - `tag add/detach` 只增减目标标签（不替换）；`tag rename/remove` 两域统一治理，`remove` 只解除关联。
+- `category rename` 重命名一级分类目录，该分类下全部技能一并移动；目标分类已存在则拒绝。不改技能名。
 - `move` 必须给 `--category` 或 `--uncategorized` 之一；不改技能名。
 - `translation set` / `overlay set` 必须给 `--file` 或 `--stdin` 之一，否则报错退出 1。
 - overlay 的 `--agent` / `--os` 省略即该维度通用（`_`）。

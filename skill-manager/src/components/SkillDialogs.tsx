@@ -1,5 +1,5 @@
 /**
- * 技能相关的管理弹窗：标签选择、移动到分类、全库标签整理。
+ * 技能相关的管理弹窗：标签选择、移动到分类、分类重命名、全库标签整理。
  *
  * 只收集用户输入并调用 client.ts；标签是否存在、分类是否合法、同名阻止
  * 都由 core 决定。
@@ -173,6 +173,60 @@ export function MoveCategoryDialog({
             <option key={category} value={category} />
           ))}
         </datalist>
+      </Field>
+    </Dialog>
+  );
+}
+
+/** 重命名一级分类：改实际目录名，该分类下全部技能一并移动。 */
+export function RenameCategoryDialog({
+  current,
+  onCancel,
+  onConfirm,
+}: {
+  current: string;
+  onCancel: () => void;
+  onConfirm: (next: string) => void | Promise<void>;
+}) {
+  const [value, setValue] = useState(current);
+  const next = value.trim();
+  const changed = next.length > 0 && next !== current;
+
+  return (
+    <Dialog
+      title={`重命名分类 · ${current}`}
+      subtitle="重命名实际库目录，该分类下的技能一并移动；技能名、已有部署与预设归属保持不变。"
+      width="w-[420px]"
+      onClose={onCancel}
+      footer={
+        <>
+          <span className="text-[12px] text-faint" />
+          <div className="flex gap-2.5">
+            <Button onClick={onCancel}>取消</Button>
+            <Button
+              kind="primary"
+              disabled={!changed}
+              onClick={() => void onConfirm(next)}
+            >
+              保存
+            </Button>
+          </div>
+        </>
+      }
+    >
+      <Field label="分类名称（最多一级）">
+        <input
+          autoFocus
+          className="field-input"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && changed) {
+              event.preventDefault();
+              void onConfirm(next);
+            }
+          }}
+        />
       </Field>
     </Dialog>
   );

@@ -127,6 +127,27 @@ fn enable_is_explicit_and_does_not_spread() {
 }
 
 #[test]
+fn hermes_agent_deploy_is_default_pool_for_other_profiles() {
+    let env = hermes_env();
+    env.write_skill("lobster", Some("AI绘画"), "painter", "# painter\n");
+    env.commit_all("加入龙虾技能");
+    // 龙虾库安装进 Hermes（记录为 agent:hermes）。各档案列表共用这份候选池。
+    env.cli_json(&["deploy", "to", "hermes", "lobster/painter"]);
+
+    let list = env.cli_json(&["hermes", "list", "blank"]);
+    let item = profile_item(&list["skills"], "painter");
+    assert_eq!(item["in_default_pool"], true, "已安装进 Hermes 的技能应出现在每个档案列表：{list}");
+    assert_eq!(item["enabled"], false, "看见不等于启用：{list}");
+    assert_eq!(item["category"], "AI绘画", "{item}");
+
+    let result = env.cli_json(&["hermes", "enable", "blank", "painter"]);
+    assert_eq!(result["items"][0]["ok"], true, "{result}");
+    assert!(TestEnv::is_symlink(
+        &env.hermes_root().join("profiles/blank/skills/painter")
+    ));
+}
+
+#[test]
 fn content_update_keeps_selection() {
     let env = hermes_env();
     env.write_skill("lobster", None, "alpha", "# alpha v1\n");

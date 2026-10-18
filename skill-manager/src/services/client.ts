@@ -191,6 +191,13 @@ export interface TagRemoveResult {
   affected: number;
 }
 
+export interface CategoryRenameResult {
+  domain: Domain;
+  from: string;
+  to: string;
+  affected: number;
+}
+
 export interface TranslationView {
   skill: string;
   exists: boolean;
@@ -347,6 +354,16 @@ export async function moveSkill(
 ): Promise<SkillSummary> {
   requireDesktop();
   return invoke<SkillSummary>("skill_move", { reference, category });
+}
+
+/** 重命名一级分类目录；该分类下全部技能一并移动，技能名不变。 */
+export async function renameCategory(
+  domain: Domain,
+  from: string,
+  to: string,
+): Promise<CategoryRenameResult> {
+  requireDesktop();
+  return invoke<CategoryRenameResult>("skill_category_rename", { domain, old: from, new: to });
 }
 
 /** 读取译文本体（无译文如实为空）。 */

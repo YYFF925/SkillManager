@@ -317,12 +317,19 @@ function LocalSkillsView({
 
       {error && <Notice tone="danger">{error}</Notice>}
 
-      {multi && selected.length > 0 && (
+      {multi && (
         <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
-          <span className="text-[13px] text-muted">已选择 {selected.length}</span>
-          <Button compact onClick={() => setSelected([])}>
-            取消选择
+          <Button
+            compact
+            disabled={visible.every((skill) => selected.includes(skill.name))}
+            onClick={() => setSelected(visible.map((skill) => skill.name))}
+          >
+            全选
           </Button>
+          <Button compact disabled={selected.length === 0} onClick={() => setSelected([])}>
+            全不选
+          </Button>
+          <span className="text-[13px] text-muted">已选择 {selected.length}</span>
           <Button
             compact
             disabled={unmanagedSelected.length === 0}
@@ -332,7 +339,7 @@ function LocalSkillsView({
           >
             <Upload className="size-3.5" strokeWidth={1.75} />
           </Button>
-          <Button compact disabled={localBusy} onClick={() => setDeleteTarget(selected)}>
+          <Button compact disabled={localBusy || selected.length === 0} onClick={() => setDeleteTarget(selected)}>
             <Trash2 className="size-3.5" strokeWidth={1.75} />
             删除本机副本
           </Button>

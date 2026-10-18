@@ -39,11 +39,15 @@ export function TaskDialog({
   const run = useCallback(
     async (current: string) => {
       setBusy(true);
+      setCopied(false);
       try {
-        setText(await generate(current));
+        const generated = await generate(current);
+        setText(generated);
         setError(null);
+        return generated;
       } catch (err) {
         setError(String(err));
+        return null;
       } finally {
         setBusy(false);
       }
@@ -56,8 +60,12 @@ export function TaskDialog({
   }, [run]);
 
   async function copy() {
+    const generated = await run(requirement);
+    if (generated == null) {
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(generated);
       setCopied(true);
       onNotice?.("任务说明已复制到剪贴板；请交给外部 Agent 执行，生成任务不代表已完成。");
     } catch (err) {
@@ -82,7 +90,7 @@ export function TaskDialog({
               <RefreshCw className="size-3.5" strokeWidth={1.75} />
               按当前要求刷新
             </Button>
-            <Button kind="primary" disabled={busy || text.length === 0} onClick={() => void copy()}>
+            <Button kind="primary" disabled={busy} onClick={() => void copy()}>
               <Copy className="size-3.5" strokeWidth={1.75} />
               {copied ? "已复制" : "复制任务说明"}
             </Button>
@@ -101,7 +109,10 @@ export function TaskDialog({
         <textarea
           value={requirement}
           placeholder={requirementPlaceholder}
-          onChange={(event) => setRequirement(event.target.value)}
+          onChange={(event) => {
+            setRequirement(event.target.value);
+            setCopied(false);
+          }}
           rows={3}
           className="w-full resize-y rounded-lg border border-line bg-panel p-3 text-[13px] leading-[21px] text-ink-3 outline-0 focus:border-accent"
         />

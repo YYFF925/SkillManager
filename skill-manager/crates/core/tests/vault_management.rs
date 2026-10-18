@@ -166,6 +166,48 @@ fn move_category_moves_directory_without_renaming() {
 }
 
 #[test]
+fn rename_category_moves_directory_and_all_skills() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let root = tmp.path();
+    write_skill(root, "code", Some("工具"), "alpha", "a");
+    write_skill(root, "code", Some("工具"), "beta", "b");
+    write_skill(root, "code", None, "gamma", "g");
+    write_skill(root, "lobster", Some("工具"), "alpha", "l");
+
+    let affected = manage::rename_category(root, Domain::Code, "工具", "脚本").unwrap();
+    assert_eq!(affected, 2);
+    assert!(root.join("code/脚本/alpha/SKILL.md").exists());
+    assert!(root.join("code/脚本/beta/SKILL.md").exists());
+    assert!(!root.join("code/工具/alpha").exists());
+    assert!(root.join("code/gamma/SKILL.md").exists());
+    assert!(root.join("lobster/工具/alpha/SKILL.md").exists());
+
+    let index = SkillIndex::build(root).unwrap();
+    assert_eq!(
+        index.get(&SkillRef::parse("code/alpha").unwrap()).unwrap().category.as_deref(),
+        Some("脚本")
+    );
+    assert_eq!(
+        index.get(&SkillRef::parse("lobster/alpha").unwrap()).unwrap().category.as_deref(),
+        Some("工具")
+    );
+}
+
+#[test]
+fn rename_category_rejects_existing_target() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let root = tmp.path();
+    write_skill(root, "code", Some("工具"), "alpha", "a");
+    write_skill(root, "code", Some("脚本"), "beta", "b");
+
+    let err = manage::rename_category(root, Domain::Code, "工具", "脚本").unwrap_err();
+    let message = err.to_string();
+    assert!(message.contains("脚本"), "{message}");
+    assert!(root.join("code/工具/alpha/SKILL.md").exists());
+    assert!(root.join("code/脚本/beta/SKILL.md").exists());
+}
+
+#[test]
 fn move_to_occupied_directory_is_blocked_with_locatable_reason() {
     let tmp = tempfile::TempDir::new().unwrap();
     let root = tmp.path();

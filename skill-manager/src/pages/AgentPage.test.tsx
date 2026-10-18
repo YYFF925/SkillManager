@@ -235,6 +235,16 @@ describe("AgentPage · 共享 Agent", () => {
     await screen.findByText("收编本机技能");
     expect(screen.queryByText("本机副本正文")).toBeNull();
   });
+
+  it("多选后可全选和全不选当前结果", async () => {
+    renderShared();
+    await screen.findByText("local-only");
+    fireEvent.click(screen.getByRole("button", { name: "多选" }));
+    fireEvent.click(screen.getByRole("button", { name: "全选" }));
+    expect(screen.getByText("已选择 3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "全不选" }));
+    expect(screen.getByText("已选择 0")).toBeInTheDocument();
+  });
 });
 
 describe("AgentPage · 全部编码 Agents（跨目标部署清单）", () => {

@@ -695,6 +695,16 @@ export function PresetPage({
 
             {multi && (
               <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
+                <Button
+                  compact
+                  disabled={skills.length === 0 || selectedSkills.length === skills.length}
+                  onClick={() => setSelected(skills.map((skill) => referenceOf(skill)))}
+                >
+                  全选
+                </Button>
+                <Button compact disabled={selected.length === 0} onClick={() => setSelected([])}>
+                  全不选
+                </Button>
                 <span className="text-[13px] text-muted">已选择 {selected.length}</span>
                 <Button
                   compact

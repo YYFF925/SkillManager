@@ -563,22 +563,16 @@ export function HermesPage({
 
       {multi && (
         <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
-          <label className="flex items-center gap-1.5 text-[13px]">
-            <input
-              type="checkbox"
-              className="selectbox"
-              ref={(element) => {
-                if (element) {
-                  element.indeterminate = selected.length > 0 && !allVisibleSelected;
-                }
-              }}
-              checked={allVisibleSelected}
-              onChange={(event) =>
-                setSelected(event.target.checked ? skills.map((skill) => skill.name) : [])
-              }
-            />
-            全选当前结果
-          </label>
+          <Button
+            compact
+            disabled={skills.length === 0 || allVisibleSelected}
+            onClick={() => setSelected(skills.map((skill) => skill.name))}
+          >
+            全选
+          </Button>
+          <Button compact disabled={selected.length === 0} onClick={() => setSelected([])}>
+            全不选
+          </Button>
           <span className="text-[13px] text-muted">已选择 {selected.length}</span>
           <Button
             compact

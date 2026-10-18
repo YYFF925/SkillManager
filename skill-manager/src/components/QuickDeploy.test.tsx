@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { QuickDeploy } from "./QuickDeploy";
@@ -41,8 +41,10 @@ describe("QuickDeploy", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "部署到 共享 Agent" })).toBeTruthy();
+    const shared = screen.getByRole("button", { name: "部署到 共享 Agent" });
+    expect(shared).toBeTruthy();
     expect(screen.getByRole("button", { name: "部署到 Codex" })).toBeTruthy();
+    fireEvent.mouseEnter(shared.parentElement!);
     expect(screen.getByRole("tooltip", { name: "共享 Agent" })).toBeTruthy();
   });
 });
