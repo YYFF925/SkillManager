@@ -5,9 +5,9 @@
   "version": "0.1.0",
   "identifier": "com.fei.skillmanager",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run prepare:cli && npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run prepare:cli -- --release && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -27,6 +27,7 @@
   "bundle": {
     "active": true,
     "targets": ["app", "dmg"],
+    "externalBin": ["binaries/skill-manager"],
     "macOS": {
       "signingIdentity": "-"
     },

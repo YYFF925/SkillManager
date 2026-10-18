@@ -179,7 +179,12 @@ skills:                             # 配套 Skill 关联（技能名引用）
 
 ### 2.2 `hermes_enables` — 档案启用名单
 
-`(profile, domain, name)` → 启用关系。default 档案即部署记录（`hermes:default`）；其他档案启用是本机状态，内容更新不重置（FR-027）。
+`(profile, domain, name)` → 启用关系；其他档案启用是本机状态，内容更新不重置（FR-027）。
+
+default 档案即 `<Hermes 根>/skills` 目录。表示「已安装进 Hermes」的部署记录有两种等价写法：`hermes:default`
+与 Agent 目标 `agent:hermes`（`Target::HermesDefault` 在 Agent 维度就是 `hermes`，两者解析到同一目录，见
+`crates/core/src/deploy/targets.rs`）。各档案共用一份候选池：龙虾库中以上述任一写法记录的技能，按技能名去重；
+default 是否已安装以该目录下实际存在技能目录为准，不要求特定记录名（FR-026）。
 
 ### 2.3 `agents` — 本机 Agent 配置
 

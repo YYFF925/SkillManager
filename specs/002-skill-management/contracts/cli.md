@@ -6,6 +6,14 @@
 
 `a | b` 表示互斥参数，`...` 表示可重复条目；未给的编辑参数表示保持原值，不表示清空。`--category <c> | --uncategorized` 区分一级分类与明确未分类。命令和字段是待实现契约，不表示软件已经可运行。
 
+## 安装后的调用入口（FR-050/051）
+
+CLI 随桌面安装包交付，版本与桌面程序一致。维护 Skill 提供定位步骤；调用不依赖 GUI 运行，也不要求安装目录在 `PATH` 中。
+
+- macOS：`<Skill Manager.app>/Contents/MacOS/skill-manager`，常规安装位置为 `/Applications/Skill Manager.app` 或 `~/Applications/Skill Manager.app`。
+- Windows：`<桌面程序安装目录>\skill-manager.exe`，自定义安装时由应用快捷方式目标定位目录；PowerShell 以 `& "<绝对路径>" <参数>` 调用。
+- 文中 `skill-manager` 是该可执行文件的简写。首次使用先执行绝对路径下的 `--version` 与 `--help`；找不到或执行失败如实报告，不误判为仅缺少 PATH，不把开发产物当作已安装程序。
+
 ## 命令表
 
 ### skill — 技能与库管理

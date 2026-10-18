@@ -37,6 +37,7 @@ skill-manager/
 
 ```bash
 npm install                # 前端依赖（首次）
+npm run prepare:cli        # 准备本机 Tauri externalBin（cargo workspace 构建／测试前运行）
 
 # 测试与检查（全部在 skill-manager/ 下运行）
 cargo test --workspace     # Rust：core 单元测试 + CLI/核心集成测试
@@ -54,6 +55,10 @@ Tauri 打包：`npm run tauri build`（`bundle.targets` 为 `app` 与 `dmg`）�
 Windows 由平台覆盖配置 `src-tauri/tauri.windows.conf.json` 把 target 改为 `nsis`，
 产物为 `target/release/bundle/nsis/Skill Manager_0.1.0_x64-setup.exe`（默认按当前用户安装，
 WebView2 用官方下载引导）。
+CLI 通过 Tauri 原生 `bundle.externalBin` 随安装包交付。开发与打包钩子会先执行
+`scripts/prepare-cli.mjs`，从同一 workspace 构建对应目标的 CLI；发布构建使用 release，
+通过 Tauri 的 `TAURI_ENV_TARGET_TRIPLE` 指定目标，生成文件在忽略的 `src-tauri/binaries/`。
+直接执行 `cargo build/test --workspace` 前先运行 `npm run prepare:cli`；只运行 CLI 或 core 不需要此步骤。
 macOS 本机打包使用 ad hoc（临时签名，`bundle.macOS.signingIdentity = "-"`），
 使签名标识与应用标识 `com.fei.skillmanager` 一致。实际验证中，未绑定应用信息的链接器签名下，
 系统本地网络开关虽已开启，GUI 的 Git SSH 仍报 `No route to host`；应用包签名并重启后连接成功。
@@ -64,6 +69,12 @@ Agent 技能目录与 `AGENTS.md`。`TestEnv::new()` 在 Windows 上直接 panic
 Windows 上先跑 `cargo test -p skill-manager-core --lib`。
 
 ## CLI 入口
+
+发行版的 CLI 无需另装，也不依赖 GUI 正在运行或安装目录已加入 `PATH`（命令搜索路径）：
+
+- macOS：`"/Applications/Skill Manager.app/Contents/MacOS/skill-manager" --help`；安装在用户应用目录或其他位置时替换应用路径。
+- Windows：在桌面主程序安装目录中调用 `skill-manager.exe`，PowerShell 写作 `& "<安装目录>\skill-manager.exe" --help`；自定义安装位置通过应用快捷方式目标定位。
+- 首次调用验证 `--version` 与 `--help`，下文 `skill-manager` 代表该绝对路径。维护 Skill 本身没有程序，只有技能文件时须安装桌面包。
 
 ```bash
 # 全局选项（所有子命令可用）

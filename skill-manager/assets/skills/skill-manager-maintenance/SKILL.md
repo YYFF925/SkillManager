@@ -215,6 +215,12 @@ registered_at: 2026-10-15
 
 ## 八、CLI 使用
 
+CLI 由 **Skill Manager 桌面安装包**提供，技能目录只包含操作规范与参考，不包含程序。首次使用须按
+[CLI 定位与调用](references/cli.md#定位与调用安装后的-cli)找到实际安装的可执行文件，并验证 `--version`、
+`--help`；后续示例中的 `skill-manager` 都替换为该绝对路径。不要因为 `command -v`／`Get-Command`
+找不到就断言程序未安装，也不要要求用户安装 Rust 或从项目源码编译。GUI 无需运行。
+若只安装了本 Skill，或应用包内程序缺失／无法执行，应明确报告需要安装包含 CLI 的桌面包及具体错误。
+
 全局选项（所有子命令可用）：`--vault <path>`、`--state-dir <path>`、`--json`。
 在本机模拟两台电脑时，用同一库的两个克隆分别配不同 `--state-dir`。
 

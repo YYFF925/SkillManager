@@ -22,6 +22,10 @@ Gitea（代码托管服务），并在隔离验收库完成真实来源入库与
 并在 Windows 上阻止会写真实用户目录的集成测试。Windows 行为仍不作兼容声明，依据与限制见
 [skill-manager/README.md](skill-manager/README.md)。
 
+**CLI 安装交付修复（2026-10-18）**：桌面包现随附同版本 CLI（命令行工具），维护 Skill 已说明安装位置与绝对路径调用。
+macOS arm64 的新 DMG 位于 `release/`，已从包内验证版本、帮助、隔离库读写与签名；Windows 的本轮打包／安装尚未实测。
+对应 FR-050/051、US10-5，结果见 [M6 报告第二十节](specs/002-skill-management/checklists/m6-report.md#二十桌面安装包随附-cli2026-10-18)。
+
 **初始统一库（2026-10-16）**：名称统一为 **SkillManagerVault（统一技能库）**；本机目录为
 `/Users/fei/Projects/workspace/SkillManagerVault`，对应 [Gitea 私有仓库](http://192.168.200.7:3000/yfpoyuas/SkillManagerVault)。
 按正式数据模型初始化两管理域、空预设、空指令源与工具目录，不携带测试数据；通过既有 `--vault` 接入，

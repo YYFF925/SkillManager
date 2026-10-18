@@ -234,3 +234,60 @@
 3. **移除说明**：档案下拉底部的“本机已发现的档案，不管理档案生命周期。”说明已删除。
 
 **验证（事实）**：新增 core 测试 `named_profile_uses_hermes_panel_title`，从 `profile.yaml` 读取到“绘画助手”；前端测试确认下拉显示“绘画助手”、不显示内部 id，也不显示被删除的底部说明。`npx tsc --noEmit`、`npm test`（**49 项通过**）、`cargo test -p skill-manager-core hermes::profiles`（4 项通过）与 `git diff --check` 通过。
+
+## 十九、预设入口、共享部署目标与分类治理（2026-10-17～18 追补）
+
+本节补记 `fe31c2e`（T130～T132）之后的改动。这些提交当时就地把 FR-003/021/025/037/038 与
+`contracts/cli.md`、`data-model.md` 改为现行行为，但 FR-007/052 涉及的显示与托盘行为、以及任务与验收链
+当时没有跟上。本节补齐实施事实、验证结果与未取证项；FR-007/052 的现行表述及 `plan.md`、
+`docs/requirements.md`、`visual-reference.md` 已同时补齐。任务文件不追加任务号，改以头部
+“2026-10-17～18 后续修订”说明并指向本节。
+
+**范围与实现（事实）**
+
+1. **预设入口简化与保存后后台流程**（`c366dad`）：主侧栏「预设」与「工具中心」同级，取消「编码预设 → 全部预设」分组与卡片总览，进入后直接显示页内列表与成员浏览；GUI 保存完成后部署刷新与获授权上传转入后台，耗时同步不再持有界面上下文锁。实现：`src/App.tsx`、`src/pages/PresetPage.tsx`、`src/lib/librarySave.tsx`、`src-tauri/src/commands/{deploy,sync,mod}.rs`、`crates/core/src/context.rs`。规格 FR-025/FR-038；视觉基线见 `specs/001-skill-management-prototype/visual-reference.md` 的预设导航调整。
+2. **共享 Agent 部署目标与全局库拉取入口**（`8cd59e1`）：编码库单项、多选与预设部署可选择「共享 Agent」（无已检测 Agent 时仍可选），按支持声明过滤并支持撤销已有部署；全局页头在「Agent 指令」左侧增加库拉取按钮，后台拉取期间保留页面操作。实现：`src/components/DeployDialog.tsx`、`src/App.tsx`。规格 FR-021/FR-037。
+3. **分类重命名**（`1b6e2a1`）：core 新增 `vault::manage::rename_category`，移动实际分类目录并一并移动该分类下全部技能，目标分类已存在时拒绝（不做隐式合并），同名调用返回 0 项；CLI 新增 `skill category rename --domain <code|lobster> <old> <new>`；GUI 分类栏提供重命名入口，「全部分类」「未分类」不提供。实现：`crates/core/src/vault/manage.rs`、`crates/cli/src/commands/skill.rs`、`src/pages/LibraryPage.tsx`；契约与设计见 `contracts/cli.md`、`data-model.md` 1.2。规格 FR-003（US1 场景 9）。
+4. **Hermes 档案技能池判定**（`1b6e2a1`）：档案列表改为共用一份候选池——龙虾库中已安装进 Hermes 的部署记录，`hermes:default` 与 Agent 目标 `agent:hermes` 视为同一次安装并按技能名去重；为具名档案启用的前置条件由“存在 `hermes:default` 部署记录”改为 default 目录下实际存在该技能目录。实现：`crates/core/src/hermes/enables.rs`；语义登记见 `data-model.md` 2.2。规格 FR-026/027。
+5. **托盘左键切换窗口**（`1b6e2a1`）：`show_menu_on_left_click(false)`，左键点击在显示与隐藏主窗口之间切换、显示时取消最小化，右键展开菜单。此前“左键即展开菜单、不另建左键快速恢复分支”的记录由本项取代，规格 FR-052 已同步。实现：`src-tauri/src/tray.rs`。
+6. **库列表不支持项位置**（`765cd9d`）：当前系统不适用的技能仍整项灰显，但按原相对顺序排到受支持技能之后，避免插在可用卡片中间。实现：`src/pages/LibraryPage.tsx`；规格 FR-007 已补。
+7. **悬浮提示自绘定位**（`1b6e2a1`）：`FastTooltip` 由系统 `title` 改为 portal 自绘，按视口边缘翻转与收边，触发元素上方空间不足时移到下方。实现：`src/components/FastTooltip.tsx`；视觉说明已补一行。
+8. **Windows 平台修复与安装包**（`34772cf`、`d547863`、`8bd347a`、`7fc32a0`、`6b95288`、`ea225aa`）：子进程统一经 `crates/core/src/process.rs` 创建（`CREATE_NO_WINDOW`），本地路径来源按系统分隔符取仓库名，集成测试在 Windows 上阻断会改写真实用户目录的用例；打包改为同时产出 `.app` 与 DMG，Windows 产出 NSIS，macOS DMG 纳入 `release/`。属实现与打包层，记录在 `skill-manager/README.md` 与 `AGENTS.md`，不改业务规格。
+
+**验证（事实，2026-10-18 补记时重跑）**
+
+| 命令 / 操作 | 结果 |
+|---|---|
+| `cargo test --workspace` | Rust **281 项通过**，0 失败 |
+| `npm test` | 前端 **73 项通过**（17 个测试文件） |
+| `npx tsc --noEmit` | 通过 |
+
+新增或更新的用例：`crates/core/tests/vault_management.rs`（分类重命名含目标已存在时拒绝）、`tests/cli_library.rs`（`skill category rename`）、`tests/cli_hermes.rs`（档案池与启用前置）、`src/components/FastTooltip.test.tsx`、`TaskDialog.test.tsx`、`src/pages/{LibraryPage,AgentPage}.test.tsx`。提交当时记录的验证为：`c366dad` 前端 60 项 / Rust 276 项；`8cd59e1` 前端 69 项 / 9 项预设 CLI 测试；`1b6e2a1` 未记录验证行，由本次重跑补齐。
+
+**未取证（保持未过）**
+
+- GUI 实操未见证：预设入口位置、共享 Agent 部署目标与撤销、页头库拉取按钮、分类重命名、托盘左键切换、悬浮提示定位均只有构建与自动化测试证据，未在真实 `.app` 上逐条操作核对。
+- Windows 平台行为未在真实 Windows 环境运行验证，只有单元/集成测试与代码路径说明支撑（见 `skill-manager/README.md`）。
+- DMG / NSIS 安装包未做安装与首次启动验证。
+- 本轮未修改真实 SkillManagerVault 内容，也未执行真实部署、撤销或上传。
+
+
+## 二十、桌面安装包随附 CLI（2026-10-18）
+
+**问题与范围**：本机维护 Skill 只有规范与 CLI 参考，原桌面包也未携带独立 CLI；开发机有编译产物不代表新电脑可执行管理任务。本轮补齐 FR-050 安装交付与 US10 场景 5，维护 Skill 仍按 FR-051 从普通上游入库／更新，未另建技能分发机制。
+
+**实现**：Tauri `externalBin` 随桌面包安装 `skill-manager`；开发／打包钩子从当前 workspace 编译对应目标 CLI，失败即停止。macOS 在应用包 `Contents/MacOS/`，Windows 在桌面主程序旁。维护 Skill 和 CLI 契约明确绝对路径调用、首次版本／帮助检查及缺失时如实报告，无运行时复制或 PATH 修改。项目 `AGENTS.md` 新增每次修改按适用 Spec 同步维护相关文档的要求。
+
+**验收（macOS arm64，实际 DMG）**
+
+| 场景号 | 预期 | 实际 | 结论 |
+|---|---|---|---|
+| 6.13 | 真实安装包中包含同版本 CLI，外部进程无需 PATH／源码／GUI 即可执行帮助与版本 | 只读挂载 DMG，以 `ditto` 复制到项目外带空格的临时安装目录；未启动该 GUI 副本，`PATH` 为空时 `--version` 返回 `skill-manager 0.1.0`（与应用 Info.plist 一致），`--help` 正常且退出码为 0 | 通过 |
+| 6.14 | 包内 CLI 在隔离库实际查询／修改，签名有效 | 从复制后的包内绝对路径调用，PATH 仅保留系统 Git 目录 `/usr/bin:/bin`，隔离 HOME／vault／state；`skill list`、`skill set code/smoke --comment`、`skill get` 均返回成功 JSON，磁盘 meta.yaml 与独立 SQLite 真实写入；应用与 CLI 的 `codesign --verify --strict` 均通过（应用另带 `--deep`） | 通过 |
+| 6.15 | 技能明确入口与缺失原因，release 唯一安装包受 Git 跟踪 | SKILL.md 与 references/cli.md 已补 macOS／Windows 定位、绝对路径及缺失说明；release 仅保留已跟踪的 `Skill Manager_0.1.0_aarch64.dmg`，其中同时包含桌面程序与 CLI | 通过 |
+
+**构建与回归**：`npm run tauri build` 已产出带签名 `.app` 与 DMG（前端类型检查、生产构建均通过）。沙箱内 `hdiutil` 报“设备未配置”，切换到获准的沙箱外构建后成功；真实 DMG 只读挂载、复制与卸载均成功。Rust workspace 首次在沙箱内执行，已有文件监听测试 `external_edits_refresh_the_index_and_notify` 等待通知超时，其余已执行用例通过；在沙箱外重跑同一 `cargo test --workspace` 后 **281 项全部通过**，包含该监听测试；未改业务代码或该测试。开发模式的 `npm run prepare:cli` 也构建成功。
+
+**安装包**：`release/Skill Manager_0.1.0_aarch64.dmg`，7,691,081 字节，SHA-256 `196b390b64c47eb592b92b13a639097c4ad3b2bbae4cd1926f3cd0c3616a2cc2`。
+
+**平台与交付限制**：Windows 的共用打包配置与技能调用说明已调整，但尚未在真实 Windows 环境执行本轮构建／安装／调用验证；不得据此声称 Windows 验收通过。本轮不改真实 SkillManagerVault 或部署副本，不自动上传项目或技能更新。

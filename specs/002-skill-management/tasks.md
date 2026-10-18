@@ -4,9 +4,13 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 # Tasks: Skill Manager 正式产品
 
+**2026-10-18 CLI 安装交付修订**：补齐 FR-050/051 与 US10 场景 5 的新电脑调用链，新增任务见 Phase 20；验证见 `quickstart.md` M6 补充三及 `checklists/m6-report.md` 第二十节。每次修改同步维护相应规格、设计与验收文档的要求已写入项目 `AGENTS.md`。
+
 **2026-10-16 后续修订**：共享目录按当前用户主目录自动定位 `.agents/skills`，无需配置。下列已完成任务中关于手动设置路径、缺路径报错或前往设置的内容属于此前实施记录，已由本次修订取代；现行行为及验收以 FR-021/042/050/055/056、CLI 契约及 quickstart 为准，结果见 `checklists/m6-report.md` 第十节。
 
 **同日交互修订**：此前“共享目录不收编”及空列表说明的任务描述也已取代。共享目录未受管技能支持纳入管理；卡片打开本机正文与文件详情，可点击控件显示手型。对应 FR-014/042/052/055，验收见 `checklists/m6-report.md` 第十一节。
+
+**2026-10-17～18 后续修订**：`fe31c2e`（T130～T132）之后的改动——预设入口简化与保存后后台刷新、共享 Agent 部署目标、全局页头库拉取入口、分类重命名、Hermes 档案技能池判定、托盘左键切换窗口、库列表不支持项位置——提交当时已就地修订 FR-003/021/025/037/038 与 `contracts/cli.md`、`data-model.md`；追补时补齐 FR-007/052 的现行表述及 `plan.md`、`docs/requirements.md`、`visual-reference.md`。这些改动不新增任务号，实施事实、验证结果与未取证项见 `checklists/m6-report.md` 第十九节，新增验收场景见 `quickstart.md` 的 M6 补充二；本节取代此前任务描述中与之冲突的部分。
 
 **Input**：本目录的 `spec.md`、`plan.md`、`research.md`、`data-model.md`、`contracts/cli.md`、`quickstart.md`；约束依据 `.specify/memory/constitution.md` v2.0.2。
 
@@ -441,3 +445,11 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 - [X] T130 [P] [US2] 在 `skill-manager/crates/core/src/upstream/discover.rs` 先写失败测试：相对仓库根 `.agents/skills/` 及其子路径下的技能不进入 `scan_repo` 结果；同仓常规目录技能仍列出；只剩一个常规技能时候选数量为 1。不测本机共享部署目录。
 - [X] T131 [US2] 在 `skill-manager/crates/core/src/upstream/discover.rs` 让 `scan_repo` 跳过相对路径 `.agents/skills` 及其子路径，不再向下扫描；`preview`、`import`、上游新增候选共用该结果。默认分类按跳过之后的候选数计算（已由调用方 `candidates.len()` 决定）。不新增 CLI 开关、排除文件或 `rejected_subpaths` 写入。指定 `--skills` 落在该路径下时按不是技能报错，不回退仓库根。本机 `<home>/.agents/skills` 部署与浏览不受本项影响。
 - [X] T132 [US4] 用 `skill-manager/tests/cli_acquire.rs` 或现有上游检查测试覆盖：预览不含 `.agents/skills/` 候选；对该路径执行 `import --skills` 失败且不入库；已登记来源只在该路径新增技能时检查不把它列为新增。将 quickstart 3.13 结果写入 `specs/002-skill-management/checklists/m3-report.md`。不把未扫描写成用户拒绝。
+
+## Phase 20: 增量 — 桌面包随附 CLI（2026-10-18）
+
+**目标**：修复新电脑安装应用和维护 Skill 后无法执行 CLI 的交付缺口（FR-050/051、US10-5）。不改核心命令与状态模型，不增加 PATH 写入、运行时复制或兼容路径。
+
+- [X] T133 [US10] 在 Tauri 配置中使用 `externalBin` 携带同版本 CLI；开发／打包前按目标平台编译并准备二进制，构建失败阻止打包；生成文件忽略，不提交中间件。
+- [X] T134 [US10] 更新配套维护 Skill 与 CLI 契约、开发 README，说明 macOS／Windows 实际安装入口、绝对路径调用、首次版本与帮助验证；区分技能文件与程序安装，不依赖开发目录或 PATH。
+- [X] T135 [US10] 构建并替换 `release/` 唯一安装包，从安装包中的应用验证 CLI 的版本、帮助、隔离库查询与修改，检查应用签名；同步记录 quickstart M6 补充三及 m6-report 第二十节的实际结果与平台限制。

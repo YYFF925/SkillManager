@@ -110,6 +110,17 @@ skill-manager/
 
 **Structure Decision**: Cargo workspace 三成员（core / cli / src-tauri 复用 core）。业务规则只存在于 `core`，CLI 与 Tauri command 都是薄入口层，保证宪章 V"同一套规则、不形成两套体系"在代码结构上成立。
 
+### 桌面安装包与 CLI 交付（2026-10-18）
+
+对应 FR-050/051、US10 场景 5。现有安装包未携带 CLI，导致新电脑只有维护技能而无法执行管理动作；该后果阻断 Agent 维护，必须在打包层补齐。
+
+- 使用 Tauri 原生 `bundle.externalBin`（外部二进制打包）携带 `skill-manager`，不新增运行时桥接、安装器或全局 PATH 修改。macOS 位于应用包 `Contents/MacOS/skill-manager`；Windows 位于桌面主程序同目录的 `skill-manager.exe`。
+- `scripts/prepare-cli.mjs` 在 Tauri 开发／打包前编译同一 workspace 中的 CLI，按目标平台准备带 target triple（目标平台三元组）后缀的二进制；编译失败直接阻止后续流程，避免再交付缺 CLI 的安装包。生成文件留在忽略的 `src-tauri/binaries/`，不提交构建中间件。
+- 维护技能说明以应用安装位置定位 CLI，先验证 `--version`／`--help`，再通过绝对路径执行管理命令；不依赖 GUI 进程或个人 shell 初始化。Windows 自定义安装位置以实际快捷方式目标为准。仅安装技能时明确缺少应用，不退回开发目录。
+- 发布验收从真实安装包取出应用，在无源码、无命令搜索路径的外部进程验证版本、帮助、隔离库查询与资料修改；结果记入 `checklists/m6-report.md` 第二十节。未运行的平台保留未验证。
+
+实现依据：[Tauri 外部二进制](https://v2.tauri.app/develop/sidecar/)与[构建钩子](https://v2.tauri.app/reference/config/#buildconfig)。
+
 ## Milestones
 
 > 目标：全部完成后才投入使用。里程碑是开发管理与方向检查点——每期按依赖自底向上，收尾执行 quickstart.md 对应场景并输出"验收场景核对表"（逐条通过/未过与证据），供用户检查是否偏离规划方向。
@@ -269,3 +280,15 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 - 不新增 CLI 开关、排除文件或兼容打开该路径的入口。已入库技能不受影响。
 
 **Phase 1 设计后复查**：原则 VI——用发现阶段跳过该路径，拒绝逐项排除清单与可配置扫描开关；原则 I——候选里根本不出现这些技能，不把未扫描写成用户拒绝。通过。
+
+## 交互与部署修订（2026-10-17～18）
+
+对应 spec.md FR-003/007/021/025/037/038/052。本批在实现中落定，未新增任务号；交付、测试与未取证项见 `checklists/m6-report.md` 第十九节，验收场景见 `quickstart.md` 的 M6 补充二。
+
+- **后台库任务不占用界面上下文锁**：`AppContext::fork()` 复用当前库快照、另开一条本机状态连接；`AppState::with_background_context` 与 `commands::background()` 在 `spawn_blocking` 中执行阻塞的 Git 与文件操作，并由 `background_jobs` 互斥量串行化。界面读取不再等待耗时同步完成；上传授权与结果语义不变（FR-038）。实现：`crates/core/src/context.rs`、`src-tauri/src/commands/mod.rs`、`commands/{deploy,sync}.rs`。
+- **共享 Agent 作为部署目标**：编码库的单项、多选与预设部署把共享目标与普通 Agent 同列，沿用既有目标解析、域边界与支持声明过滤，不新增准入规则；无已检测 Agent 时该目标仍可选。实现：`src/components/DeployDialog.tsx`、`src/App.tsx`。
+- **全局库拉取入口**：页头按钮调用既有库拉取能力并刷新当前页面，不做上游检查、不触发上传，也不新增组合命令（FR-037）。
+- **分类重命名**：core 增加 `vault::manage::rename_category`，整套移动一级分类目录；目标分类已存在时拒绝（避免隐式合并），同名返回 0 项；CLI 出口为 `skill category rename`，GUI 入口在分类栏，「全部分类」「未分类」不提供（FR-003）。实现：`crates/core/src/vault/manage.rs`、`crates/cli/src/commands/skill.rs`。
+- **Hermes 档案技能池**：候选池取龙虾库中已安装进 Hermes 的部署记录，`hermes:default` 与 `agent:hermes` 视为同一次安装并按技能名去重；启用前置条件改为 default 目录下实际存在该技能目录，不再依赖特定记录名。设计登记见 `data-model.md` 2.2。实现：`crates/core/src/hermes/enables.rs`。
+- **托盘左键**：关掉左键展开菜单，左键切换主窗口显示/隐藏并在显示时取消最小化，菜单交由右键（FR-052）。实现：`src-tauri/src/tray.rs`。
+- **库列表不支持项位置**与**悬浮提示自绘定位**属显示层：前者只调整已过滤结果的排列顺序，不改查询条件（FR-007）；后者把提示层移入 portal 并按视口边缘翻转收边。

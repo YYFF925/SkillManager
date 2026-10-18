@@ -2,6 +2,7 @@
 
 # Rust
 skill-manager/target/
+skill-manager/src-tauri/binaries/
 
 # 前端
 skill-manager/node_modules/

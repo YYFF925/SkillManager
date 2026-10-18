@@ -1,7 +1,40 @@
 # Skill Manager CLI 参考
 
 本文件是配套维护 Skill 的 CLI（命令行接口）参考，与当前实现一致。
-可执行文件为 `skill-manager`（项目仓库 `skill-manager/target/debug/skill-manager` 或安装后的同名声）。
+可执行文件为桌面安装包随附的 `skill-manager`（Windows 为 `skill-manager.exe`），与桌面程序同版本。
+
+## 定位与调用安装后的 CLI
+
+Skill 只提供规范；程序由 **Skill Manager 桌面安装包**提供，二者分别安装／更新。GUI 无需运行，
+不要求 `PATH`（命令搜索路径）包含应用目录，也不要求源码或编译工具链。
+
+**macOS**：在实际安装的 `Skill Manager.app/Contents/MacOS/` 中定位 `skill-manager`。
+通常位于 `/Applications/Skill Manager.app` 或 `~/Applications/Skill Manager.app`；自定义位置以实际应用为准。
+例如安装在系统应用目录时：
+
+```bash
+"/Applications/Skill Manager.app/Contents/MacOS/skill-manager" --version
+"/Applications/Skill Manager.app/Contents/MacOS/skill-manager" --help
+"/Applications/Skill Manager.app/Contents/MacOS/skill-manager" --json settings get vault_path
+```
+
+**Windows（PowerShell）**：通过 Skill Manager 快捷方式的“目标”定位桌面程序安装目录，
+同目录中的 `skill-manager.exe` 即 CLI。标准当前用户安装通常可按下面的位置验证；若用户选了其他目录，
+使用实际目录，不反复尝试开发目录：
+
+```powershell
+$skillManagerCli = Join-Path $env:LOCALAPPDATA 'Skill Manager\skill-manager.exe'
+& $skillManagerCli --version
+& $skillManagerCli --help
+& $skillManagerCli --json settings get vault_path
+```
+
+确认入口后，本文所有 `skill-manager …` 示例都以该绝对路径调用（PowerShell 使用 `&`）。
+应用安装目录有空格，必须按上述方式引用。`settings get vault_path` 为 `null` 时由用户在 GUI 接入已有库，
+或在命令中显式传 `--vault <已有 SkillManagerVault 路径>`。
+
+找不到应用、应用内缺少 CLI 或执行失败时，报告检查的实际路径与错误；只装了本 Skill 不等于已安装 CLI。
+应安装包含 CLI 的桌面包，不把 GUI 主程序当 CLI，不静默使用源码目录的开发产物。
 
 ## 全局约定
 
