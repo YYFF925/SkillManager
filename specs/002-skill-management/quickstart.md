@@ -180,7 +180,7 @@ skill-manager skill update code/skill-manager-maintenance
 |---|---|---|
 | 6.13 | 从新安装包取出应用，依维护 Skill 定位 CLI，应用置于带空格的目录，以无源码路径、无 PATH 的外部进程执行 `--version` 与 `--help` | 包内同版本 CLI 能直接调用，不启动 GUI，不要求 Rust 或全局命令；帮助与退出码正确 |
 | 6.14 | 同一包内 CLI 显式传隔离 `--vault`／`--state-dir`，执行技能列表、`skill set`、再读取资料；测试目录置于项目外 | JSON 可解析，查询与修改真实生效，不触及用户库；macOS 检查包签名；Windows 需独立实机记录，未执行不报告通过 |
-| 6.15 | 检查维护 Skill 的入口说明，并检查交付目录 | 明确只有技能不等于 CLI 已安装、缺失／执行失败如实报告；`release/` 只有一份含 CLI 的安装包并受 Git 跟踪 |
+| 6.15 | 检查维护 Skill 的入口说明，并检查交付目录 | 明确只有技能不等于 CLI 已安装、缺失／执行失败如实报告；`release/` 每个平台只有一份含 CLI 的安装包并受 Git 跟踪 |
 
 ## 自动化与人工分工
 
