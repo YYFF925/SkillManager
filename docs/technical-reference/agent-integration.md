@@ -31,6 +31,7 @@ Codex、Roo Code 的旧单色图标使用深色反相；其他图标可能自带
 - `.config` 路径在 Windows 的候选解析需结合真实 Agent 行为；macOS 不能直接将所有 CLI 路径替换成
   `Library/Application Support`。静态数据不替代逐平台验证。
 - Hermes 的静态 `.hermes` 记录不适合作为所有平台的最终路径，见 [Hermes 说明](hermes-integration.md)。
+- Antigravity 官方已把 App／IDE 全局技能目录改为 `~/.gemini/config/skills`（legacy `~/.gemini/antigravity/skills` 仍兼容）；CLI 全局目录 `~/.gemini/antigravity-cli/skills` 未纳入部署目标。目录中该条目按官方现行路径登记，不再对应参考源码字面量（2026-10 核对官方文档）。
 
 共享技能目录可单独表示为部署目标，不混入 53 个真实 Agent 的安装数量。
 设置中的启用状态、用户自定目录及实际检测结果属于程序运行资料，不写死到这份参考清单。
