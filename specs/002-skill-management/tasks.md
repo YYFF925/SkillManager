@@ -453,3 +453,12 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 - [X] T133 [US10] 在 Tauri 配置中使用 `externalBin` 携带同版本 CLI；开发／打包前按目标平台编译并准备二进制，构建失败阻止打包；生成文件忽略，不提交中间件。
 - [X] T134 [US10] 更新配套维护 Skill 与 CLI 契约、开发 README，说明 macOS／Windows 实际安装入口、绝对路径调用、首次版本与帮助验证；区分技能文件与程序安装，不依赖开发目录或 PATH。
 - [X] T135 [US10] 构建并替换 `release/` 唯一安装包，从安装包中的应用验证 CLI 的版本、帮助、隔离库查询与修改，检查应用签名；同步记录 quickstart M6 补充三及 m6-report 第二十节的实际结果与平台限制。
+
+## Phase 21: 增量 — YAML 写回保型（2026-10-28）
+
+**目标**：修复部署与写回把字符串降级为 plain 标量、被 YAML 1.1 消费者隐式类型化（日期/时间/布尔/数字形状改型、键 `on` 变布尔、行内注释丢失）的缺陷。所有 YAML 写回点统一保型，部署合成只改 `description` 行。
+
+**独立验收**：frontmatter 含 `date: "2026-10-08"`、`time: "12:30"`、`flag: "no"`、`on: "on"` 的技能注入注释部署后，除 description 行外与原件逐字节一致；meta.yaml 未知字段写回后仍是字符串；同输入重复合成字节一致。
+
+- [X] T136 [US3] [US1] 新增 `skill-manager/crates/core/src/yaml_safe.rs`：按 PyYAML resolver 的 1.1 隐式类型谓词 `needs_quotes` 与保守发射器，写回统一走 `to_yaml_string`（无危险字符串时与 yaml_serde 输出逐字节一致；含 `Value::Tagged` 回退）；`deploy/compose.rs` 注入改为文本级最小编辑（定位唯一顶层 `description:` 行，块标量前缀进首条内容行、引号值前缀进引号内、plain 值原位拼接，编辑后整块重解析校验，不符即未注入），删除整块重序列化；meta.yaml/tool.yaml/source.yaml/presets/decisions 及 `--stdin` 共 7 处写回点全部换用安全序列化。测试：`yaml_safe` 谓词/往返/分派、`compose` 注入形态（引号/块标量/行内注释/CRLF/幂等/无 frontmatter）、`deployment.rs` 与 `tests/cli_deploy.rs` 端到端字节保真、`vault_management.rs` 未知字段类型保真、`toolcenter` stdin 危险值。同步修订 data-model.md §1.3 写入规则、spec.md US3/FR-016、contracts/cli.md tool register 条款 per FR-016/FR-006、D3
+- [X] T137 [US10] 构建并替换 `release/` 的 macOS 安装包（Windows NSIS 需在 Windows 机器重建，本轮保持旧版并在交付说明注明）；用新安装包内 CLI 验证部署保型与冒烟，重部署受污染的既有部署副本（如 agent:hermes 的 ego-browser）；记录 quickstart M6 补充四及 m6-report 第二十一节 per FR-050、T135 惯例

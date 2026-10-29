@@ -291,3 +291,24 @@
 **安装包**：`release/Skill Manager_0.1.0_aarch64.dmg`，7,691,081 字节，SHA-256 `196b390b64c47eb592b92b13a639097c4ad3b2bbae4cd1926f3cd0c3616a2cc2`。
 
 **平台与交付限制**：Windows 的共用打包配置与技能调用说明已调整，但尚未在真实 Windows 环境执行本轮构建／安装／调用验证；不得据此声称 Windows 验收通过。本轮不改真实 SkillManagerVault 或部署副本，不自动上传项目或技能更新。
+
+## 二十一、YAML 写回保型（2026-10-28）
+
+**问题与范围**：部署合成与 YAML 写回把整块结构经 `yaml_serde::to_string` 重序列化，emitter 按 YAML 1.2 core 判定 plain 标量安全，`"2026-10-08"`、`"12:30"`、`"no"`、`"on"` 等形状被无引号输出；PyYAML 等下游按 YAML 1.1 解析为 date/int/bool，键 `on:` 也会变成布尔键，行内注释丢失。实际事故：Hermes `skill_view` 对 ego-browser 报 `Object of type date is not JSON serializable`。全仓共 7 处写回点（frontmatter 注入、meta.yaml、tool.yaml ×2、source.yaml、presets、决定记录）。
+
+**实现**（tasks.md Phase 21 / T136）：新增 `crates/core/src/yaml_safe.rs`——按 PyYAML resolver 的 1.1 隐式类型谓词 `needs_quotes` 与保守发射器，统一入口 `to_yaml_string`（无危险字符串时与 `yaml_serde` 输出逐字节一致，含 `Value::Tagged` 回退）；`deploy/compose.rs` 注入改为文本级最小编辑：定位唯一顶层 `description:` 行（块标量前缀进首条内容行、引号值前缀进引号内、plain 值原位拼接），编辑后整块重解析校验，不符即「未注入」安全降级；`--stdin` 注册经 JSON 文本转 Value（JSON 即带引号 YAML，无隐式类型化窗口）。修订 data-model.md §1.3 写入规则、spec.md US3/FR-016、contracts/cli.md tool register 条款。
+
+**验收（macOS arm64，实际 DMG 内 CLI）**
+
+| 场景号 | 预期 | 实际 | 结论 |
+|---|---|---|---|
+| 6.16 | 注释注入只改 description 行，引号/行内注释逐字节保留 | 隔离库含 `date: "2026-10-08"`、`time: "12:30"`、`flag: "no" # 上游注释` 的技能经包内 CLI `skill set --comment` + `deploy to cursor`，副本除 description 行外与原件逐字节一致；`cargo test --workspace` 覆盖同断言（compose 单测 10 例、deployment/cli_deploy 集成各 1 例、vault_management/toolcenter 未知字段与 stdin 各 1 例） | 通过 |
+| 6.17 | 同输入重复合成字节一致 | compose 单测与 cli_deploy 端到端均断言两次产物逐字节相等；真实库 `deploy sync` 二次执行全部 unchanged | 通过 |
+| 6.18 | 受污染既有副本恢复，严格 1.1 消费者无损解析 | 包内同源 release CLI 对真实库执行 `deploy sync`：8 项 updated、42 项 unchanged、0 错误；`~/.hermes/skills/ego-browser/SKILL.md` 的 `date: "2026-10-08"` 引号恢复，PyYAML 全部解析为 str（`bootstrap: true` 保持 bool，原件即布尔），`json.dumps` 通过；扫描 `~/.hermes/skills` 与 `~/.agents/skills` 共 51 个 SKILL.md 无残留类型化 | 通过 |
+| 6.19 | release/ 每平台一份安装包 | macOS 新包替换旧包（hdiutil UDZO）；Windows NSIS 包保持旧版（含修复前 CLI，待 Windows 机器重建），不得据此声称 Windows 已含修复 | 部分（如实记录） |
+
+**构建与回归**：`cargo test --workspace` **300 项全部通过、0 失败**（含本轮新增的 yaml_safe/compose 单测、deployment 与 cli_deploy 字节保真、vault_management/toolcenter 未知字段类型保真用例）。`npm run tauri build` 编译与 `.app` 打包成功（ad hoc 签名 `codesign --verify --strict` 通过），但 create-dmg 的 Finder AppleScript 在自动化会话持续超时（-1712，沙箱内外一致；另清理过一只残留挂载的旧镜像 `/dev/disk9`），按最小充分原则改用 `hdiutil create -format UDZO` 直接封装：功能等价（同样只读挂载、拖拽安装、含已签名 `.app`），仅无 Finder 窗口美化（背景图/图标布局）。
+
+**安装包**：`release/Skill Manager_0.1.0_aarch64.dmg`，8,943,032 字节，SHA-256 `a390da301315b794fb19890ad9619375c26313b114caf565a127f8c59c21a148`。版本号沿用 0.1.0（仓库惯例不因重造升版）。
+
+**平台与交付限制**：Windows NSIS 安装包未在本轮重建（macOS 无法产出），包内 CLI 仍含本缺陷，待 Windows 实机重建后一并恢复；DMG 改用 hdiutil 封装，与既往 create-dmg 产物相比无 Finder 视觉布局。本轮不自动提交或推送，交付提交由用户指示后按 AGENTS.md 双端规则执行。

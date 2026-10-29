@@ -126,7 +126,7 @@ tool task [<slug>] --action register|edit|install|update|guide [--requirement <t
 tool skill-link <slug> <ref>                                 # 配套 Skill 来源资料随 tool set 维护
 ```
 
-- `register` 新登记，`set` 修改已有共享资料；`--dir` 提供 tool.yaml、guide.md 及其所需检查脚本；`--stdin` 接收对象 `{"tool": <字段映射>, "guide": <正文>}`，其他脚本通过资料目录维护。登记的 slug 由 `tool.yaml` 的 `name` 派生（保留 ASCII 字母数字，其余折为 `-`）；已登记时 `register` 报错，改用 `set`。`--dir` 中缺失的 `guide.md` 或其他文件表示保持原值，不表示清空；未知字段写回时保留。
+- `register` 新登记，`set` 修改已有共享资料；`--dir` 提供 tool.yaml、guide.md 及其所需检查脚本；`--stdin` 接收对象 `{"tool": <字段映射>, "guide": <正文>}`，其他脚本通过资料目录维护。登记的 slug 由 `tool.yaml` 的 `name` 派生（保留 ASCII 字母数字，其余折为 `-`）；已登记时 `register` 报错，改用 `set`。`--dir` 中缺失的 `guide.md` 或其他文件表示保持原值，不表示清空；未知字段写回时保留，且值与其字符串形态（含键）不被 YAML 隐式类型改写（同 data-model.md §1.3 写入规则）。
 - 工具登记、资料维护、安装与验证回写由外部 Agent 完成；GUI 生成/复制对应任务，全部实际管理动作 CLI 可达。`task --action register` 允许尚无 slug（由 `--requirement` 说明工具名称与来源/安装要求）；其他动作必须给已登记工具。任务不等于安装或更新完成。
 - 检查只执行登记的单个最新版本检查命令，保存检查事实，不改 `tool_installs`。无命令、失败、未检查分别表达；未安装工具获得上游版本后仍是未安装，不显示“本机最新”。版本比较约定见 data-model.md §1.5（T074 落定）；无法比较或上游低于本机记录时如实说明，不冒充“最新/可更新”。
 - `set-install` 仅在 Agent 核实实际结果后回写安装事实并重置该工具检查结果；命令本身不安装程序。`--version ""`（空字符串）表示 Agent 核实该工具已不在本机：清除安装记录并同样重置检查结果。工具版本与配套技能版本互不代替。

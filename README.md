@@ -26,6 +26,13 @@ Gitea（代码托管服务），并在隔离验收库完成真实来源入库与
 macOS arm64 的新 DMG 位于 `release/`，已从包内验证版本、帮助、隔离库读写与签名；Windows 的本轮打包／安装尚未实测。
 对应 FR-050/051、US10-5，结果见 [M6 报告第二十节](specs/002-skill-management/checklists/m6-report.md#二十桌面安装包随附-cli2026-10-18)。
 
+**YAML 写回保型（2026-10-28）**：修复部署合成与各 YAML 写回点把引号形态的日期/时间/布尔/数字形状字符串
+无引号输出、被 YAML 1.1 消费者隐式类型化（含键形态改写与行内注释丢失）的缺陷；部署注入改为只改
+`description` 行的文本级最小编辑，7 处写回点统一走 1.1 谓词保护的安全序列化，`cargo test --workspace` 300 项通过。
+macOS DMG 已重造并替换（hdiutil 封装，无 Finder 窗口美化）；真实库既有部署经 `deploy sync` 恢复（8 项更新，含
+Hermes 的 ego-browser）。**Windows NSIS 包保持旧版**（内含 CLI 仍带本缺陷），待 Windows 实机重建。
+结果见 [M6 报告第二十一节](specs/002-skill-management/checklists/m6-report.md#二十一yaml-写回保型2026-10-28)。
+
 **初始统一库（2026-10-16）**：名称统一为 **SkillManagerVault（统一技能库）**；本机目录为
 `/Users/fei/Projects/workspace/SkillManagerVault`，对应 [Gitea 私有仓库](http://192.168.200.7:3000/yfpoyuas/SkillManagerVault)。
 按正式数据模型初始化两管理域、空预设、空指令源与工具目录，不携带测试数据；通过既有 `--vault` 接入，

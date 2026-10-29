@@ -18,6 +18,7 @@ pub mod sync;
 pub mod toolcenter;
 pub mod upstream;
 pub mod vault;
+pub mod yaml_safe;
 
 pub use context::{AppContext, GlobalOptions};
 pub use diagnostics::{DiagnosticsExport, DiagnosticsReport};

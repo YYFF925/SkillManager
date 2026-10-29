@@ -272,11 +272,16 @@ fn inject_comment(bytes: &[u8], comment: &str) -> Result<Injection> {
 /// 把注释作为一个前缀写进 frontmatter 的 `description`。
 ///
 /// 返回 `(替换后的全文, 未注入原因)`：`(None, None)` 表示无需改动。
+///
+/// 注入只改写 `description` 所在行（文本级最小编辑）：frontmatter 其余行
+/// 逐字节透传，引号样式、行内注释、键形态全部保持原样，避免整块重序列化
+/// 把日期/时间/布尔形状的字符串降级成 plain 标量（YAML 1.1 消费者会改型）。
+/// 编辑后整块重新解析校验，任何不符都以「未注入」安全降级，绝不产出语义变化的其他键。
 fn inject_comment_text(text: &str, comment: &str) -> Result<(Option<String>, Option<String>)> {
     let prefix = format!("{comment}{COMMENT_SEPARATOR}");
     match split_frontmatter(text) {
         Some((block, body)) => {
-            let mut map = match yaml_serde::from_str::<Value>(block) {
+            let map = match yaml_serde::from_str::<Value>(block) {
                 Ok(Value::Mapping(mapping)) => mapping,
                 Ok(Value::Null) => Mapping::new(),
                 Ok(_) => {
@@ -307,41 +312,188 @@ fn inject_comment_text(text: &str, comment: &str) -> Result<(Option<String>, Opt
                     ));
                 }
             };
-            map.insert(
+            let Some(new_block) = rewrite_description_line(block, &prefix, &value) else {
+                return Ok((
+                    None,
+                    Some("frontmatter 的 description 无法安全定位，未注入中文注释".to_string()),
+                ));
+            };
+            // 校验：除 description 换成前缀拼接值外，整块语义与编辑前一致。
+            let mut expected = map.clone();
+            expected.insert(
                 Value::String("description".to_string()),
                 Value::String(value),
             );
-            let serialized = serialize_mapping(&map)?;
+            let verified = matches!(
+                yaml_serde::from_str::<Value>(&new_block),
+                Ok(parsed) if parsed == Value::Mapping(expected)
+            );
+            if !verified {
+                return Ok((
+                    None,
+                    Some("frontmatter 编辑后校验不一致，未注入中文注释".to_string()),
+                ));
+            }
             let mut out = String::from("---\n");
-            out.push_str(&serialized);
+            out.push_str(&new_block);
             out.push_str("---\n");
             out.push_str(body);
             Ok((Some(out), None))
         }
         None => {
             // 没有 frontmatter：新增一个最小块承载注释，正文保持在块之后。
-            let mut map = Mapping::new();
-            map.insert(
-                Value::String("description".to_string()),
-                Value::String(comment.to_string()),
-            );
-            let serialized = serialize_mapping(&map)?;
-            let mut out = String::from("---\n");
-            out.push_str(&serialized);
-            out.push_str("---\n");
+            let mut out = String::from("---\ndescription: ");
+            out.push_str(&crate::yaml_safe::format_plain_if_safe(comment));
+            out.push_str("\n---\n");
             out.push_str(text);
             Ok((Some(out), None))
         }
     }
 }
 
-fn serialize_mapping(map: &Mapping) -> Result<String> {
-    let text = yaml_serde::to_string(&Value::Mapping(map.clone()))
-        .map_err(|err| CoreError::other(format!("序列化 frontmatter 失败：{err}")))?;
-    if text.ends_with('\n') {
-        Ok(text)
+/// 在 frontmatter 文本中定位唯一的顶层 `description:` 行并做最小编辑；
+/// 无法安全定位或编辑时返回 `None`（调用方转为「未注入」）。
+fn rewrite_description_line(block: &str, prefix: &str, new_value: &str) -> Option<String> {
+    let lines: Vec<&str> = block.split_inclusive('\n').collect();
+    let index = locate_description_line(&lines)?;
+    let edited: Vec<String> = match index {
+        Some(index) => {
+            let rest = lines[index]
+                .trim_end_matches(['\r', '\n'])["description:".len()..]
+                .trim_start();
+            if rest.starts_with('|') || rest.starts_with('>') {
+                edit_description_block(&lines, index, prefix)?
+            } else {
+                let mut edited = Vec::with_capacity(lines.len());
+                edited.extend(lines[..index].iter().map(|line| line.to_string()));
+                edited.push(edit_description_entry(lines[index], prefix, new_value)?);
+                edited.extend(lines[index + 1..].iter().map(|line| line.to_string()));
+                edited
+            }
+        }
+        // 没有 description 键：在块末尾追加（对应映射追加键的历史位置）。
+        None => {
+            let mut edited = Vec::with_capacity(lines.len() + 1);
+            edited.extend(lines.iter().map(|line| line.to_string()));
+            edited.push(format!(
+                "description: {}\n",
+                crate::yaml_safe::format_plain_if_safe(new_value)
+            ));
+            edited
+        }
+    };
+    Some(edited.concat())
+}
+
+/// 顶层 `description:` 行的下标；出现多处或不存在时分别返回 `None`/`Some(None)`。
+fn locate_description_line(lines: &[&str]) -> Option<Option<usize>> {
+    let mut found = None;
+    for (index, line) in lines.iter().enumerate() {
+        let content = line.trim_end_matches(['\r', '\n']);
+        if content.starts_with("description") && content["description".len()..].starts_with(':') {
+            let after = &content["description:".len()..];
+            if after.is_empty() || after.starts_with(' ') {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(index);
+            }
+        }
+    }
+    Some(found)
+}
+
+/// 编辑一行单值形式的 `description: ...`：引号值把前缀插进开引号之后（闭引号与
+/// 行内注释原样保留）；plain 值原位拼接前缀（拼接结果不安全时整值带引号重写）；
+/// 空值或仅有行内注释时整值重写。
+fn edit_description_entry(line: &str, prefix: &str, new_value: &str) -> Option<String> {
+    let ending = line_ending(line);
+    let content = line.trim_end_matches(['\r', '\n']);
+    let rest = content["description:".len()..].trim_start();
+    if let Some(quote) = rest.chars().next().filter(|ch| *ch == '\'' || *ch == '"') {
+        let inner = &rest[1..];
+        let escaped_prefix = match quote {
+            '\'' => prefix.replace('\'', "''"),
+            _ => prefix.replace('\\', "\\\\").replace('"', "\\\""),
+        };
+        return Some(format!("description: {quote}{escaped_prefix}{inner}{ending}"));
+    }
+    let (value_part, comment_part) = if rest.is_empty() || rest.starts_with('#') {
+        ("", rest)
     } else {
-        Ok(format!("{text}\n"))
+        split_plain_comment(rest)
+    };
+    let candidate = format!("{prefix}{}", value_part.trim_end());
+    let value_text = if crate::yaml_safe::can_be_plain(&candidate)
+        && !crate::yaml_safe::needs_quotes(&candidate)
+    {
+        candidate
+    } else {
+        crate::yaml_safe::format_string(new_value)
+    };
+    let separator = if comment_part.is_empty() { "" } else { " " };
+    Some(format!(
+        "description: {value_text}{separator}{comment_part}{ending}"
+    ))
+}
+
+/// 按「空白 + #」切分 plain 值与其后的行内注释。
+fn split_plain_comment(rest: &str) -> (&str, &str) {
+    let bytes = rest.as_bytes();
+    for index in 1..bytes.len() {
+        if bytes[index] == b'#' && (bytes[index - 1] == b' ' || bytes[index - 1] == b'\t') {
+            return (&rest[..index], &rest[index..]);
+        }
+    }
+    (rest, "")
+}
+
+/// 块标量 `description: |/>`：前缀拼进第一条内容行的内容开头，头部与其余行原样。
+fn edit_description_block(lines: &[&str], index: usize, prefix: &str) -> Option<Vec<String>> {
+    let mut edited = Vec::with_capacity(lines.len());
+    edited.extend(lines[..=index].iter().map(|line| line.to_string()));
+    let mut content_at = None;
+    for (offset, line) in lines[index + 1..].iter().enumerate() {
+        let body = line.trim_end_matches(['\r', '\n']);
+        if body.trim().is_empty() {
+            continue; // 块标量中的空行，原样保留，继续找首条内容行
+        }
+        if body.starts_with(' ') || body.starts_with('\t') {
+            content_at = Some(offset);
+            break;
+        }
+        return None; // 未缩进的非空行：块标量在此结束且没有内容行
+    }
+    let Some(offset) = content_at else {
+        // 空块标量：头部行整行重写为单行值。
+        let ending = line_ending(lines[index]);
+        *edited.last_mut().unwrap() = format!(
+            "description: {}{ending}",
+            crate::yaml_safe::format_plain_if_safe(prefix)
+        );
+        return Some(edited);
+    };
+    let line = lines[index + 1 + offset];
+    let ending = line_ending(line);
+    let body = line.trim_end_matches(['\r', '\n']);
+    let indent_len = body.len() - body.trim_start().len();
+    edited.push(format!(
+        "{}{}{}{ending}",
+        &body[..indent_len],
+        prefix,
+        &body[indent_len..]
+    ));
+    edited.extend(lines[index + 2 + offset..].iter().map(|line| line.to_string()));
+    Some(edited)
+}
+
+fn line_ending(line: &str) -> &str {
+    if line.ends_with("\r\n") {
+        "\r\n"
+    } else if line.ends_with('\n') {
+        "\n"
+    } else {
+        ""
     }
 }
 
@@ -476,5 +628,155 @@ pub fn remove_path(path: &Path) -> Result<()> {
         Ok(_) => std::fs::remove_file(path).map_err(|err| CoreError::io(path, err)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(CoreError::io(path, err)),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 测试：中文注释注入的文本级最小编辑
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 带引号形态字段与行内注释的 frontmatter（对应 YAML 1.1 类型腐蚀事故样本）。
+    const PROBE: &str = "---\n\
+name: probe-skill\n\
+description: Probe skill for YAML round-trip testing.\n\
+version: \"1.10\"\n\
+date: \"2026-10-08\"\n\
+time: \"12:30\"\n\
+flag: \"no\" # 上游手写注释，应保留\n\
+on: \"on\"\n\
+---\n# probe\nbody\n";
+
+    #[test]
+    fn injection_only_rewrites_the_description_line() {
+        let (out, note) = inject_comment_text(PROBE, "测试注释").unwrap();
+        assert!(note.is_none(), "{note:?}");
+        let out = out.expect("应产生编辑结果");
+        assert!(
+            out.contains("description: 测试注释｜Probe skill for YAML round-trip testing.\n"),
+            "{out}"
+        );
+        // 其余行的引号样式与行内注释逐字节保留。
+        for kept in [
+            "name: probe-skill\n",
+            "version: \"1.10\"\n",
+            "date: \"2026-10-08\"\n",
+            "time: \"12:30\"\n",
+            "flag: \"no\" # 上游手写注释，应保留\n",
+            "on: \"on\"\n",
+        ] {
+            assert!(out.contains(kept), "应原样保留 {kept:?}：\n{out}");
+        }
+        // 重解析：所有值仍是字符串，`on:` 键也仍是字符串键。
+        let (block, _) = split_frontmatter(&out).unwrap();
+        let map = match yaml_serde::from_str::<Value>(block).unwrap() {
+            Value::Mapping(map) => map,
+            other => panic!("应为映射：{other:?}"),
+        };
+        for key in ["date", "time", "flag", "on", "version"] {
+            assert_eq!(
+                map.get(&Value::String(key.to_string())),
+                Some(&Value::String(
+                    match key {
+                        "date" => "2026-10-08",
+                        "time" => "12:30",
+                        "flag" => "no",
+                        "on" => "on",
+                        _ => "1.10",
+                    }
+                    .to_string()
+                )),
+                "键 {key} 重解析应仍是字符串"
+            );
+        }
+    }
+
+    #[test]
+    fn block_scalar_description_gets_prefix_on_first_content_line() {
+        let text = "---\nname: probe\ndescription: |\n  第一行\n  第二行\n---\n正文\n";
+        let (out, note) = inject_comment_text(text, "注释").unwrap();
+        assert!(note.is_none(), "{note:?}");
+        let out = out.unwrap();
+        assert!(
+            out.contains("description: |\n  注释｜第一行\n  第二行\n"),
+            "块标量样式与内容应保留、前缀进首行：\n{out}"
+        );
+    }
+
+    #[test]
+    fn quoted_description_gets_prefix_inside_quotes() {
+        let text = "---\ndescription: \"原描述\"\n---\n正文\n";
+        let (out, _) = inject_comment_text(text, "注释").unwrap();
+        assert!(
+            out.as_deref().unwrap().contains("description: \"注释｜原描述\"\n"),
+            "{out:?}"
+        );
+
+        // 单引号值：前缀中的单引号按 '' 转义。
+        let text = "---\ndescription: 'it''s here'\n---\n正文\n";
+        let (out, _) = inject_comment_text(text, "注'释").unwrap();
+        assert!(
+            out.as_deref().unwrap().contains("description: '注''释｜it''s here'\n"),
+            "{out:?}"
+        );
+    }
+
+    #[test]
+    fn plain_description_keeps_inline_comment() {
+        let text = "---\ndescription: foo # note\n---\n正文\n";
+        let (out, _) = inject_comment_text(text, "注释").unwrap();
+        assert!(
+            out.as_deref().unwrap().contains("description: 注释｜foo # note\n"),
+            "{out:?}"
+        );
+    }
+
+    #[test]
+    fn existing_prefix_is_left_unchanged() {
+        let text = "---\ndescription: 注释｜已有\n---\n正文\n";
+        let (out, note) = inject_comment_text(text, "注释").unwrap();
+        assert_eq!((out, note), (None, None));
+    }
+
+    #[test]
+    fn missing_description_key_is_appended() {
+        let text = "---\nname: x\n---\nbody\n";
+        let (out, _) = inject_comment_text(text, "注释").unwrap();
+        assert_eq!(
+            out.as_deref().unwrap(),
+            "---\nname: x\ndescription: 注释\n---\nbody\n"
+        );
+    }
+
+    #[test]
+    fn no_frontmatter_gets_minimal_block() {
+        let (out, _) = inject_comment_text("正文\n", "注释").unwrap();
+        assert_eq!(out.as_deref().unwrap(), "---\ndescription: 注释\n---\n正文\n");
+
+        // 危险形状的注释值在最小块里也保持字符串。
+        let (out, _) = inject_comment_text("正文\n", "12:30").unwrap();
+        assert_eq!(out.as_deref().unwrap(), "---\ndescription: '12:30'\n---\n正文\n");
+    }
+
+    #[test]
+    fn non_string_description_is_skipped_with_note() {
+        let text = "---\ndescription: [a, b]\n---\n正文\n";
+        let (out, note) = inject_comment_text(text, "注释").unwrap();
+        assert!(out.is_none());
+        assert!(note.unwrap().contains("不是字符串"));
+    }
+
+    #[test]
+    fn crlf_line_endings_are_preserved() {
+        let text = "---\r\ndescription: foo\r\n---\r\nbody\r\n";
+        let (out, note) = inject_comment_text(text, "注释").unwrap();
+        assert!(note.is_none(), "{note:?}");
+        assert!(
+            out.as_deref().unwrap().contains("description: 注释｜foo\r\n"),
+            "{out:?}"
+        );
     }
 }

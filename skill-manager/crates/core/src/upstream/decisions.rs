@@ -65,7 +65,11 @@ pub fn load(vault_root: &Path) -> Result<Vec<DecisionEntry>> {
 /// 写入全部决定记录（空列表会写出空文件，保留共享资产可读性）。
 pub fn save(vault_root: &Path, entries: &[DecisionEntry]) -> Result<()> {
     let file = path(vault_root);
-    let text = yaml_serde::to_string(&entries.to_vec()).map_err(|err| CoreError::Yaml {
+    let value = yaml_serde::to_value(entries).map_err(|err| CoreError::Yaml {
+        path: file.clone(),
+        message: err.to_string(),
+    })?;
+    let text = crate::yaml_safe::to_yaml_string(&value).map_err(|err| CoreError::Yaml {
         path: file.clone(),
         message: err.to_string(),
     })?;

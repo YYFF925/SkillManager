@@ -15,3 +15,6 @@ skill-manager/src-tauri/gen/schemas/
 .env
 .env.*
 *.log
+
+# 本地 Agent 会话产物
+.zcode/

@@ -277,8 +277,12 @@ impl TestEnv {
         full.extend_from_slice(args);
         let output = self.cli(&full);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let parsed: Value = serde_json::from_str(stdout.trim())
-            .unwrap_or_else(|err| panic!("CLI 输出不是 JSON（{err}）：{stdout}"));
+        let parsed: Value = serde_json::from_str(stdout.trim()).unwrap_or_else(|err| {
+            panic!(
+                "CLI {args:?} 输出不是 JSON（{err}）：stdout={stdout} stderr={}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+        });
         (output.status.code().unwrap_or(-1), parsed)
     }
 

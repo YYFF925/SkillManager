@@ -172,11 +172,22 @@ impl ToolFile {
     }
 
     /// 由单个 JSON 对象构造（`--stdin` 的 `{"tool": {...}}`）。
+    ///
+    /// JSON 文本本身是合法 YAML（字符串带双引号不会被隐式类型化），
+    /// 经它转 Value 再安全序列化，避免日期/时间/布尔形状的字符串在往返中丢引号。
     pub fn from_json_object(
         object: &serde_json::Map<String, serde_json::Value>,
         path: &Path,
     ) -> Result<Self> {
-        let text = yaml_serde::to_string(object).map_err(|err| CoreError::Yaml {
+        let json = serde_json::to_string(object).map_err(|err| CoreError::Yaml {
+            path: path.to_path_buf(),
+            message: err.to_string(),
+        })?;
+        let value = yaml_serde::from_str::<Value>(&json).map_err(|err| CoreError::Yaml {
+            path: path.to_path_buf(),
+            message: err.to_string(),
+        })?;
+        let text = crate::yaml_safe::to_yaml_string(&value).map_err(|err| CoreError::Yaml {
             path: path.to_path_buf(),
             message: err.to_string(),
         })?;
@@ -358,11 +369,13 @@ impl ToolFile {
         true
     }
 
-    /// 序列化文本（保留未知字段与键顺序）。
+    /// 序列化文本（保留未知字段与键顺序，值与其字符串形态不被 YAML 隐式类型改写）。
     pub fn to_yaml(&self) -> Result<String> {
-        yaml_serde::to_string(&Value::Mapping(self.raw.clone())).map_err(|err| CoreError::Yaml {
-            path: self.path.clone(),
-            message: err.to_string(),
+        crate::yaml_safe::to_yaml_string(&Value::Mapping(self.raw.clone())).map_err(|err| {
+            CoreError::Yaml {
+                path: self.path.clone(),
+                message: err.to_string(),
+            }
         })
     }
 
@@ -652,6 +665,29 @@ mod tests {
         assert!(text.contains("foo: keep-me"), "{text}");
         assert!(text.contains("新"), "{text}");
         assert!(text.contains("uv"), "{text}");
+    }
+
+    #[test]
+    fn stdin_values_with_1_1_shapes_keep_their_types() {
+        // 危险形状字符串（日期/六十进制/布尔）写回后必须带引号，
+        // 否则 YAML 1.1 消费者会改型；JSON 数字保持数字。
+        let root = tempfile::TempDir::new().unwrap();
+        let payload = serde_json::json!({
+            "tool": {
+                "name": "probe",
+                "summary": "2026-10-08",
+                "check_command": "12:30",
+                "flag": "no",
+                "order": 3,
+            },
+        });
+        write_from_stdin(root.path(), "probe", &payload).unwrap();
+        let text = std::fs::read_to_string(tool_path(root.path(), "probe")).unwrap();
+        // 保守写回会把键也单引号化；断言值形态即可。
+        assert!(text.contains("summary': '2026-10-08'"), "{text}");
+        assert!(text.contains("check_command': '12:30'"), "{text}");
+        assert!(text.contains("flag': 'no'"), "{text}");
+        assert!(text.contains("order': 3"), "{text}");
     }
 
     #[test]

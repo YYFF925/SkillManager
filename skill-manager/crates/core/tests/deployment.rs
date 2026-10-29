@@ -226,6 +226,50 @@ fn comment_prefix_is_not_stacked_when_overlay_already_carries_it() {
     assert_eq!(entry.matches("检查依赖｜").count(), 1, "{entry}");
 }
 
+#[test]
+fn quoted_frontmatter_shapes_survive_comment_injection() {
+    // 对应 YAML 1.1 类型腐蚀事故：引号形态的日期/时间/布尔/数字形状字段与
+    // 行内注释在注入注释后必须逐字节保留，重解析仍是字符串。
+    let env = Env::new();
+    let original = "---\n\
+name: alpha\n\
+description: 解析依赖\n\
+version: \"1.10\"\n\
+date: \"2026-10-08\"\n\
+time: \"12:30\"\n\
+flag: \"no\" # 上游手写注释，应保留\n\
+on: \"on\"\n\
+---\n原文正文\n";
+    let dir = env.skill("code", Some("工具"), "alpha", original);
+
+    let artifact = compose_skill(&dir, Some("codex"), "macos", Some("检查依赖")).unwrap();
+    let entry = artifact.text("SKILL.md").unwrap();
+    // 除 description 行外，frontmatter 其余行与原件逐字节一致。
+    for kept in [
+        "name: alpha\n",
+        "version: \"1.10\"\n",
+        "date: \"2026-10-08\"\n",
+        "time: \"12:30\"\n",
+        "flag: \"no\" # 上游手写注释，应保留\n",
+        "on: \"on\"\n",
+        "---\n原文正文\n",
+    ] {
+        assert!(entry.contains(kept), "应原样保留 {kept:?}：\n{entry}");
+    }
+    assert!(
+        entry.contains("description: 检查依赖｜解析依赖\n"),
+        "注释应注入 description：\n{entry}"
+    );
+
+    // 幂等：同输入再次合成产物字节一致。
+    let again = compose_skill(&dir, Some("codex"), "macos", Some("检查依赖")).unwrap();
+    assert_eq!(
+        artifact.text("SKILL.md"),
+        again.text("SKILL.md"),
+        "同输入重复合成应字节一致"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // 准入：管理域边界与支持声明
 // ---------------------------------------------------------------------------

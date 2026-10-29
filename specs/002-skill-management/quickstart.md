@@ -182,6 +182,17 @@ skill-manager skill update code/skill-manager-maintenance
 | 6.14 | 同一包内 CLI 显式传隔离 `--vault`／`--state-dir`，执行技能列表、`skill set`、再读取资料；测试目录置于项目外 | JSON 可解析，查询与修改真实生效，不触及用户库；macOS 检查包签名；Windows 需独立实机记录，未执行不报告通过 |
 | 6.15 | 检查维护 Skill 的入口说明，并检查交付目录 | 明确只有技能不等于 CLI 已安装、缺失／执行失败如实报告；`release/` 每个平台只有一份含 CLI 的安装包并受 Git 跟踪 |
 
+## M6 补充四 — YAML 写回保型（2026-10-28）
+
+验收部署与写回不再把字符串降级为会被 YAML 1.1 消费者隐式类型化的 plain 标量（对应 tasks.md Phase 21 / T136-T137）。使用隔离库与本机状态，不修改真实用户库内容（末条重部署除外，它本身就是修复的落地动作）。
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 6.16 | 隔离库写入含 `date: "2026-10-08"`、`time: "12:30"`、`flag: "no" # 注释`、`on: "on"` 的技能，`skill set --comment` 后部署 | 部署副本除 `description` 行外与库内原件逐字节一致（引号与行内注释保留）；`skill set` 后 meta.yaml 未知字段仍是字符串 |
+| 6.17 | 对同一技能再次 `deploy sync` | 产物字节不变（幂等） |
+| 6.18 | 从新安装包内 CLI 重部署既有受污染副本（如 agent:hermes 的 ego-browser），用严格 1.1 消费者（`python3 -c "import yaml; …"`）重解析 | 危险形状值全部解析为 `str`，无 `date`/`int`/`bool` 类型化，下游 JSON 序列化不再崩溃 |
+| 6.19 | 检查 `release/` | macOS 新包替换旧包；Windows NSIS 待 Windows 机器重建前保持旧版并在交付说明注明 |
+
 ## 自动化与人工分工
 
 - M1~M3 的 CLI 场景（1.4~1.8、2.x 命令部分、3.x）纳入集成测试（`tests/`，cargo test 驱动 CLI 断言 JSON 输出与文件系统结果）；

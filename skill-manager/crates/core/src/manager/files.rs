@@ -316,11 +316,13 @@ impl MetaFile {
         changed
     }
 
-    /// 序列化文本（保留未知字段与键顺序）。
+    /// 序列化文本（保留未知字段与键顺序，值与其字符串形态不被 YAML 隐式类型改写）。
     pub fn to_yaml(&self) -> Result<String> {
-        yaml_serde::to_string(&Value::Mapping(self.raw.clone())).map_err(|err| CoreError::Yaml {
-            path: PathBuf::from(format!("{MANAGER_DIR}/{META_FILE}")),
-            message: err.to_string(),
+        crate::yaml_safe::to_yaml_string(&Value::Mapping(self.raw.clone())).map_err(|err| {
+            CoreError::Yaml {
+                path: PathBuf::from(format!("{MANAGER_DIR}/{META_FILE}")),
+                message: err.to_string(),
+            }
         })
     }
 
@@ -569,7 +571,11 @@ pub fn read_source(skill_dir: &Path) -> Result<Option<SourceRecord>> {
 /// 写入来源记录。
 pub fn write_source(skill_dir: &Path, record: &SourceRecord) -> Result<()> {
     let path = source_path(skill_dir);
-    let text = yaml_serde::to_string(record).map_err(|err| CoreError::Yaml {
+    let value = yaml_serde::to_value(record).map_err(|err| CoreError::Yaml {
+        path: path.clone(),
+        message: err.to_string(),
+    })?;
+    let text = crate::yaml_safe::to_yaml_string(&value).map_err(|err| CoreError::Yaml {
         path: path.clone(),
         message: err.to_string(),
     })?;

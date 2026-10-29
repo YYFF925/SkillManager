@@ -42,6 +42,45 @@ fn seed(env: &TestEnv) {
     env.write_skill("lobster", None, "omega", "龙虾技能\n");
 }
 
+#[test]
+fn deploy_keeps_quoted_frontmatter_shapes_and_is_byte_idempotent() {
+    // 端到端复现 YAML 1.1 类型腐蚀事故场景：引号形态字段与行内注释
+    // 部署后逐字节保留，重复部署字节一致。
+    let env = TestEnv::new();
+    let original = "---\n\
+name: probe\n\
+description: Probe skill\n\
+version: \"1.10\"\n\
+date: \"2026-10-08\"\n\
+time: \"12:30\"\n\
+flag: \"no\" # 上游注释\n\
+---\n正文\n";
+    env.write_skill("code", None, "probe", original);
+    env.write_manager("code", None, "probe", "meta.yaml", "comment: 检查\n");
+
+    let (code, result) = env.cli_json_raw(&["deploy", "to", "codex", "code/probe"]);
+    assert_eq!(code, 0, "{result}");
+    let entry_path = deployed(&env, ".codex/skills", "probe").join("SKILL.md");
+    let first = std::fs::read_to_string(&entry_path).unwrap();
+    for kept in [
+        "name: probe\n",
+        "version: \"1.10\"\n",
+        "date: \"2026-10-08\"\n",
+        "time: \"12:30\"\n",
+        "flag: \"no\" # 上游注释\n",
+        "---\n正文\n",
+    ] {
+        assert!(first.contains(kept), "部署副本应原样保留 {kept:?}：\n{first}");
+    }
+    assert!(first.contains("description: 检查｜Probe skill\n"), "{first}");
+
+    // 再次部署（sync 全量）后产物字节一致。
+    let (code, _) = env.cli_json_raw(&["deploy", "sync"]);
+    assert_eq!(code, 0);
+    let second = std::fs::read_to_string(&entry_path).unwrap();
+    assert_eq!(first, second, "重复部署应字节一致");
+}
+
 fn deployed(env: &TestEnv, rel: &str, name: &str) -> std::path::PathBuf {
     env.home.join(rel).join(name)
 }

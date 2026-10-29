@@ -189,12 +189,13 @@ impl PresetFile {
 
     /// 写回；内容未变化时也会重写（不做额外差异检测）。
     pub fn save(&self) -> Result<()> {
-        let text = yaml_serde::to_string(&Value::Sequence(self.items.clone())).map_err(|err| {
-            CoreError::Yaml {
-                path: self.path.clone(),
-                message: err.to_string(),
-            }
-        })?;
+        let text =
+            crate::yaml_safe::to_yaml_string(&Value::Sequence(self.items.clone())).map_err(|err| {
+                CoreError::Yaml {
+                    path: self.path.clone(),
+                    message: err.to_string(),
+                }
+            })?;
         write_atomic(&self.path, text.as_bytes())
     }
 

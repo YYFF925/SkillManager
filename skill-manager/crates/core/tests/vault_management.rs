@@ -420,6 +420,46 @@ fn unknown_yaml_fields_survive_metadata_write_back() {
     assert!(raw.find("foo").unwrap() < raw.find("tags").unwrap(), "{raw}");
 }
 
+#[test]
+fn quoted_unknown_fields_keep_their_string_form_after_write_back() {
+    // 对应 YAML 1.1 类型腐蚀事故：引号形态的日期/布尔形状未知字段经写回后
+    // 必须仍重解析为字符串，键顺序不变。
+    let tmp = tempfile::TempDir::new().unwrap();
+    let root = tmp.path();
+    write_skill(root, "code", None, "alpha", "a");
+    write_meta(
+        root,
+        "code",
+        None,
+        "alpha",
+        "my_date: \"2026-10-08\"\nmy_flag: \"no\"\ncomment: 旧注释\n",
+    );
+
+    let reference = SkillRef::parse("code/alpha").unwrap();
+    manage::set_comment(root, &reference, Some("新注释")).unwrap();
+
+    let raw = read_meta(root, "code", None, "alpha");
+    // 保守写回为带引号形式，不再是会被 1.1 消费者类型化的 plain 标量。
+    assert!(raw.contains("'my_date': '2026-10-08'"), "{raw}");
+    assert!(raw.contains("'my_flag': 'no'"), "{raw}");
+    assert!(raw.contains("新注释"), "{raw}");
+    assert!(raw.find("my_date").unwrap() < raw.find("comment").unwrap(), "{raw}");
+
+    // 重解析：仍是字符串值。
+    let parsed = yaml_serde::from_str::<yaml_serde::Value>(&raw).unwrap();
+    let map = parsed.as_mapping().unwrap();
+    assert_eq!(
+        map.get(yaml_serde::Value::String("my_date".into())),
+        Some(&yaml_serde::Value::String("2026-10-08".into())),
+        "{raw}"
+    );
+    assert_eq!(
+        map.get(yaml_serde::Value::String("my_flag".into())),
+        Some(&yaml_serde::Value::String("no".into())),
+        "{raw}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // 译文时效
 // ---------------------------------------------------------------------------
