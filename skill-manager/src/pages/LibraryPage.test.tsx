@@ -98,6 +98,30 @@ function summary(name: string, category: string | null): SkillSummary {
   };
 }
 
+it("packs unselected tag filter chips without extra button padding", async () => {
+  vi.mocked(listSkills).mockResolvedValue({
+    skills: [],
+    total: 0,
+    tag_candidates: ["API", "Fork 维护"],
+    categories: [],
+  });
+  render(<LibraryPage domain="code" os="macos" agents={[]} reloadToken={0} onCount={vi.fn()} />);
+  const api = await screen.findByRole("button", { name: "API" });
+  expect(api.className).toContain("px-0");
+  expect(api.className).not.toContain("px-2");
+  expect(api.querySelector("span")?.textContent).toBe("API");
+
+  fireEvent.click(api);
+  await waitFor(() => expect(listSkills).toHaveBeenLastCalledWith(expect.objectContaining({
+    domain: "code",
+    tags: ["API"],
+  })));
+  const selected = screen.getByRole("button", { name: "API" });
+  expect(selected.className).toContain("px-2");
+  expect(selected.className).toContain("bg-accent");
+  expect(selected.querySelector("span")).toBeNull();
+});
+
 it("shows a rename control on named categories like presets", async () => {
   vi.mocked(listSkills).mockResolvedValue({
     skills: [summary("alpha", "家庭运维"), summary("beta", null)],
