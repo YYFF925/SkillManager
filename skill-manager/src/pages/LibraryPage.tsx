@@ -661,8 +661,8 @@ export function LibraryPage({
             type="button"
             onClick={() => setTag(candidate)}
             title={candidate}
-            className={`rounded-full px-2 text-[12px] leading-5 ${
-              tag === candidate ? "bg-accent text-white" : ""
+            className={`inline-flex items-center rounded-full text-[12px] leading-5 ${
+              tag === candidate ? "bg-accent px-2 text-white" : "px-0"
             }`}
           >
             {tag === candidate ? candidate : <TagChip tag={candidate} />}
