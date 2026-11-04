@@ -462,9 +462,9 @@ export function PresetPage({
     memberFilter !== "all";
 
   return (
-    <div className="flex items-start gap-4">
+    <div className="flex h-full min-h-0 items-stretch gap-4">
       {/* 左侧预设列表 */}
-      <aside className="w-[180px] shrink-0">
+      <aside className="flex w-[180px] shrink-0 flex-col overflow-y-auto overscroll-contain">
         <div className="mb-2 flex items-center justify-between px-1">
           <Segmented
             options={[
@@ -548,14 +548,14 @@ export function PresetPage({
       </aside>
 
       {/* 右侧成员浏览 */}
-      <div className="min-w-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {error && (
-          <div className="mb-3.5">
+          <div className="mb-3.5 shrink-0">
             <Notice tone="danger">{error}</Notice>
           </div>
         )}
         {notice && (
-          <div className="mb-3.5">
+          <div className="mb-3.5 shrink-0">
             <Notice>{notice}</Notice>
           </div>
         )}
@@ -566,7 +566,7 @@ export function PresetPage({
           </p>
         ) : (
           <>
-            <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="mb-3.5 flex shrink-0 flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="text-[15px] font-semibold">{preset.name}</h2>
@@ -658,7 +658,7 @@ export function PresetPage({
               </div>
             </div>
 
-            <div className="mb-3.5 flex min-h-[23px] flex-wrap items-center gap-1.5">
+            <div className="mb-3.5 flex min-h-[23px] shrink-0 flex-wrap items-center gap-1.5">
               <span className="mr-0.5 text-[12px] text-faint">标签</span>
               <button
                 type="button"
@@ -694,7 +694,7 @@ export function PresetPage({
             </div>
 
             {multi && (
-              <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
+              <div className="mb-3.5 flex shrink-0 flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
                 <Button
                   compact
                   disabled={skills.length === 0 || selectedSkills.length === skills.length}
@@ -723,8 +723,8 @@ export function PresetPage({
               </div>
             )}
 
-            <div className="flex items-start gap-4">
-              <aside className="w-[132px] shrink-0">
+            <div className="flex min-h-0 flex-1 items-stretch gap-4">
+              <aside className="category-rail w-[148px] shrink-0">
                 <button
                   type="button"
                   onClick={() => setCategory(null)}
@@ -774,8 +774,8 @@ export function PresetPage({
               <div
                 className={
                   layout === "grid"
-                    ? "grid min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(min(100%,400px),1fr))] gap-3"
-                    : "grid min-w-0 flex-1 grid-cols-1 gap-3"
+                    ? "grid min-h-0 min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(min(100%,400px),1fr))] gap-3 overflow-y-auto overscroll-contain"
+                    : "grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3 overflow-y-auto overscroll-contain"
                 }
               >
                 {skills.map((skill) => {

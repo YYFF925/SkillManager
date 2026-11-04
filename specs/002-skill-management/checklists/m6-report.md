@@ -309,6 +309,28 @@
 
 **构建与回归**：`cargo test --workspace` **300 项全部通过、0 失败**（含本轮新增的 yaml_safe/compose 单测、deployment 与 cli_deploy 字节保真、vault_management/toolcenter 未知字段类型保真用例）。`npm run tauri build` 编译与 `.app` 打包成功（ad hoc 签名 `codesign --verify --strict` 通过），但 create-dmg 的 Finder AppleScript 在自动化会话持续超时（-1712，沙箱内外一致；另清理过一只残留挂载的旧镜像 `/dev/disk9`），按最小充分原则改用 `hdiutil create -format UDZO` 直接封装：功能等价（同样只读挂载、拖拽安装、含已签名 `.app`），仅无 Finder 窗口美化（背景图/图标布局）。
 
-**安装包**：`release/Skill Manager_0.1.0_aarch64.dmg`，8,943,032 字节，SHA-256 `a390da301315b794fb19890ad9619375c26313b114caf565a127f8c59c21a148`。版本号沿用 0.1.0（仓库惯例不因重造升版）。
+**安装包**：`release/Skill Manager_0.1.0_aarch64.dmg`，8,612,058 字节，SHA-256 `0d94195dffd4685320df2c9deddf6cb7df95d217bfd6b44450fd17547fd5f007`（按提交 `a7f80d1` 内的实际文件校正；原记录 8,943,032 字节与 SHA `a390da30…` 与提交内容不符）。版本号沿用 0.1.0（仓库惯例不因重造升版）。
 
 **平台与交付限制**：Windows NSIS 安装包未在本轮重建（macOS 无法产出），包内 CLI 仍含本缺陷，待 Windows 实机重建后一并恢复；DMG 改用 hdiutil 封装，与既往 create-dmg 产物相比无 Finder 视觉布局。本轮不自动提交或推送，交付提交由用户指示后按 AGENTS.md 双端规则执行。
+
+## 二十二、分类栏固定独立滚动（2026-10-29）
+
+**问题**：技能库（及沿用同一布局的 Hermes 档案、预设详情、工具中心）左侧分类栏原先随整页内容滚动；分类较多时滚走卡片也会把分类入口带走，且没有独立滚动条。
+
+**规格**：不新增业务 FR。交互以原型为验收基线（002 spec 视觉约束、001 `visual-reference.md`「分类栏滚动（2026-10-29）」）。行为：分类栏固定在工具栏／标签栏下方，与右侧卡片区分滚动；仅分类内容溢出时显示滚动条。
+
+**实现**：原型 `.library-layout` 占满剩余高度，`.category-rail` 与卡片网格各自 `overflow-y: auto`。产品 `AppShell` 内容区改为定高，`LibraryPage`／`HermesPage`／`PresetPage`／`ToolCenterPage` 的分类栏使用 `.category-rail`。
+
+**验证（事实）**
+
+| 命令 / 操作 | 结果 |
+|---|---|
+| `npx tsc --noEmit` | 通过 |
+| `npx vitest run` | 前端 **75 项通过**（17 个测试文件）；含分类栏布局断言与合并入的 chips 间距测试 |
+| `cargo test --workspace` | **300 项全部通过、0 失败**（与 YAML 写回保型合并后回归） |
+
+同日将技能库／档案／预设详情分类列由 132px 加宽为 148px，避免五个汉字分类名被计数徽标挤成省略号。工具中心分类列仍为 152px，未改。
+
+GUI 实操未见证：分类溢出时出现滚动条、未溢出时不出现、滚动卡片时分类栏仍固定、五个汉字分类名完整显示。未启动真实 `.app`，也未改 SkillManagerVault。
+
+**合并与安装包**：本改动与远端 `a7f80d1`（YAML 写回保型）、`cb94490`（chips 间距收紧）合并后重造 DMG：`npm run tauri build -- --bundles app` 加 `hdiutil create -format UDZO`，包内 `.app` 通过 `codesign --verify --strict`，CLI 输出版本 `skill-manager 0.1.0` 与完整帮助。`release/Skill Manager_0.1.0_aarch64.dmg`，9,413,675 字节，SHA-256 `9d83ad80daa056ac0ca89ff4deab5736bfcfe2d657b4ea6d6087b601466889c3`。

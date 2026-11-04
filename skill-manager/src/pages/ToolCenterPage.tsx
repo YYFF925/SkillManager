@@ -153,8 +153,8 @@ export function ToolCenterPage({
   }
 
   return (
-    <div>
-      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mb-3.5 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <span className="text-[12px] text-faint">
           软件只检查登记来源；安装、更新与核实回写由外部 Agent 完成。
         </span>
@@ -174,7 +174,7 @@ export function ToolCenterPage({
         </div>
       </div>
 
-      <div className="mb-3.5 grid grid-cols-4 gap-3">
+      <div className="mb-3.5 grid shrink-0 grid-cols-4 gap-3">
         {(
           [
             ["本机已安装", stats.installed, false],
@@ -197,7 +197,7 @@ export function ToolCenterPage({
         ))}
       </div>
 
-      <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
+      <div className="mb-3.5 flex shrink-0 flex-wrap items-center gap-2.5">
         <label className="flex h-10 w-[300px] items-center gap-2.5 rounded-lg border border-line bg-panel px-3 text-faint">
           <Search className="size-4 shrink-0" strokeWidth={1.75} />
           <input
@@ -219,18 +219,18 @@ export function ToolCenterPage({
       </div>
 
       {error && (
-        <div className="mb-3.5">
+        <div className="mb-3.5 shrink-0">
           <Notice tone="danger">{error}</Notice>
         </div>
       )}
       {notice && (
-        <div className="mb-3.5">
+        <div className="mb-3.5 shrink-0">
           <Notice>{notice}</Notice>
         </div>
       )}
 
-      <div className="flex items-start gap-5">
-        <aside className="w-[152px] shrink-0">
+      <div className="flex min-h-0 flex-1 items-stretch gap-5">
+        <aside className="category-rail w-[152px] shrink-0">
           <button
             type="button"
             onClick={() => setCategory(null)}
@@ -261,7 +261,7 @@ export function ToolCenterPage({
           ))}
         </aside>
 
-        <div className="grid min-w-0 flex-1 grid-cols-2 gap-3 min-[1301px]:grid-cols-3">
+        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-3 overflow-y-auto overscroll-contain min-[1301px]:grid-cols-3">
           {visible.map((entry) => {
             const installed = entry.install !== null;
             const badge = statusBadge(entry);

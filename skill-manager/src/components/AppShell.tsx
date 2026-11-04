@@ -197,7 +197,7 @@ export function AppShell({
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {/* 内容宽度按视觉基线限制在约 1200px，保持工具型界面的信息密度。 */}
+        {/* 内容宽度按视觉基线限制在约 1440px，保持工具型界面的信息密度。 */}
         <div className="shrink-0 px-5 pt-4">
           <header className="mx-auto flex w-full max-w-[1440px] items-start justify-between gap-4 border-b border-line pb-3.5">
             <div className="min-w-0">
@@ -218,8 +218,10 @@ export function AppShell({
             )}
           </header>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-6 pb-6">
-          <div className="mx-auto w-full max-w-[1440px]">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 pt-6 pb-6">
+          <div className="mx-auto h-full min-h-0 w-full max-w-[1440px] overflow-y-auto">
+            {children}
+          </div>
         </div>
       </main>
     </div>

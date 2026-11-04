@@ -140,3 +140,17 @@ it("shows a rename control on named categories like presets", async () => {
   fireEvent.click(screen.getByRole("button", { name: "保存" }));
   await waitFor(() => expect(renameCategory).toHaveBeenCalledWith("code", "家庭运维", "脚本"));
 });
+
+it("pins the category rail and only scrolls it when categories overflow", async () => {
+  vi.mocked(listSkills).mockResolvedValue({
+    skills: [summary("alpha", "家庭运维"), summary("beta", null)],
+    total: 2,
+    tag_candidates: [],
+    categories: ["家庭运维"],
+  });
+  render(<LibraryPage domain="code" os="macos" agents={[]} reloadToken={0} onCount={vi.fn()} />);
+  const all = await screen.findByRole("button", { name: /全部分类/ });
+  const rail = all.closest("aside");
+  expect(rail?.classList.contains("category-rail")).toBe(true);
+  expect(rail?.parentElement?.className).toMatch(/flex-1/);
+});

@@ -530,14 +530,14 @@ export function LibraryPage({
   }
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-col">
       {upstream.busy && (
-        <div className="mb-3.5">
+        <div className="mb-3.5 shrink-0">
           <FetchProgressLine progress={upstream.progress} />
         </div>
       )}
 
-      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-4">
+      <div className="mb-3.5 flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2.5">
           <label className="flex h-10 w-[280px] items-center gap-2.5 rounded-lg border border-line bg-panel px-3 text-faint">
             <Search className="size-4 shrink-0" strokeWidth={1.75} />
@@ -635,7 +635,7 @@ export function LibraryPage({
         </div>
       </div>
 
-      <div className="mb-3.5 flex min-h-[23px] flex-wrap items-center gap-1.5">
+      <div className="mb-3.5 flex min-h-[23px] shrink-0 flex-wrap items-center gap-1.5">
         <span className="mr-0.5 text-[12px] text-faint">标签</span>
         <button
           type="button"
@@ -680,18 +680,18 @@ export function LibraryPage({
       </div>
 
       {error && (
-        <div className="mb-3.5">
+        <div className="mb-3.5 shrink-0">
           <Notice tone="danger">{error}</Notice>
         </div>
       )}
       {notice && (
-        <div className="mb-3.5">
+        <div className="mb-3.5 shrink-0">
           <Notice>{notice}</Notice>
         </div>
       )}
 
       {multi && (
-        <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
+        <div className="mb-3.5 flex shrink-0 flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
           <Button
             compact
             disabled={skills.length === 0 || allVisibleSelected}
@@ -754,8 +754,8 @@ export function LibraryPage({
         </div>
       )}
 
-      <div className="flex items-start gap-4">
-        <aside className="w-[132px] shrink-0">
+      <div className="flex min-h-0 flex-1 items-stretch gap-4">
+        <aside className="category-rail w-[148px] shrink-0">
           <button
             type="button"
             onClick={() => setCategory(null)}
@@ -819,8 +819,8 @@ export function LibraryPage({
         <div
           className={
             layout === "grid"
-              ? "grid min-w-0 flex-1 grid-cols-2 gap-3 min-[1301px]:grid-cols-3"
-              : "grid min-w-0 flex-1 grid-cols-1 gap-3"
+              ? "grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-3 overflow-y-auto overscroll-contain min-[1301px]:grid-cols-3"
+              : "grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3 overflow-y-auto overscroll-contain"
           }
         >
           {skills.map((skill) => {

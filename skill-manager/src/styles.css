@@ -352,6 +352,14 @@ textarea:focus-visible {
   input.selectbox { accent-color: var(--c-accent); width: 15px; height: 15px; }
   input.selectbox:disabled { cursor: default; }
 
+  /* 分类栏固定在工具栏下方，与卡片区分滚动；仅内容溢出时出现滚动条。 */
+  .category-rail {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
   /* 卡片三点菜单（原型 .card-menu）。 */
   .card-menu {
     position: fixed;

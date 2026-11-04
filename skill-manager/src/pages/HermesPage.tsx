@@ -383,8 +383,8 @@ export function HermesPage({
   }
 
   return (
-    <div>
-      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-4">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mb-3.5 flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2.5">
           {/* 档案选择 */}
           <div className="relative" ref={pickerRef}>
@@ -503,7 +503,7 @@ export function HermesPage({
         </div>
       </div>
 
-      <div className="mb-3.5 flex min-h-[23px] flex-wrap items-center gap-1.5">
+      <div className="mb-3.5 flex min-h-[23px] shrink-0 flex-wrap items-center gap-1.5">
         <span className="mr-0.5 text-[12px] text-faint">标签</span>
         <button
           type="button"
@@ -538,23 +538,23 @@ export function HermesPage({
         ))}
       </div>
 
-      <p className="mb-3.5 flex items-center gap-1.5 text-[12px] text-faint">
+      <p className="mb-3.5 flex shrink-0 items-center gap-1.5 text-[12px] text-faint">
         <MoreHorizontal className="size-3.5" strokeWidth={1.75} />
         其他档案从 default 候选池显式启用，新增到 default 的技能不会自动启用到其他档案。
       </p>
 
       {error && (
-        <div className="mb-3.5">
+        <div className="mb-3.5 shrink-0">
           <Notice tone="danger">{error}</Notice>
         </div>
       )}
       {notice && (
-        <div className="mb-3.5">
+        <div className="mb-3.5 shrink-0">
           <Notice>{notice}</Notice>
         </div>
       )}
       {filtered?.config_error && (
-        <div className="mb-3.5">
+        <div className="mb-3.5 shrink-0">
           <Notice tone="warn">
             档案 `config.yaml` 读取失败，启用状态不作有效结论：{filtered.config_error}
           </Notice>
@@ -562,7 +562,7 @@ export function HermesPage({
       )}
 
       {multi && (
-        <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
+        <div className="mb-3.5 flex shrink-0 flex-wrap items-center gap-2.5 rounded-lg border border-line bg-panel p-2.5">
           <Button
             compact
             disabled={skills.length === 0 || allVisibleSelected}
@@ -599,8 +599,8 @@ export function HermesPage({
         </div>
       )}
 
-      <div className="flex items-start gap-4">
-        <aside className="w-[132px] shrink-0">
+      <div className="flex min-h-0 flex-1 items-stretch gap-4">
+        <aside className="category-rail w-[148px] shrink-0">
           <button
             type="button"
             onClick={() => setCategory(null)}
@@ -648,8 +648,8 @@ export function HermesPage({
         <div
           className={
             layout === "grid"
-              ? "grid min-w-0 flex-1 grid-cols-2 gap-3 min-[1301px]:grid-cols-3"
-              : "grid min-w-0 flex-1 grid-cols-1 gap-3"
+              ? "grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-3 overflow-y-auto overscroll-contain min-[1301px]:grid-cols-3"
+              : "grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3 overflow-y-auto overscroll-contain"
           }
         >
           {skills.map((skill) => {
