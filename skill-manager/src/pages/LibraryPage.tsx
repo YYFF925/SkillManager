@@ -530,7 +530,7 @@ export function LibraryPage({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       {upstream.busy && (
         <div className="mb-3.5 shrink-0">
           <FetchProgressLine progress={upstream.progress} />
@@ -816,13 +816,14 @@ export function LibraryPage({
           )}
         </aside>
 
-        <div
-          className={
-            layout === "grid"
-              ? "grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-3 overflow-y-auto overscroll-contain min-[1301px]:grid-cols-3"
-              : "grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3 overflow-y-auto overscroll-contain"
-          }
-        >
+        <div className="card-pane">
+          <div
+            className={
+              layout === "grid"
+                ? "grid grid-cols-2 gap-3 min-[1301px]:grid-cols-3"
+                : "grid grid-cols-1 gap-3"
+            }
+          >
           {skills.map((skill) => {
             const reference = referenceOf(skill);
             const unsupported = unsupportedOs(skill.oses, os);
@@ -972,6 +973,7 @@ export function LibraryPage({
               )}
             </div>
           )}
+          </div>
         </div>
       </div>
 

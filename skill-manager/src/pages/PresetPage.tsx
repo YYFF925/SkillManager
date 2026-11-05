@@ -462,7 +462,7 @@ export function PresetPage({
     memberFilter !== "all";
 
   return (
-    <div className="flex h-full min-h-0 items-stretch gap-4">
+    <div className="flex h-full min-h-0 flex-1 items-stretch gap-4">
       {/* 左侧预设列表 */}
       <aside className="flex w-[180px] shrink-0 flex-col overflow-y-auto overscroll-contain">
         <div className="mb-2 flex items-center justify-between px-1">
@@ -771,13 +771,14 @@ export function PresetPage({
                 )}
               </aside>
 
-              <div
-                className={
-                  layout === "grid"
-                    ? "grid min-h-0 min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(min(100%,400px),1fr))] gap-3 overflow-y-auto overscroll-contain"
-                    : "grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3 overflow-y-auto overscroll-contain"
-                }
-              >
+              <div className="card-pane">
+                <div
+                  className={
+                    layout === "grid"
+                      ? "grid grid-cols-[repeat(auto-fill,minmax(min(100%,400px),1fr))] gap-3"
+                      : "grid grid-cols-1 gap-3"
+                  }
+                >
                 {skills.map((skill) => {
                   const reference = referenceOf(skill);
                   const isMember = memberSet.has(lower(skill.name));
@@ -898,6 +899,7 @@ export function PresetPage({
                     )}
                   </div>
                 )}
+                </div>
               </div>
             </div>
           </>

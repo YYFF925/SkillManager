@@ -153,4 +153,7 @@ it("pins the category rail and only scrolls it when categories overflow", async 
   const rail = all.closest("aside");
   expect(rail?.classList.contains("category-rail")).toBe(true);
   expect(rail?.parentElement?.className).toMatch(/flex-1/);
+  const pane = rail?.parentElement?.querySelector(":scope > .card-pane");
+  expect(pane).not.toBeNull();
+  expect(pane?.querySelector(":scope > .grid")).not.toBeNull();
 });

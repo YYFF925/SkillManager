@@ -360,6 +360,22 @@ textarea:focus-visible {
     overscroll-behavior: contain;
   }
 
+  /* 卡片区独立滚动；网格高度跟内容走，避免 WKWebView 把行拉满或压扁。 */
+  .card-pane {
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .card-pane > .grid {
+    width: 100%;
+    height: max-content;
+    align-content: start;
+    grid-auto-rows: max-content;
+  }
+
   /* 卡片三点菜单（原型 .card-menu）。 */
   .card-menu {
     position: fixed;

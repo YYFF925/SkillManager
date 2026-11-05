@@ -334,3 +334,13 @@
 GUI 实操未见证：分类溢出时出现滚动条、未溢出时不出现、滚动卡片时分类栏仍固定、五个汉字分类名完整显示。未启动真实 `.app`，也未改 SkillManagerVault。
 
 **合并与安装包**：本改动与远端 `a7f80d1`（YAML 写回保型）、`cb94490`（chips 间距收紧）合并后重造 DMG：`npm run tauri build -- --bundles app` 加 `hdiutil create -format UDZO`，包内 `.app` 通过 `codesign --verify --strict`，CLI 输出版本 `skill-manager 0.1.0` 与完整帮助。`release/Skill Manager_0.1.0_aarch64.dmg`，9,413,675 字节，SHA-256 `9d83ad80daa056ac0ca89ff4deab5736bfcfe2d657b4ea6d6087b601466889c3`。
+
+## 二十三、DMG 安装入口补齐（2026-11-05）
+
+**问题**：此前 DMG 只包含 `Skill Manager.app`，没有 `Applications` 快捷方式；用户只能从只读挂载卷直接运行应用，无法按 macOS 常见方式拖拽安装。该问题属于打包交付缺陷，不改变业务规格。
+
+**实现**：在 DMG 暂存目录中同时放入应用与指向 `/Applications` 的 `Applications` 快捷方式，再用 `hdiutil create -format UDZO` 封装；包内应用与 CLI 仍来自同一次 `npm run tauri build -- --bundles app`。
+
+**验证（事实）**：只读挂载新 DMG，确认根目录同时存在 `Skill Manager.app` 与 `Applications -> /Applications`；应用 `codesign --verify --strict` 通过，包内 CLI `--version` 返回 `skill-manager 0.1.0`。
+
+**安装包**：`release/Skill Manager_0.1.0_aarch64.dmg`，8,955,440 字节，SHA-256 `b182856a807823abd2c469a1ca57fecaf9afa93d0f14b3ab3a2cad2dbd978f64`。本记录替代第二十二节中的 macOS 包哈希；Windows NSIS 包未重建。

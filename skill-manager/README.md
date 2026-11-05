@@ -52,6 +52,7 @@ cargo run -p skill-manager-cli -- --help   # CLI
 ```
 
 Tauri 打包：`npm run tauri build`（`bundle.targets` 为 `app` 与 `dmg`）。
+macOS DMG 内含应用与 `Applications` 快捷方式；安装时把 `Skill Manager.app` 拖入 `Applications`，不要直接从只读挂载卷双击运行。
 Windows 由平台覆盖配置 `src-tauri/tauri.windows.conf.json` 把 target 改为 `nsis`，
 产物为 `target/release/bundle/nsis/Skill Manager_0.1.0_x64-setup.exe`（默认按当前用户安装，
 WebView2 用官方下载引导）。

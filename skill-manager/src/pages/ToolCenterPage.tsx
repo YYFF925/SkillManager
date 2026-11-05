@@ -153,7 +153,7 @@ export function ToolCenterPage({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <div className="mb-3.5 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <span className="text-[12px] text-faint">
           软件只检查登记来源；安装、更新与核实回写由外部 Agent 完成。
@@ -261,7 +261,8 @@ export function ToolCenterPage({
           ))}
         </aside>
 
-        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-3 overflow-y-auto overscroll-contain min-[1301px]:grid-cols-3">
+        <div className="card-pane">
+          <div className="grid grid-cols-2 gap-3 min-[1301px]:grid-cols-3">
           {visible.map((entry) => {
             const installed = entry.install !== null;
             const badge = statusBadge(entry);
@@ -368,6 +369,7 @@ export function ToolCenterPage({
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
 

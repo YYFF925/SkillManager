@@ -383,7 +383,7 @@ export function HermesPage({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <div className="mb-3.5 flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2.5">
           {/* 档案选择 */}
@@ -645,13 +645,14 @@ export function HermesPage({
           )}
         </aside>
 
-        <div
-          className={
-            layout === "grid"
-              ? "grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-3 overflow-y-auto overscroll-contain min-[1301px]:grid-cols-3"
-              : "grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3 overflow-y-auto overscroll-contain"
-          }
-        >
+        <div className="card-pane">
+          <div
+            className={
+              layout === "grid"
+                ? "grid grid-cols-2 gap-3 min-[1301px]:grid-cols-3"
+                : "grid grid-cols-1 gap-3"
+            }
+          >
           {skills.map((skill) => {
             const unsupported = unsupportedOs(skill.oses, os);
             const isSelected = selected.includes(skill.name);
@@ -799,6 +800,7 @@ export function HermesPage({
               )}
             </div>
           )}
+          </div>
         </div>
       </div>
 
