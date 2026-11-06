@@ -34,7 +34,7 @@ Hermes 的 ego-browser）。**Windows NSIS 包保持旧版**（内含 CLI 仍带
 结果见 [M6 报告第二十一节](specs/002-skill-management/checklists/m6-report.md#二十一yaml-写回保型2026-10-28)。
 
 **初始统一库（2026-10-16）**：名称统一为 **SkillManagerVault（统一技能库）**；本机目录为
-`/Users/fei/Projects/workspace/SkillManagerVault`，对应 [Gitea 私有仓库](http://192.168.200.7:3000/yfpoyuas/SkillManagerVault)。
+`/Users/fei/Projects/workspace/SkillManagerVault`，对应 [GitHub 私有仓库](https://github.com/YYFF925/SkillManagerVault)。
 按正式数据模型初始化两管理域、空预设、空指令源与工具目录，不携带测试数据；通过既有 `--vault` 接入，
 后续沿用 `sync status` / `sync pull` / 经同意的 `sync push`。本机状态和认证不进入库；
 配套维护 Skill 的项目上游已发布；本轮验收使用隔离临时库，初始统一库可按需要显式选择该普通来源入库。

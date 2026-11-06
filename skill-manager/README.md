@@ -127,7 +127,7 @@ skill-manager agent read-local shared <name>
 
 `assets/skills/skill-manager-maintenance/` 是**单一**配套维护 Skill（库维护规范 + CLI 使用参考 +
 工具安装登记流程合一，见 research.md D9）。它按 FR-051 作为**普通上游技能**入库：
-本项目已发布到 [Gitea 上游仓库](http://192.168.200.7:3000/yfpoyuas/SkillManager)，以该仓库为上游、以
+本项目已发布到 [GitHub 上游仓库](https://github.com/YYFF925/SkillManager)，以该仓库为上游、以
 `skill-manager/assets/skills/skill-manager-maintenance` 为来源子路径执行 `skill import`；
 后续更新走既有 `skill check` / `skill update`，不新增专用分发机制。
 2026-10-17 已获用户授权并完成发布；真实来源入库与普通版本更新已在隔离临时库验证，见 [M5 报告](../specs/002-skill-management/checklists/m5-report.md)。
