@@ -228,3 +228,13 @@ describe("SettingsPage · 立即检查", () => {
     expect(screen.getByText("工具检查失败：fixture")).toBeTruthy();
   });
 });
+
+describe("SettingsPage · 页面滚动", () => {
+  it("页面本身作为滚动容器，避免被 AppShell 的 overflow-hidden 裁切", async () => {
+    const { container } = renderSettings();
+    await screen.findByRole("heading", { name: "支持的 Agent（1/2）" });
+    const root = container.firstElementChild;
+    expect(root?.className).toMatch(/min-h-0/);
+    expect(root?.className).toMatch(/overflow-y-auto/);
+  });
+});

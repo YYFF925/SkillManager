@@ -235,7 +235,7 @@ export function SettingsPage({
   const upstreamCandidates = latestSchedule?.upstream_report?.candidates.length ?? 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain">
       {error && <Notice tone="danger">{error}</Notice>}
 
       <AgentSettings

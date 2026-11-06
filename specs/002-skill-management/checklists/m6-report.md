@@ -344,3 +344,23 @@ GUI 实操未见证：分类溢出时出现滚动条、未溢出时不出现、�
 **验证（事实）**：只读挂载新 DMG，确认根目录同时存在 `Skill Manager.app` 与 `Applications -> /Applications`；应用 `codesign --verify --strict` 通过，包内 CLI `--version` 返回 `skill-manager 0.1.0`。
 
 **安装包**：`release/Skill Manager_0.1.0_aarch64.dmg`，8,955,440 字节，SHA-256 `b182856a807823abd2c469a1ca57fecaf9afa93d0f14b3ab3a2cad2dbd978f64`。本记录替代第二十二节中的 macOS 包哈希；Windows NSIS 包未重建。
+
+## 二十四、设置页整页滚动（2026-11-06）
+
+**问题**：设置页进入后无法滚动，右侧无滚动条；已检测 Agent 较多时，「全局配置」及后续区块被裁在视口外。原因是 `AppShell` 主内容区为分类栏／卡片区分区滚动写成 `overflow-hidden`，设置页作为整页长文档却没有自己的滚动容器。
+
+**规格**：不新增业务 FR。设置页仍按 FR-056 分区；本轮只修布局，使整页在内容溢出时可滚动。
+
+**实现**：`SettingsPage` 根节点改为 `h-full min-h-0 flex-1 overflow-y-auto overscroll-contain`，由页面自身承担滚动。`AppShell` 的 `overflow-hidden` 保持不变，以免破坏技能库等页的分区滚动。
+
+**验证（事实）**
+
+| 命令 / 操作 | 结果 |
+|---|---|
+| `npx vitest run src/pages/SettingsPage.test.tsx` | 5 项通过，含根节点滚动容器断言 |
+| `npx tauri build --bundles app` | 产出已签名 `.app`；`codesign --verify --strict` 通过 |
+| 包内 CLI `--version` | `skill-manager 0.1.0` |
+
+GUI 实操：开发模式已启动设置页供核对滚动；发行包未再做安装与首次启动验证。
+
+**安装包**：`release/Skill Manager_0.1.0_aarch64.dmg`，8,955,365 字节，SHA-256 `2db548d23490632b1701aba56fc99b3a746d7c5e57887f881b3f5b1ec7c031de`。本记录替代第二十三节中的 macOS 包哈希。DMG 根目录含 `Skill Manager.app` 与 `Applications -> /Applications`。Windows NSIS 包未重建。
