@@ -29,7 +29,7 @@
 - 制作可分发安装包或发布应用更新的提交，必须先把 SemVer 的 patch（第三位）加一，并同步 `skill-manager/Cargo.toml` 的 `workspace.package.version`、`skill-manager/package.json` 与 `skill-manager/src-tauri/tauri.conf.json`。不得因「只是重造包」而不升版。可用 `node skill-manager/scripts/bump-version.mjs`。major / minor 仅在用户明确要求时提升，并重置更低位。
 - GitHub 源码仓库 `YYFF925/SkillManager` 公开，Issues / Pull Request / Wiki / Discussions 关闭，不接外部贡献。在线更新源就是该仓库的 GitHub Releases：安装包挂版本 tag，各平台 `latest-*.json` 挂稳定 tag `updater-manifests`。不是 git 里的 `release/`。`release/` 仍按平台各留一份安装包并纳入本仓库提交。
 - 构建更新包前用凭据 `/service/skillmanager/updater` 注入 `TAURI_SIGNING_PRIVATE_KEY`，再执行 `tauri build`；当前平台发布用 `node skill-manager/scripts/publish-github-update.mjs`。
-- 双平台发版走 GitHub Actions：推送 `v*` tag（或手动 `workflow_dispatch`）后，macOS 与 Windows 标准 runner 签名构建并发布到 GitHub Releases。私钥只放 GitHub secret `TAURI_SIGNING_PRIVATE_KEY`，不进仓库。公开仓标准 runner 不收费。
+- 双平台发版走 GitHub Actions：推送 `v*` tag（或手动 `workflow_dispatch`）后，macOS 与 Windows 标准 runner 签名构建并发布到 GitHub Releases。私钥只放 GitHub secret `TAURI_SIGNING_PRIVATE_KEY`，不进仓库。公开仓标准 runner 不收费。构建完成后从 Release 下载 Windows 安装包替换 `release/` 旧包并提交双端推送；Actions 产物不会自动进入 Git。完整步骤见 [docs/technical-reference/app-updater.md](docs/technical-reference/app-updater.md)。
 
 ## 按任务阅读
 
