@@ -1,5 +1,28 @@
 // Disposable screenshot renderer. Uses an isolated headless browser and only local prototype files.
-const { chromium } = require('/Users/fei/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+function loadPlaywright(){
+  const candidates=[
+    '/Users/fei/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright',
+    'playwright',
+    'playwright-core'
+  ];
+  for(const name of candidates){
+    try{return require(name)}catch{}
+  }
+  throw new Error('playwright not found');
+}
+const { chromium } = loadPlaywright();
+function chromePath(){
+  const candidates=[
+    process.env.CHROME_PATH,
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/opt/google/chrome/chrome',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser'
+  ].filter(Boolean);
+  return candidates.find(p=>fs.existsSync(p));
+}
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -56,8 +79,10 @@ const selectedFrames = requestedFrames.length ? frames.filter(([name]) => reques
 (async () => {
   const output = path.join(__dirname, 'renders');
   fs.mkdirSync(output, { recursive: true });
+  const executablePath = chromePath();
+  if(!executablePath) throw new Error('Chrome/Chromium not found');
   const browser = await chromium.launch({
-    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    executablePath,
     headless: true
   });
   try {
