@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "hindsight": {
+      "url": "https://hindsight.feiron.top/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${HINDSIGHT_API_TOKEN}"
+      }
+    }
+  }
+}
