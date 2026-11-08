@@ -25,7 +25,8 @@ if (!signature) {
 }
 
 const tag = `v${version}`;
-const assetUrl = `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(artifact.name)}`;
+const assetName = githubAssetName(artifact.name);
+const assetUrl = `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(assetName)}`;
 const files = [artifact.path, `${artifact.path}.sig`];
 if (installer.path !== artifact.path) {
   files.push(installer.path);
@@ -34,6 +35,7 @@ ensureRelease(tag, files, {
   title: tag,
   notes: notes || tag,
 });
+assertAssetPublished(tag, assetName);
 writeManifest(target, {
   version,
   notes,
@@ -46,6 +48,24 @@ writeManifest(target, {
   },
 });
 console.log(`已发布 ${target} ${version}`);
+
+/** GitHub 上传时把资产名里的空格换成点，清单地址必须用上传后的名字，否则 404。 */
+function githubAssetName(name) {
+  return name.replace(/ /g, ".");
+}
+
+/** 上传后核对资产名：清单地址错了就是安装时 404，必须在发布阶段失败。 */
+function assertAssetPublished(tagName, name) {
+  const raw = execFileSync(
+    "gh",
+    ["release", "view", tagName, "--repo", repo, "--json", "assets"],
+    { encoding: "utf8" },
+  );
+  const published = JSON.parse(raw).assets.map((asset) => asset.name);
+  if (!published.includes(name)) {
+    throw new Error(`Release ${tagName} 缺少资产 ${name}，现有：${published.join(", ")}`);
+  }
+}
 
 function resolveTarget() {
   const override = process.env.TAURI_UPDATER_TARGET;
