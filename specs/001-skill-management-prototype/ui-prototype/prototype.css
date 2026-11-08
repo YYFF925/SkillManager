@@ -168,10 +168,11 @@
 .instruction-empty-hint{margin:8px 0 0;font-size:12px;color:var(--faint)}
 
 /* Todoist UI batch: in-flow filters, category grip, sidebar presets, agent pills */
-.filter-menu-trigger{height:40px;min-width:128px;max-width:180px;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:0 10px 0 12px;font-size:13px;color:var(--text)}
+.filter-menu{position:relative}
+.filter-menu-trigger{height:40px;width:max-content;max-width:180px;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:0 10px 0 12px;font-size:13px;color:var(--text)}
 .filter-menu-trigger>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .filter-menu-trigger>.i{width:14px;height:14px;margin-left:auto;color:var(--muted)}
-.filter-menu-panel{display:flex;flex-direction:column;align-items:stretch;width:max-content;min-width:180px;max-width:280px;margin:0 0 12px;padding:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 1px 2px #18181b0a}
+.filter-menu-panel{position:absolute;top:calc(100% + 4px);left:0;z-index:40;display:flex;flex-direction:column;align-items:stretch;width:max-content;min-width:100%;max-width:240px;margin:0;padding:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px #18181b1f}
 .filter-menu-option{height:32px;border:0;background:transparent;border-radius:6px;padding:0 10px;text-align:left;font-size:13px;color:var(--text)}
 .filter-menu-option:hover,.filter-menu-option.on{background:var(--active)}
 .category{gap:2px;padding:0 4px 0 0}
@@ -182,10 +183,10 @@
 .category-rename{flex:1;min-width:0;height:26px;border:1px solid var(--green);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:13px;padding:0 6px}
 .category.drop-target,.preset-row.drop-target{outline:1px dashed var(--green);outline-offset:-1px}
 body.is-sorting .preset-row-actions{opacity:1;pointer-events:auto}
-.preset-section-head{display:flex;align-items:center;gap:6px;margin:0 2px 8px}
+.preset-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 4px 8px}
 .preset-section-head .section-title{margin:0;flex:0 0 auto}
-.preset-domain-seg.seg{width:auto;flex:1;height:24px;margin:0;padding:2px;min-width:0}
-.preset-domain-seg.seg button{height:18px;padding:0 4px;font-size:11px;line-height:18px}
+.preset-domain-seg.seg{width:max-content;flex:0 0 auto;margin:0 0 0 auto;height:auto;padding:2px;min-width:0;border-radius:8px}
+.preset-domain-seg.seg button{flex:0 0 auto;width:auto;height:22px;padding:0 8px;font-size:12px;line-height:22px}
 .preset-empty{margin:2px 8px 8px;color:var(--faint);font-size:12px}
 .preset-row{display:flex;align-items:center}
 .preset-row>.drag-handle{width:16px;height:28px;color:#c4c4cc;position:relative;z-index:1}
