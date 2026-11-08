@@ -9,7 +9,7 @@
 - 版本 tag（如 `v0.1.1`）：当前平台 updater 产物（macOS `.app.tar.gz`、Windows NSIS）及其 `.sig`
 - 稳定 tag `updater-manifests`：各平台清单 `latest-darwin-aarch64.json`、`latest-windows-x86_64.json`
 
-应用按 `https://github.com/YYFF925/SkillManager/releases/download/updater-manifests/latest-{{target}}-{{arch}}.json` 取清单。macOS 与 Windows 用同一套 updater 代码，但安装包和清单分开：macOS 产出 `latest-darwin-aarch64.json`，Windows 产出 `latest-windows-x86_64.json`。两平台可错开版本。清单不写入 `main`，避免和 Gitea 双端提交互相抢历史。
+应用按 `https://github.com/YYFF925/SkillManager/releases/download/updater-manifests/latest-{{target}}-{{arch}}.json` 取清单。macOS 与 Windows 用同一套 updater 代码，但安装包和清单分开：macOS 产出 `latest-darwin-aarch64.json`，Windows 产出 `latest-windows-x86_64.json`。两平台可错开版本。清单不写入 `main`，避免和源码提交互相抢历史。
 
 GitHub Actions 在各自原生 runner 上构建，Mac 与 Windows 安装包不通用，也不能在 Mac 上交叉出可靠的 Windows 更新包。
 
@@ -30,10 +30,10 @@ Tauri updater 签名不能关。公钥在 `skill-manager/src-tauri/tauri.conf.js
 标准流程（双平台，GitHub Actions 构建）：
 
 1. `node skill-manager/scripts/bump-version.mjs` 升 patch（`--minor` / `--major` 仅在用户明确要求时）。同步修改 `Cargo.toml`、`package.json`、`tauri.conf.json`。
-2. 提交本次改动，推 `github` 与 `origin` 两个远端。
-3. `git tag -f v<version>`，把该 tag 推到两个远端（`git push <remote> v<version> --force`）。tag 推送即触发 `.github/workflows/release.yml`；也可在 Actions 页手动 `workflow_dispatch`。
+2. 提交本次改动，只推 `github`（Gitea `origin` 不再推送）。
+3. `git tag -f v<version>`，把该 tag 推到 `github`（`git push github v<version> --force`）。tag 推送即触发 `.github/workflows/release.yml`；也可在 Actions 页手动 `workflow_dispatch`。
 4. 等两个 job 成功，确认版本 tag 的 Release 含 macOS DMG、`.app.tar.gz` 及 `.sig`、Windows `-setup.exe` 及 `.sig`；`updater-manifests` 含对应平台的 `latest-*.json`，且 `version` 是新版本号。
-5. 下载 Windows `-setup.exe`，替换 `release/` 里同平台旧包，提交并双端推送。这一步不能省：Actions 产物不在 Git 历史里，`release/` 仍要求每个平台各留一份。
+5. 下载 Windows `-setup.exe`，替换 `release/` 里同平台旧包，提交并推到 `github`。这一步不能省：Actions 产物不在 Git 历史里，`release/` 仍要求每个平台各留一份。
 6. 验证：`curl -fsSL .../latest-darwin-aarch64.json` 与 `latest-windows-x86_64.json`，核对 `version`、`url`、`signature`。
 
 注意：

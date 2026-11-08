@@ -105,7 +105,7 @@
 `skill-manager-maintenance`）。按 D9/FR-051，它作为**普通上游技能**入库：本项目推送用户 GitHub 远端后，
 以该项目远端为上游仓库、以 `skill-manager/assets/skills/skill-manager-maintenance` 为来源子路径入库。
 
-本项目公开上游为 `https://github.com/YYFF925/SkillManager.git`。开发推送仍是 GitHub `github` 与 Gitea `origin` 双端。
+本项目公开上游为 `https://github.com/YYFF925/SkillManager.git`。2026-11-08 起开发推送只维护 GitHub `github`，不再推 Gitea `origin`。
 2026-10-17 用户已授权并完成真实发布与入库验收（T124，见 m5-report 第十二节）。
 
 实际命令（`<repo-url>` 为本项目远端地址）：
