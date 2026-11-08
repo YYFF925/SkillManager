@@ -38,6 +38,7 @@ import { LocalSkillDetail } from "../components/LocalSkillDetail";
 import { CopyToDomainDialog } from "../components/SkillDialogs";
 import { DeployDialog } from "../components/DeployDialog";
 import { QuickDeploy } from "../components/QuickDeploy";
+import { AgentPresetPills } from "../components/AgentPresetPills";
 // 部署记录的目标展示名（`agent:<key>`/`shared`/`hermes:default`）复用库内既有映射。
 import { targetLabel as deploymentTargetName } from "../lib/targets";
 import { Badge, Button, ConfirmDialog, Dialog, Notice, Segmented } from "../components/ui";
@@ -241,6 +242,14 @@ function LocalSkillsView({
 
   return (
     <div className="flex flex-col gap-4">
+      <AgentPresetPills
+        domain={agentDomain}
+        target={target}
+        agents={agents}
+        reloadToken={version}
+        onNotice={onNotice}
+        onChanged={() => setVersion((value) => value + 1)}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
           <label className="flex h-10 w-[240px] items-center gap-2.5 rounded-lg border border-line bg-panel px-3 text-faint">

@@ -732,7 +732,11 @@ fn matches_query(view: &ProfileSkillView, query: &SearchQuery) -> bool {
     if query.require_untagged {
         return view.tags.is_empty();
     }
-    query.tags.is_empty() || view.tags.iter().any(|tag| query.tags.contains(tag))
+    query.tags.is_empty()
+        || query
+            .tags
+            .iter()
+            .all(|tag| view.tags.iter().any(|item| item == tag))
 }
 
 /// 分类联动的标签候选：只含所选分类内实际出现的标签。

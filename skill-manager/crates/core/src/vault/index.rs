@@ -446,7 +446,11 @@ impl SkillIndex {
                 if query.require_untagged {
                     return entry.tags.is_empty();
                 }
-                query.tags.is_empty() || entry.tags.iter().any(|tag| query.tags.contains(tag))
+                query.tags.is_empty()
+                    || query
+                        .tags
+                        .iter()
+                        .all(|tag| entry.tags.iter().any(|item| item == tag))
             })
             .filter(|entry| match &query.agent {
                 Some(agent) => entry.supports_agent(&agent.key, agent.domain),

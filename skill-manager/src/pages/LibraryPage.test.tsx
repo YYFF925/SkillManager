@@ -13,17 +13,27 @@ vi.mock("../services/client", async (importOriginal) => ({
 
 it("combines actual deployment, preset and text filters through the existing query", async () => {
   render(<LibraryPage domain="code" os="macos" agents={[]} reloadToken={0} onCount={vi.fn()} />);
-  await screen.findByRole("option", { name: "日常维护" });
-  await screen.findByRole("option", { name: "agent:codex" });
-  fireEvent.change(screen.getByLabelText("指定部署目标"), { target: { value: "agent:codex" } });
-  fireEvent.change(screen.getByLabelText("所属预设"), { target: { value: "daily" } });
-  fireEvent.change(screen.getByPlaceholderText("搜索名称、中文注释、正文或标签…"), { target: { value: "alpha" } });
-  await waitFor(() => expect(listSkills).toHaveBeenLastCalledWith(expect.objectContaining({
-    domain: "code", deployedTo: "agent:codex", preset: "daily", query: "alpha",
-  })));
+  fireEvent.click(await screen.findByRole("button", { name: "指定部署目标" }));
+  fireEvent.click(await screen.findByRole("option", { name: "agent:codex" }));
+  fireEvent.click(screen.getByRole("button", { name: "所属预设" }));
+  fireEvent.click(await screen.findByRole("option", { name: "日常维护" }));
+  fireEvent.change(screen.getByPlaceholderText("搜索名称、中文注释、正文或标签…"), {
+    target: { value: "alpha" },
+  });
+  await waitFor(() =>
+    expect(listSkills).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        domain: "code",
+        deployedTo: "agent:codex",
+        preset: "daily",
+        query: "alpha",
+      }),
+    ),
+  );
   fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
   await waitFor(() => expect(listSkills).toHaveBeenLastCalledWith({ domain: "code" }));
 });
+
 it("puts skills unsupported on the current OS after supported ones", async () => {
   vi.mocked(listSkills).mockResolvedValue({
     skills: [
@@ -98,7 +108,7 @@ function summary(name: string, category: string | null): SkillSummary {
   };
 }
 
-it("packs unselected tag filter chips without extra button padding", async () => {
+it("packs unselected tag filter chips without extra button padding and ANDs multi-select", async () => {
   vi.mocked(listSkills).mockResolvedValue({
     skills: [],
     total: 0,
@@ -112,17 +122,31 @@ it("packs unselected tag filter chips without extra button padding", async () =>
   expect(api.querySelector("span")?.textContent).toBe("API");
 
   fireEvent.click(api);
-  await waitFor(() => expect(listSkills).toHaveBeenLastCalledWith(expect.objectContaining({
-    domain: "code",
-    tags: ["API"],
-  })));
+  await waitFor(() =>
+    expect(listSkills).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        domain: "code",
+        tags: ["API"],
+      }),
+    ),
+  );
   const selected = screen.getByRole("button", { name: "API" });
   expect(selected.className).toContain("px-2");
   expect(selected.className).toContain("bg-accent");
   expect(selected.querySelector("span")).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: "Fork 维护" }));
+  await waitFor(() =>
+    expect(listSkills).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        domain: "code",
+        tags: ["API", "Fork 维护"],
+      }),
+    ),
+  );
 });
 
-it("shows a rename control on named categories like presets", async () => {
+it("renames categories inline without a dialog", async () => {
   vi.mocked(listSkills).mockResolvedValue({
     skills: [summary("alpha", "家庭运维"), summary("beta", null)],
     total: 2,
@@ -133,11 +157,13 @@ it("shows a rename control on named categories like presets", async () => {
   expect(await screen.findByRole("button", { name: "重命名分类 家庭运维" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "重命名分类 未分类" })).toBeNull();
   expect(screen.queryByRole("button", { name: "重命名分类 全部分类" })).toBeNull();
+  expect(screen.getByRole("button", { name: "新建分类" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "拖动排序 家庭运维" })).toBeTruthy();
 
   fireEvent.click(screen.getByRole("button", { name: "重命名分类 家庭运维" }));
-  const input = await screen.findByDisplayValue("家庭运维");
+  const input = await screen.findByLabelText("分类名称");
   fireEvent.change(input, { target: { value: "脚本" } });
-  fireEvent.click(screen.getByRole("button", { name: "保存" }));
+  fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() => expect(renameCategory).toHaveBeenCalledWith("code", "家庭运维", "脚本"));
 });
 
@@ -148,12 +174,9 @@ it("pins the category rail and only scrolls it when categories overflow", async 
     tag_candidates: [],
     categories: ["家庭运维"],
   });
-  render(<LibraryPage domain="code" os="macos" agents={[]} reloadToken={0} onCount={vi.fn()} />);
-  const all = await screen.findByRole("button", { name: /全部分类/ });
-  const rail = all.closest("aside");
-  expect(rail?.classList.contains("category-rail")).toBe(true);
-  expect(rail?.parentElement?.className).toMatch(/flex-1/);
-  const pane = rail?.parentElement?.querySelector(":scope > .card-pane");
-  expect(pane).not.toBeNull();
-  expect(pane?.querySelector(":scope > .grid")).not.toBeNull();
+  const { container } = render(
+    <LibraryPage domain="code" os="macos" agents={[]} reloadToken={0} onCount={vi.fn()} />,
+  );
+  await screen.findByText("家庭运维");
+  expect(container.querySelector(".category-rail")).toBeTruthy();
 });

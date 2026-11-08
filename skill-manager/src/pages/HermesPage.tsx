@@ -36,6 +36,7 @@ import {
 } from "../services/client";
 import { osLabel, unsupportedOs } from "../lib/support";
 import { TagChip } from "../components/TagChip";
+import { toggleTagSelection, pruneSelectedTags, type TagMode } from "../lib/tagFilter";
 import { LocalSkillDetail } from "../components/LocalSkillDetail";
 import { HermesSkillDetail } from "../components/HermesSkillDetail";
 import { QuickDeploy } from "../components/QuickDeploy";
@@ -120,7 +121,8 @@ export function HermesPage({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
-  const [tag, setTag] = useState<string | null>(null);
+  const [tagMode, setTagMode] = useState<TagMode>("all");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilter>("all");
   const [layout, setLayout] = useState<Layout>("grid");
   const [multi, setMulti] = useState(false);
@@ -186,14 +188,14 @@ export function HermesPage({
       try {
         const full = await hermesList(active);
         const hasFilter =
-          debouncedQuery.trim().length > 0 || category !== null || tag !== null;
+          debouncedQuery.trim().length > 0 || category !== null || tagMode !== "all";
         const narrowed = hasFilter
           ? await hermesList(active, {
               query: debouncedQuery.trim() || undefined,
               category: category !== null && category !== UNCATEGORIZED ? category : undefined,
               uncategorized: category === UNCATEGORIZED || undefined,
-              tags: tag !== null && tag !== NO_TAG ? [tag] : undefined,
-              noTag: tag === NO_TAG || undefined,
+              tags: tagMode === "and" ? selectedTags : undefined,
+              noTag: tagMode === "none" || undefined,
             })
           : full;
         if (cancelled) {
@@ -215,11 +217,11 @@ export function HermesPage({
     return () => {
       cancelled = true;
     };
-  }, [active, debouncedQuery, category, tag, reloadToken, version]);
+  }, [active, debouncedQuery, category, tagMode, selectedTags, reloadToken, version]);
 
   useEffect(() => {
     setSelected([]);
-  }, [active, debouncedQuery, category, tag]);
+  }, [active, debouncedQuery, category, tagMode, selectedTags]);
 
   // 档案下拉：点外部或 Escape 关闭。
   useEffect(() => {
@@ -257,10 +259,19 @@ export function HermesPage({
   const tagCandidates = useMemo(() => filtered?.tag_candidates ?? [], [filtered]);
 
   useEffect(() => {
-    if (tag !== null && tag !== NO_TAG && !tagCandidates.includes(tag)) {
-      setTag(null);
+    if (tagMode !== "and") {
+      return;
     }
-  }, [tag, tagCandidates]);
+    const next = pruneSelectedTags(selectedTags, tagCandidates);
+    if (next.length !== selectedTags.length) {
+      if (next.length === 0) {
+        setTagMode("all");
+        setSelectedTags([]);
+      } else {
+        setSelectedTags(next);
+      }
+    }
+  }, [tagMode, selectedTags, tagCandidates]);
 
   const railCategories = useMemo(() => {
     const counts = new Map<string, number>();
@@ -285,14 +296,24 @@ export function HermesPage({
   const activeLabel = activeProfile ? profileLabel(activeProfile) : "选择档案";
 
   const filterActive =
-    debouncedQuery.trim().length > 0 || category !== null || tag !== null || enabledFilter !== "all";
+    debouncedQuery.trim().length > 0 ||
+    category !== null ||
+    tagMode !== "all" ||
+    enabledFilter !== "all";
 
   function clearFilters() {
     setQuery("");
     setDebouncedQuery("");
     setCategory(null);
-    setTag(null);
+    setTagMode("all");
+    setSelectedTags([]);
     setEnabledFilter("all");
+  }
+
+  function onToggleTag(name: string) {
+    const next = toggleTagSelection(tagMode, selectedTags, name);
+    setTagMode(next.mode);
+    setSelectedTags(next.selected);
   }
 
   function toggleSelect(name: string) {
@@ -507,35 +528,41 @@ export function HermesPage({
         <span className="mr-0.5 text-[12px] text-faint">标签</span>
         <button
           type="button"
-          onClick={() => setTag(null)}
+          onClick={() => onToggleTag("")}
+          aria-pressed={tagMode === "all"}
           className={`rounded-full px-2 text-[12px] leading-5 ${
-            tag === null ? "bg-accent text-white" : "bg-subtle text-muted"
+            tagMode === "all" ? "bg-accent text-white" : "bg-subtle text-muted"
           }`}
         >
           全部标签
         </button>
         <button
           type="button"
-          onClick={() => setTag(NO_TAG)}
+          onClick={() => onToggleTag(NO_TAG)}
+          aria-pressed={tagMode === "none"}
           className={`rounded-full border border-line px-2 text-[12px] leading-[18px] ${
-            tag === NO_TAG ? "bg-accent text-white" : "text-muted"
+            tagMode === "none" ? "bg-accent text-white" : "text-muted"
           }`}
         >
           无标签
         </button>
-        {tagCandidates.map((candidate) => (
-          <button
-            key={candidate}
-            type="button"
-            onClick={() => setTag(candidate)}
-            title={candidate}
-            className={`inline-flex items-center rounded-full text-[12px] leading-5 ${
-              tag === candidate ? "bg-accent px-2 text-white" : "px-0"
-            }`}
-          >
-            {tag === candidate ? candidate : <TagChip tag={candidate} />}
-          </button>
-        ))}
+        {tagCandidates.map((candidate) => {
+          const on = tagMode === "and" && selectedTags.includes(candidate);
+          return (
+            <button
+              key={candidate}
+              type="button"
+              onClick={() => onToggleTag(candidate)}
+              title={candidate}
+              aria-pressed={on}
+              className={`inline-flex items-center rounded-full text-[12px] leading-5 ${
+                on ? "bg-accent px-2 text-white" : "px-0"
+              }`}
+            >
+              {on ? candidate : <TagChip tag={candidate} />}
+            </button>
+          );
+        })}
       </div>
 
       <p className="mb-3.5 flex shrink-0 items-center gap-1.5 text-[12px] text-faint">

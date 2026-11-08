@@ -13,26 +13,18 @@ import {
   GripVertical,
   LayoutGrid,
   List,
-  Pencil,
-  Plus,
   Rocket,
   Search,
   Square,
-  Trash2,
 } from "lucide-react";
 
 import {
   addPresetMembers,
-  createPreset,
-  deletePreset,
   deployStatus,
   listPresets,
   listSkills,
   removePresetMembers,
-  renamePreset,
   reorderPresetMembers,
-  reorderPresets,
-  setPresetIcon,
   type AgentView,
   type DeploymentStatusView,
   type Domain,
@@ -41,7 +33,6 @@ import {
   type SkillListResult,
   type SkillSummary,
 } from "../services/client";
-import { PRESET_ICON_OPTIONS, presetIconOption } from "../lib/presetIcons";
 import { reorderVisible } from "../lib/presetOrder";
 import { unsupportedDeployReason } from "../lib/support";
 import { DeployDialog } from "../components/DeployDialog";
@@ -49,7 +40,8 @@ import { QuickDeploy } from "../components/QuickDeploy";
 import { PresetDeployDialog } from "../components/PresetDeployDialog";
 import { SkillDetail } from "../components/SkillDetail";
 import { TagChip } from "../components/TagChip";
-import { Badge, Button, ConfirmDialog, Dialog, Notice, Segmented } from "../components/ui";
+import { toggleTagSelection, pruneSelectedTags, type TagMode } from "../lib/tagFilter";
+import { Badge, Button, Notice, Segmented } from "../components/ui";
 
 const UNCATEGORIZED = "__none";
 const NO_TAG = "__none";
@@ -96,74 +88,41 @@ function MemberToggle({
   );
 }
 
-/** 图标选择网格（新建与重命名共用；仅改图标也可保存）。 */
-function PresetIconPicker({
-  value,
-  onChange,
-}: {
-  value: string | null;
-  onChange: (key: string) => void;
-}) {
-  return (
-    <div className="grid max-w-[350px] grid-cols-8 gap-1.5">
-      {PRESET_ICON_OPTIONS.map((option) => {
-        const Icon = option.icon;
-        const active = option.key === value;
-        return (
-          <button
-            key={option.key}
-            type="button"
-            title={`${option.label}（${option.key}）`}
-            aria-label={option.label}
-            onClick={() => onChange(option.key)}
-            className={`flex h-9 items-center justify-center rounded-lg border transition-colors ${
-              active
-                ? "border-accent-line bg-accent-soft text-accent"
-                : "border-line bg-panel text-muted hover:bg-hover"
-            }`}
-          >
-            <Icon
-              className="size-[15px]"
-              strokeWidth={1.75}
-              style={{ color: option.color }}
-            />
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 export interface PresetPageProps {
   os: EnvironmentOs | null;
   agents: AgentView[];
   reloadToken: number;
+  /** 侧栏选定的管理域（预设列表已迁到 AppShell）。 */
+  domain: Domain;
+  /** 侧栏选定的预设 id；无预设时为 null。 */
+  selectedId: string | null;
+  onSelectedIdChange: (id: string | null) => void;
   /** 上报当前管理域预设数量，用于页头计数。 */
   onCount: (count: number) => void;
   /** 上报当前管理域标题。 */
   onTitle: (title: string) => void;
   /** 保存库内修改后的统一流程（刷新已有部署并按已确认策略上传）。 */
   onLibrarySaved?: () => Promise<void>;
-  /** 从其他页面指定初始管理域（默认编码库）。 */
-  initialDomain?: Domain;
 }
 
 export function PresetPage({
   os,
   agents,
   reloadToken,
+  domain,
+  selectedId,
+  onSelectedIdChange,
   onCount,
   onTitle,
   onLibrarySaved,
-  initialDomain,
 }: PresetPageProps) {
-  const [domain, setDomain] = useState<Domain>(initialDomain ?? "code");
   const [presets, setPresets] = useState<PresetView[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
-  const [tag, setTag] = useState<string | null>(null);
+  const [tagMode, setTagMode] = useState<TagMode>("all");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [memberFilter, setMemberFilter] = useState<MemberFilter>("all");
   const [layout, setLayout] = useState<Layout>("grid");
   const [multi, setMulti] = useState(false);
@@ -173,14 +132,10 @@ export function PresetPage({
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<PresetView | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [skillDeploy, setSkillDeploy] = useState<string[] | null>(null);
   const [records, setRecords] = useState<DeploymentStatusView[]>([]);
-  const [dragPreset, setDragPreset] = useState<string | null>(null);
   const [dragMember, setDragMember] = useState<string | null>(null);
 
   const preset = useMemo(
@@ -208,14 +163,18 @@ export function PresetPage({
     try {
       const list = await listPresets(domain);
       setPresets(list);
-      setSelectedId((current) =>
-        current && list.some((item) => item.id === current) ? current : list[0]?.id ?? null,
-      );
+      const next =
+        selectedId && list.some((item) => item.id === selectedId)
+          ? selectedId
+          : list[0]?.id ?? null;
+      if (next !== selectedId) {
+        onSelectedIdChange(next);
+      }
       setError(null);
     } catch (err) {
       setError(String(err));
     }
-  }, [domain]);
+  }, [domain, onSelectedIdChange, selectedId]);
 
   useEffect(() => {
     void refreshPresets();
@@ -237,15 +196,15 @@ export function PresetPage({
           return;
         }
         const hasFilter =
-          debouncedQuery.trim().length > 0 || category !== null || tag !== null;
+          debouncedQuery.trim().length > 0 || category !== null || tagMode !== "all";
         const result = hasFilter
           ? await listSkills({
               domain,
               query: debouncedQuery.trim() || undefined,
               category: category !== null && category !== UNCATEGORIZED ? category : undefined,
               uncategorized: category === UNCATEGORIZED || undefined,
-              tags: tag !== null && tag !== NO_TAG ? [tag] : undefined,
-              noTag: tag === NO_TAG || undefined,
+              tags: tagMode === "and" ? selectedTags : undefined,
+              noTag: tagMode === "none" || undefined,
             })
           : base;
         if (cancelled) {
@@ -263,18 +222,19 @@ export function PresetPage({
     return () => {
       cancelled = true;
     };
-  }, [domain, debouncedQuery, category, tag, version, reloadToken]);
+  }, [domain, debouncedQuery, category, tagMode, selectedTags, version, reloadToken]);
 
   // 切换管理域或筛选时清空多选与选择。
   useEffect(() => {
     setSelected([]);
-  }, [domain, debouncedQuery, category, tag, memberFilter]);
+  }, [domain, debouncedQuery, category, tagMode, selectedTags, memberFilter]);
 
   useEffect(() => {
     setQuery("");
     setDebouncedQuery("");
     setCategory(null);
-    setTag(null);
+    setTagMode("all");
+    setSelectedTags([]);
     setMemberFilter("all");
     setMulti(false);
   }, [domain]);
@@ -325,10 +285,19 @@ export function PresetPage({
 
   const tagCandidates = useMemo(() => filtered?.tag_candidates ?? [], [filtered]);
   useEffect(() => {
-    if (tag !== null && tag !== NO_TAG && !tagCandidates.includes(tag)) {
-      setTag(null);
+    if (tagMode !== "and") {
+      return;
     }
-  }, [tag, tagCandidates]);
+    const next = pruneSelectedTags(selectedTags, tagCandidates);
+    if (next.length !== selectedTags.length) {
+      if (next.length === 0) {
+        setTagMode("all");
+        setSelectedTags([]);
+      } else {
+        setSelectedTags(next);
+      }
+    }
+  }, [tagMode, selectedTags, tagCandidates]);
 
   const railCategories = useMemo(() => {
     const counts = new Map<string, number>();
@@ -382,29 +351,6 @@ export function PresetPage({
     await runMemberChange([skill.name], isMember ? "remove" : "add");
   }
 
-  async function reorderPresetList(targetId: string) {
-    if (!dragPreset || dragPreset === targetId) {
-      return;
-    }
-    const from = presets.findIndex((item) => item.id === dragPreset);
-    const to = presets.findIndex((item) => item.id === targetId);
-    if (from < 0 || to < 0) {
-      return;
-    }
-    const next = [...presets];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    setDragPreset(null);
-    try {
-      const updated = await reorderPresets(domain, next.map((item) => item.id));
-      setPresets(updated);
-      setNotice("已调整预设显示顺序（不改变成员集合或实际部署）。");
-      setError(null);
-      await onLibrarySaved?.();
-    } catch (err) {
-      setError(String(err));
-    }
-  }
 
   async function reorderMemberList(targetName: string) {
     if (!preset || !dragMember || dragMember === targetName) {
@@ -435,120 +381,21 @@ export function PresetPage({
     }
   }
 
-  async function confirmDelete() {
-    const target = deleteTarget;
-    setDeleteTarget(null);
-    if (!target) {
-      return;
-    }
-    try {
-      await deletePreset(domain, target.id);
-      setNotice(`已删除预设「${target.name}」（实际部署未改变）。`);
-      setError(null);
-      if (selectedId === target.id) {
-        setSelectedId(null);
-      }
-      setVersion((value) => value + 1);
-      await onLibrarySaved?.();
-    } catch (err) {
-      setError(String(err));
-    }
-  }
 
   const filterActive =
     debouncedQuery.trim().length > 0 ||
     category !== null ||
-    tag !== null ||
+    tagMode !== "all" ||
     memberFilter !== "all";
 
-  return (
-    <div className="flex h-full min-h-0 flex-1 items-stretch gap-4">
-      {/* 左侧预设列表 */}
-      <aside className="flex w-[180px] shrink-0 flex-col overflow-y-auto overscroll-contain">
-        <div className="mb-2 flex items-center justify-between px-1">
-          <Segmented
-            options={[
-              { value: "code", label: "编码库" },
-              { value: "lobster", label: "龙虾库" },
-            ]}
-            value={domain}
-            onChange={(value) => setDomain(value as Domain)}
-            className="h-8"
-          />
-        </div>
-        <div className="flex flex-col gap-0.5">
-          {presets.map((item) => {
-            const option = presetIconOption(item.icon);
-            const Icon = option.icon;
-            const active = item.id === selectedId;
-            return (
-              <div
-                key={item.id}
-                draggable
-                onDragStart={() => setDragPreset(item.id)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => void reorderPresetList(item.id)}
-                className={`group flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] ${
-                  active ? "bg-selected font-medium text-ink" : "text-ink-2 hover:bg-hover"
-                }`}
-              >
-                <span
-                  title="拖动调整预设顺序"
-                  className="flex size-4 shrink-0 cursor-grab items-center justify-center text-faint opacity-0 group-hover:opacity-100"
-                >
-                  <GripVertical className="size-3.5" strokeWidth={1.75} />
-                </span>
-                <Icon className="size-4 shrink-0" strokeWidth={1.75} style={{ color: option.color }} />
-                <button
-                  type="button"
-                  title={`${item.name}（${item.id}）`}
-                  onClick={() => setSelectedId(item.id)}
-                  className="min-w-0 flex-1 truncate text-left"
-                >
-                  {item.name}
-                </button>
-                {(item.missing_members?.length ?? 0) > 0 && (
-                  <span title="含缺失成员" className="shrink-0 text-[11px] text-warn">
-                    !
-                  </span>
-                )}
-                <button
-                  type="button"
-                  title="重命名 / 图标"
-                  aria-label={`编辑预设 ${item.name}`}
-                  onClick={() => {
-                    setSelectedId(item.id);
-                    setEditOpen(true);
-                  }}
-                  className="grid size-5 shrink-0 place-items-center rounded-[5px] text-faint opacity-0 hover:bg-hover hover:text-accent group-hover:opacity-100"
-                >
-                  <Pencil className="size-3.5" strokeWidth={1.75} />
-                </button>
-                <button
-                  type="button"
-                  title="删除预设"
-                  aria-label={`删除预设 ${item.name}`}
-                  onClick={() => setDeleteTarget(item)}
-                  className="grid size-5 shrink-0 place-items-center rounded-[5px] text-faint opacity-0 hover:bg-hover hover:text-danger group-hover:opacity-100"
-                >
-                  <Trash2 className="size-3.5" strokeWidth={1.75} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="mt-1.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-muted hover:bg-hover"
-        >
-          <Plus className="size-4 shrink-0" strokeWidth={1.75} />
-          新建预设
-        </button>
-      </aside>
+  function onToggleTag(name: string) {
+    const next = toggleTagSelection(tagMode, selectedTags, name);
+    setTagMode(next.mode);
+    setSelectedTags(next.selected);
+  }
 
-      {/* 右侧成员浏览 */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+  return (
+    <div className="flex h-full min-h-0 flex-1 flex-col">
         {error && (
           <div className="mb-3.5 shrink-0">
             <Notice tone="danger">{error}</Notice>
@@ -562,7 +409,7 @@ export function PresetPage({
 
         {!preset ? (
           <p className="px-4 py-8 text-[13px] text-muted">
-            该管理域还没有预设，请从左侧新建预设。
+            该库还没有预设，请从左侧新建。
           </p>
         ) : (
           <>
@@ -662,35 +509,41 @@ export function PresetPage({
               <span className="mr-0.5 text-[12px] text-faint">标签</span>
               <button
                 type="button"
-                onClick={() => setTag(null)}
+                onClick={() => onToggleTag("")}
+                aria-pressed={tagMode === "all"}
                 className={`rounded-full px-2 text-[12px] leading-5 ${
-                  tag === null ? "bg-accent text-white" : "bg-subtle text-muted"
+                  tagMode === "all" ? "bg-accent text-white" : "bg-subtle text-muted"
                 }`}
               >
                 全部标签
               </button>
               <button
                 type="button"
-                onClick={() => setTag(NO_TAG)}
+                onClick={() => onToggleTag(NO_TAG)}
+                aria-pressed={tagMode === "none"}
                 className={`rounded-full border border-line px-2 text-[12px] leading-[18px] ${
-                  tag === NO_TAG ? "bg-accent text-white" : "text-muted"
+                  tagMode === "none" ? "bg-accent text-white" : "text-muted"
                 }`}
               >
                 无标签
               </button>
-              {tagCandidates.map((candidate) => (
-                <button
-                  key={candidate}
-                  type="button"
-                  onClick={() => setTag(candidate)}
-                  title={candidate}
-                  className={`inline-flex items-center rounded-full text-[12px] leading-5 ${
-                    tag === candidate ? "bg-accent px-2 text-white" : "px-0"
-                  }`}
-                >
-                  {tag === candidate ? candidate : <TagChip tag={candidate} />}
-                </button>
-              ))}
+              {tagCandidates.map((candidate) => {
+                const on = tagMode === "and" && selectedTags.includes(candidate);
+                return (
+                  <button
+                    key={candidate}
+                    type="button"
+                    onClick={() => onToggleTag(candidate)}
+                    title={candidate}
+                    aria-pressed={on}
+                    className={`inline-flex items-center rounded-full text-[12px] leading-5 ${
+                      on ? "bg-accent px-2 text-white" : "px-0"
+                    }`}
+                  >
+                    {on ? candidate : <TagChip tag={candidate} />}
+                  </button>
+                );
+              })}
             </div>
 
             {multi && (
@@ -889,7 +742,8 @@ export function PresetPage({
                             setQuery("");
                             setDebouncedQuery("");
                             setCategory(null);
-                            setTag(null);
+                            setTagMode("all");
+                            setSelectedTags([]);
                             setMemberFilter("all");
                           }}
                         >
@@ -904,54 +758,6 @@ export function PresetPage({
             </div>
           </>
         )}
-      </div>
-
-      {createOpen && (
-        <CreatePresetDialog
-          domain={domain}
-          onCancel={() => setCreateOpen(false)}
-          onConfirm={async (name, icon, targetDomain) => {
-            try {
-              const created = await createPreset(targetDomain, name, icon);
-              setNotice(`已新建预设「${created.name}」（id ${created.id}；尚未部署）。`);
-              setError(null);
-              setCreateOpen(false);
-              if (targetDomain !== domain) {
-                setDomain(targetDomain);
-              }
-              setSelectedId(created.id);
-              setVersion((value) => value + 1);
-              await onLibrarySaved?.();
-            } catch (err) {
-              setError(String(err));
-            }
-          }}
-        />
-      )}
-
-      {editOpen && preset && (
-        <EditPresetDialog
-          preset={preset}
-          onCancel={() => setEditOpen(false)}
-          onConfirm={async (name, icon) => {
-            try {
-              if (name !== preset.name) {
-                await renamePreset(domain, preset.id, name);
-              }
-              if ((icon ?? null) !== (preset.icon ?? null)) {
-                await setPresetIcon(domain, preset.id, icon);
-              }
-              setNotice("已更新预设名称／图标（成员与实际部署未改变）。");
-              setError(null);
-              setEditOpen(false);
-              setVersion((value) => value + 1);
-              await onLibrarySaved?.();
-            } catch (err) {
-              setError(String(err));
-            }
-          }}
-        />
-      )}
 
       {deployOpen && preset && (
         <PresetDeployDialog
@@ -978,17 +784,6 @@ export function PresetPage({
         />
       )}
 
-      {deleteTarget && (
-        <ConfirmDialog
-          title="删除预设"
-          subtitle="只删除组合定义，不撤销已部署的副本；成员的技能与部署保持不变。"
-          message={`将删除预设「${deleteTarget.name}」（${deleteTarget.id}，${deleteTarget.members.length} 个成员）。`}
-          confirmLabel="删除"
-          danger
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => void confirmDelete()}
-        />
-      )}
 
       {detail && (
         <SkillDetail
@@ -1024,132 +819,5 @@ export function PresetPage({
         />
       )}
     </div>
-  );
-}
-
-/** 新建预设：名称 + 图标（图标可后改）。 */
-function CreatePresetDialog({
-  domain,
-  onCancel,
-  onConfirm,
-}: {
-  domain: Domain;
-  onCancel: () => void;
-  onConfirm: (name: string, icon: string, domain: Domain) => void | Promise<void>;
-}) {
-  const [name, setName] = useState("");
-  const [icon, setIcon] = useState(PRESET_ICON_OPTIONS[0].key);
-  const [targetDomain, setTargetDomain] = useState<Domain>(domain);
-  return (
-    <Dialog
-      title="新建预设"
-      subtitle="创建后进入对应技能库，用卡片开关选择组合成员。"
-      onClose={onCancel}
-      footer={
-        <>
-          <span className="text-[12px] text-faint">成员稍后在预设详情中用卡片开关选择。</span>
-          <div className="flex gap-2.5">
-            <Button onClick={onCancel}>取消</Button>
-            <Button
-              kind="primary"
-              disabled={name.trim() === ""}
-              onClick={() => void onConfirm(name.trim(), icon, targetDomain)}
-            >
-              创建
-            </Button>
-          </div>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-[1fr_230px] gap-4">
-          <div>
-            <label className="mb-2 block text-[12px] text-faint">预设名称</label>
-            <input
-              autoFocus
-              className="field-input"
-              value={name}
-              placeholder="例如：Rust 依赖检查"
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          <div>
-            <label className="mb-2 block text-[12px] text-faint">管理域</label>
-            <select
-              className="field-input"
-              value={targetDomain}
-              onChange={(event) => setTargetDomain(event.target.value as Domain)}
-            >
-              <option value="code">编码技能库</option>
-              <option value="lobster">龙虾技能库</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label className="mb-2 block text-[12px] text-faint">图标</label>
-          <PresetIconPicker value={icon} onChange={setIcon} />
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
-/** 重命名 / 改图标：仅改图标也可保存。 */
-function EditPresetDialog({
-  preset,
-  onCancel,
-  onConfirm,
-}: {
-  preset: PresetView;
-  onCancel: () => void;
-  onConfirm: (name: string, icon: string | null) => void | Promise<void>;
-}) {
-  const [name, setName] = useState(preset.name);
-  const [icon, setIcon] = useState<string | null>(preset.icon ?? null);
-  const changed = name.trim() !== preset.name || (icon ?? null) !== (preset.icon ?? null);
-  return (
-    <Dialog
-      title="重命名 / 图标"
-      onClose={onCancel}
-      footer={
-        <>
-          <div className="flex gap-2.5">
-            <Button onClick={onCancel}>取消</Button>
-            <Button
-              kind="primary"
-              disabled={!changed || name.trim() === ""}
-              onClick={() => void onConfirm(name.trim(), icon)}
-            >
-              保存
-            </Button>
-          </div>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <div>
-          <label className="mb-2 block text-[12px] text-faint">预设名称</label>
-          <input
-            autoFocus
-            className="field-input"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </div>
-        <div>
-          <label className="mb-2 block text-[12px] text-faint">
-            图标（当前：{presetIconOption(icon).label}）
-          </label>
-          <PresetIconPicker value={icon} onChange={setIcon} />
-          <button
-            type="button"
-            onClick={() => setIcon(null)}
-            className="mt-2 text-[12px] text-muted hover:text-accent"
-          >
-            清除图标
-          </button>
-        </div>
-      </div>
-    </Dialog>
   );
 }

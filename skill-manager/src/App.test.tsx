@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { checkNow, syncPull, syncPush, type PullReportView } from "./services/client";
@@ -19,6 +19,7 @@ vi.mock("./services/client", async (importOriginal) => ({
   onVaultChanged: vi.fn(async () => () => {}),
   onScheduleFinished: vi.fn(async () => () => {}),
   currentSchedule: vi.fn(async () => null),
+  listPresets: vi.fn(async () => []),
   syncPull: vi.fn(),
   syncPush: vi.fn(),
   checkNow: vi.fn(),
@@ -39,7 +40,8 @@ it("预设页可从指令左侧拉取，等待期间能切页且不会重复触�
   let finish!: (report: PullReportView) => void;
   vi.mocked(syncPull).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "预设" }));
+  const presetDomain = await screen.findByRole("group", { name: "预设所属库" });
+  fireEvent.click(within(presetDomain).getByRole("button", { name: "编码库" }));
   expect(screen.getByTestId("preset-refresh")).toHaveTextContent("0");
   const pull = screen.getByRole("button", { name: "检查并拉取 SkillManagerVault" });
   const instruction = screen.getByRole("button", { name: "Agent 指令" });
@@ -56,7 +58,7 @@ it("预设页可从指令左侧拉取，等待期间能切页且不会重复触�
   expect(await screen.findByText("已拉取最新技能库")).toBeInTheDocument();
   expect(screen.getByTestId("library-refresh")).toHaveTextContent("1");
   expect(pull).toBeEnabled();
-  fireEvent.click(screen.getByRole("button", { name: "预设" }));
+  fireEvent.click(within(screen.getByRole("group", { name: "预设所属库" })).getByRole("button", { name: "编码库" }));
   expect(screen.getByTestId("preset-refresh")).toHaveTextContent("1");
   expect(syncPush).not.toHaveBeenCalled();
   expect(checkNow).not.toHaveBeenCalled();

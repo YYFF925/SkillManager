@@ -117,18 +117,12 @@ export function InstructionEditor({ agents, onClose, onSaved }: InstructionEdito
   return (
     <Dialog
       title="Agent 指令文件"
-      subtitle="指令源保存在 SkillManagerVault 中并随库同步；保存后按“全局在前、专属在后”覆盖本机已启用目标。"
       width="w-[880px]"
       onClose={onClose}
       footer={
-        <>
-          <span className="text-[12px] text-faint">
-            只有一个“保存”按钮；保存后保持打开，切换工具会保留未保存草稿。
-          </span>
-          <Button kind="primary" disabled={busy || loading} onClick={() => void save()}>
-            {busy ? "正在保存…" : "保存"}
-          </Button>
-        </>
+        <Button kind="primary" disabled={busy || loading} onClick={() => void save()}>
+          {busy ? "正在保存…" : "保存"}
+        </Button>
       }
     >
       <div className="flex gap-4">
@@ -233,16 +227,6 @@ export function InstructionEditor({ agents, onClose, onSaved }: InstructionEdito
             </div>
           )}
 
-          {preview !== undefined && (
-            <div>
-              <p className="mb-1 text-[12px] text-muted">
-                合成预览（当前已保存的源内容）
-              </p>
-              <pre className="read-text max-h-[140px] overflow-auto text-[11px]">
-                {preview.trim().length > 0 ? preview : "（空）"}
-              </pre>
-            </div>
-          )}
         </div>
       </div>
     </Dialog>

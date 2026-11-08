@@ -49,6 +49,8 @@ export interface AppShellProps {
   /** 标题右侧数量徽标；未接入真实数据时不传。 */
   count?: number;
   headerExtra?: ReactNode;
+  /** 顶层导航与 Agent 分组之间的侧栏区（预设）。 */
+  betweenNav?: ReactNode;
   vaultStatus?: VaultStatus;
   update?: SidebarUpdate;
   children: ReactNode;
@@ -114,6 +116,7 @@ export function AppShell({
   subtitle,
   count,
   headerExtra,
+  betweenNav,
   vaultStatus,
   update,
   children,
@@ -165,6 +168,7 @@ export function AppShell({
                   <span className="truncate">{group.action.label}</span>
                 </button>
               )}
+              {index === 0 && betweenNav}
             </div>
           ))}
         </nav>

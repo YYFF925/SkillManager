@@ -124,12 +124,12 @@ Agent 改界面前读本文。视觉画布是可操作原型，不是本文的�
 
 改原型的哪一块，就改哪个 React 文件。完整表在 `.agents/skills/frontend-design/SKILL.md`。
 
-- 外壳：`sidebar` / `head` → `AppShell.tsx`
-- 技能库：`library` / `libraryCard` → `LibraryPage.tsx`
+- 外壳：`sidebar` / `head` → `AppShell.tsx`；侧栏预设区 → `SidebarPresets.tsx`
+- 技能库：`library` / `libraryCard` / `filter-menu` / `category-rail` → `LibraryPage.tsx`、`FilterMenu.tsx`、`CategoryRail.tsx`
 - Hermes：`profiles` → `HermesPage.tsx`
 - 工具中心：`toolCenter` / `toolCard` → `ToolCenterPage.tsx`
-- 预设：`presetPage` → `PresetPage.tsx`
-- Agent：`agents` → `AgentPage.tsx`
+- 预设：`presetPage`（成员浏览）→ `PresetPage.tsx`；列表在侧栏
+- Agent：`agents` / `agent-pill` → `AgentPage.tsx`、`AgentPresetPills.tsx`
 - 设置：`settings` → `SettingsPage.tsx` + `AgentSettings` / `SyncStatus` / `DiagnosticsPanel`
 - 共用控件：`.btn` `.seg` `.badge` `.dialog` → `components/ui.tsx`
 - 弹窗：`skillDialog` `deployDialog` `intakeDialog` `drawInstructions` 等 → 同名职责的 `components/*.tsx`

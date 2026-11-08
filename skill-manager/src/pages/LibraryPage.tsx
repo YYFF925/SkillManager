@@ -16,7 +16,6 @@ import {
   LayoutGrid,
   List,
   MoreHorizontal,
-  Pencil,
   Plus,
   RefreshCw,
   Rocket,
@@ -62,16 +61,18 @@ import {
   CopyToDomainDialog,
   ManageTagsDialog,
   MoveCategoryDialog,
-  RenameCategoryDialog,
   TagPickerDialog,
   summarizeManageItems,
 } from "../components/SkillDialogs";
 import { FetchProgressLine } from "../components/FetchProgress";
+import { FilterMenu } from "../components/FilterMenu";
+import { CategoryRail, CATEGORY_UNCATEGORIZED } from "../components/CategoryRail";
+import { toggleTagSelection, pruneSelectedTags, type TagMode } from "../lib/tagFilter";
 import { TaskDialog } from "../components/TaskDialog";
 import { Badge, Button, ConfirmDialog, Notice, Segmented } from "../components/ui";
 
 /** 分类栏/标签栏的特殊取值：与 core 的“未分类”“无标签”筛选对应。 */
-const UNCATEGORIZED = "__none";
+const UNCATEGORIZED = CATEGORY_UNCATEGORIZED;
 const NO_TAG = "__none";
 
 /** 卡片菜单的大致高度，用于贴近窗口底部时的翻转定位。 */
@@ -134,7 +135,8 @@ export function LibraryPage({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
-  const [tag, setTag] = useState<string | null>(null);
+  const [tagMode, setTagMode] = useState<TagMode>("all");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [layout, setLayout] = useState<Layout>("grid");
   const [multi, setMulti] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -150,7 +152,6 @@ export function LibraryPage({
     { mode: "add" | "remove"; targets: string[] } | null
   >(null);
   const [moveTarget, setMoveTarget] = useState<SkillSummary | null>(null);
-  const [renameCategoryTarget, setRenameCategoryTarget] = useState<string | null>(null);
   const [manageTags, setManageTags] = useState(false);
   const [deployTarget, setDeployTarget] = useState<string[] | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string[] | null>(null);
@@ -184,15 +185,19 @@ export function LibraryPage({
           return;
         }
         const hasFilter =
-          debouncedQuery.trim().length > 0 || category !== null || tag !== null || !!deployedTo || !!preset;
+          debouncedQuery.trim().length > 0 ||
+          category !== null ||
+          tagMode !== "all" ||
+          !!deployedTo ||
+          !!preset;
         const result = hasFilter
           ? await listSkills({
               domain,
               query: debouncedQuery.trim() || undefined,
               category: category !== null && category !== UNCATEGORIZED ? category : undefined,
               uncategorized: category === UNCATEGORIZED || undefined,
-              tags: tag !== null && tag !== NO_TAG ? [tag] : undefined,
-              noTag: tag === NO_TAG || undefined,
+              tags: tagMode === "and" ? selectedTags : undefined,
+              noTag: tagMode === "none" || undefined,
               deployedTo: deployedTo || undefined,
               preset: preset || undefined,
             })
@@ -218,12 +223,12 @@ export function LibraryPage({
     return () => {
       cancelled = true;
     };
-  }, [domain, debouncedQuery, category, tag, deployedTo, preset, reloadToken, version, onCount]);
+  }, [domain, debouncedQuery, category, tagMode, selectedTags, deployedTo, preset, reloadToken, version, onCount]);
 
   // 筛选或搜索变化时清空批量选择（与原型一致，避免作用于不可见条目）。
   useEffect(() => {
     setSelected([]);
-  }, [domain, debouncedQuery, category, tag, deployedTo, preset, deployFilter]);
+  }, [domain, debouncedQuery, category, tagMode, selectedTags, deployedTo, preset, deployFilter]);
 
   // 从其他页面（Hermes 详情“前往技能库编辑”）跳转进来：直接打开目标技能详情。
   useEffect(() => {
@@ -333,20 +338,28 @@ export function LibraryPage({
         counts.set(skill.category, (counts.get(skill.category) ?? 0) + 1);
       }
     }
-    return {
-      named: [...counts.entries()].sort((left, right) => (left[0] < right[0] ? -1 : 1)),
-      uncategorized,
-    };
+    return { namedCounts: counts, uncategorized };
   }, [all]);
 
-  const categoryNames = railCategories.named.map(([name]) => name);
+  const categoryNames = [...railCategories.namedCounts.keys()].sort((left, right) =>
+    left < right ? -1 : 1,
+  );
 
   // 切换分类后失效的标签筛选自动清除。
   useEffect(() => {
-    if (tag !== null && tag !== NO_TAG && !tagCandidates.includes(tag)) {
-      setTag(null);
+    if (tagMode !== "and") {
+      return;
     }
-  }, [tag, tagCandidates]);
+    const next = pruneSelectedTags(selectedTags, tagCandidates);
+    if (next.length !== selectedTags.length) {
+      if (next.length === 0) {
+        setTagMode("all");
+        setSelectedTags([]);
+      } else {
+        setSelectedTags(next);
+      }
+    }
+  }, [tagMode, selectedTags, tagCandidates]);
 
   // 卡片菜单：点外部或 Escape 关闭。
   useEffect(() => {
@@ -403,16 +416,28 @@ export function LibraryPage({
   }
 
   const filterActive =
-    debouncedQuery.trim().length > 0 || category !== null || tag !== null || deployFilter !== "all" || !!deployedTo || !!preset;
+    debouncedQuery.trim().length > 0 ||
+    category !== null ||
+    tagMode !== "all" ||
+    deployFilter !== "all" ||
+    !!deployedTo ||
+    !!preset;
 
   function clearFilters() {
     setQuery("");
     setDebouncedQuery("");
     setCategory(null);
-    setTag(null);
+    setTagMode("all");
+    setSelectedTags([]);
     setDeployFilter("all");
     setDeployedTo("");
     setPreset("");
+  }
+
+  function onToggleTag(name: string) {
+    const next = toggleTagSelection(tagMode, selectedTags, name);
+    setTagMode(next.mode);
+    setSelectedTags(next.selected);
   }
 
   const selectedSkills = skills.filter((skill) => selected.includes(referenceOf(skill)));
@@ -455,7 +480,6 @@ export function LibraryPage({
       if (category === from) {
         setCategory(result.to);
       }
-      setRenameCategoryTarget(null);
       setVersion((value) => value + 1);
       void syncDeployments();
     } catch (err) {
@@ -557,18 +581,27 @@ export function LibraryPage({
             value={deployFilter}
             onChange={(value) => setDeployFilter(value as DeployFilter)}
           />
-          <select aria-label="指定部署目标" value={deployedTo}
-            onChange={(event) => setDeployedTo(event.target.value)}
-            className="h-10 rounded-lg border border-line bg-panel px-3 text-[13px] text-ink-3">
-            <option value="">全部部署目标</option>
-            {deployedOptions.map((target) => <option key={target} value={target}>{targetLabel(target, agents)}</option>)}
-          </select>
-          <select aria-label="所属预设" value={preset}
-            onChange={(event) => setPreset(event.target.value)}
-            className="h-10 rounded-lg border border-line bg-panel px-3 text-[13px] text-ink-3">
-            <option value="">全部预设</option>
-            {presets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
+          <FilterMenu
+            ariaLabel="指定部署目标"
+            value={deployedTo}
+            onChange={setDeployedTo}
+            options={[
+              { value: "", label: "全部部署目标" },
+              ...deployedOptions.map((target) => ({
+                value: target,
+                label: targetLabel(target, agents),
+              })),
+            ]}
+          />
+          <FilterMenu
+            ariaLabel="所属预设"
+            value={preset}
+            onChange={setPreset}
+            options={[
+              { value: "", label: "全部预设" },
+              ...presets.map((item) => ({ value: item.id, label: item.name })),
+            ]}
+          />
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2.5">
           <Button compact disabled={upstream.busy} onClick={() => void upstream.checkAll()}>
@@ -639,35 +672,41 @@ export function LibraryPage({
         <span className="mr-0.5 text-[12px] text-faint">标签</span>
         <button
           type="button"
-          onClick={() => setTag(null)}
+          onClick={() => onToggleTag("")}
+          aria-pressed={tagMode === "all"}
           className={`rounded-full px-2 text-[12px] leading-5 ${
-            tag === null ? "bg-accent text-white" : "bg-subtle text-muted"
+            tagMode === "all" ? "bg-accent text-white" : "bg-subtle text-muted"
           }`}
         >
           全部标签
         </button>
         <button
           type="button"
-          onClick={() => setTag(NO_TAG)}
+          onClick={() => onToggleTag(NO_TAG)}
+          aria-pressed={tagMode === "none"}
           className={`rounded-full border border-line px-2 text-[12px] leading-[18px] ${
-            tag === NO_TAG ? "bg-accent text-white" : "text-muted"
+            tagMode === "none" ? "bg-accent text-white" : "text-muted"
           }`}
         >
           无标签
         </button>
-        {tagCandidates.map((candidate) => (
-          <button
-            key={candidate}
-            type="button"
-            onClick={() => setTag(candidate)}
-            title={candidate}
-            className={`inline-flex items-center rounded-full text-[12px] leading-5 ${
-              tag === candidate ? "bg-accent px-2 text-white" : "px-0"
-            }`}
-          >
-            {tag === candidate ? candidate : <TagChip tag={candidate} />}
-          </button>
-        ))}
+        {tagCandidates.map((candidate) => {
+          const on = tagMode === "and" && selectedTags.includes(candidate);
+          return (
+            <button
+              key={candidate}
+              type="button"
+              onClick={() => onToggleTag(candidate)}
+              title={candidate}
+              aria-pressed={on}
+              className={`inline-flex items-center rounded-full text-[12px] leading-5 ${
+                on ? "bg-accent px-2 text-white" : "px-0"
+              }`}
+            >
+              {on ? candidate : <TagChip tag={candidate} />}
+            </button>
+          );
+        })}
         <button
           type="button"
           title="管理标签"
@@ -755,66 +794,15 @@ export function LibraryPage({
       )}
 
       <div className="flex min-h-0 flex-1 items-stretch gap-4">
-        <aside className="category-rail w-[148px] shrink-0">
-          <button
-            type="button"
-            onClick={() => setCategory(null)}
-            className={`mb-0.5 flex h-[35px] w-full items-center gap-1.5 rounded-md px-2.5 text-left text-[14px] ${
-              category === null ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
-            }`}
-          >
-            全部分类
-            <span className="grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
-              {all?.total ?? 0}
-            </span>
-          </button>
-          {railCategories.named.map(([name, count]) => (
-            <div
-              key={name}
-              className={`group mb-0.5 flex h-[35px] w-full items-center gap-0.5 rounded-md px-2.5 text-[14px] ${
-                category === name ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
-              }`}
-            >
-              <button
-                type="button"
-                title={name}
-                onClick={() => setCategory(name)}
-                className="min-w-0 flex-1 truncate text-left"
-              >
-                {name}
-              </button>
-              <button
-                type="button"
-                title="重命名"
-                aria-label={`重命名分类 ${name}`}
-                onClick={() => {
-                  setCategory(name);
-                  setRenameCategoryTarget(name);
-                }}
-                className="grid size-5 shrink-0 place-items-center rounded-[5px] text-faint opacity-0 hover:bg-hover hover:text-accent group-hover:opacity-100 group-focus-within:opacity-100"
-              >
-                <Pencil className="size-3.5" strokeWidth={1.75} />
-              </button>
-              <span className="grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
-                {count}
-              </span>
-            </div>
-          ))}
-          {railCategories.uncategorized > 0 && (
-            <button
-              type="button"
-              onClick={() => setCategory(UNCATEGORIZED)}
-              className={`mb-0.5 flex h-[35px] w-full items-center gap-1.5 rounded-md px-2.5 text-left text-[14px] ${
-                category === UNCATEGORIZED ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
-              }`}
-            >
-              未分类
-              <span className="ml-auto grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
-                {railCategories.uncategorized}
-              </span>
-            </button>
-          )}
-        </aside>
+        <CategoryRail
+          domain={domain}
+          total={all?.total ?? 0}
+          namedCounts={railCategories.namedCounts}
+          uncategorizedCount={railCategories.uncategorized}
+          selected={category}
+          onSelect={setCategory}
+          onRenameNamed={(from, to) => void renameRailCategory(from, to)}
+        />
 
         <div className="card-pane">
           <div
@@ -1121,13 +1109,6 @@ export function LibraryPage({
         />
       )}
 
-      {renameCategoryTarget && (
-        <RenameCategoryDialog
-          current={renameCategoryTarget}
-          onCancel={() => setRenameCategoryTarget(null)}
-          onConfirm={(next) => void renameRailCategory(renameCategoryTarget, next)}
-        />
-      )}
 
       {moveTarget && (
         <MoveCategoryDialog

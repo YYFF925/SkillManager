@@ -214,7 +214,7 @@ export function Dialog({
         </div>
         <div className="min-h-0 flex-1 overflow-auto px-6 py-5">{children}</div>
         {footer && (
-          <div className="flex items-center justify-between gap-4 border-t border-line-soft px-6 py-[15px]">
+          <div className="flex items-center justify-end gap-4 border-t border-line-soft px-6 py-[15px]">
             {footer}
           </div>
         )}
@@ -248,23 +248,20 @@ export function ConfirmDialog({
       width="w-[480px]"
       onClose={onCancel}
       footer={
-        <>
-          <span className="text-[12px] text-faint" />
-          <div className="flex gap-2.5">
-            <Button onClick={onCancel}>取消</Button>
-            <button
-              type="button"
-              onClick={onConfirm}
-              className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border px-3 text-[13px] transition-colors ${
-                danger
-                  ? "border-danger bg-danger text-white hover:opacity-90"
-                  : "border-accent-strong bg-accent-strong font-medium text-white hover:bg-accent"
-              }`}
-            >
-              {confirmLabel}
-            </button>
-          </div>
-        </>
+        <div className="flex w-full items-center justify-end gap-2.5">
+          <Button onClick={onCancel}>取消</Button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border px-3 text-[13px] transition-colors ${
+              danger
+                ? "border-danger bg-danger text-white hover:opacity-90"
+                : "border-accent-strong bg-accent-strong font-medium text-white hover:bg-accent"
+            }`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
       }
     >
       <p className="text-[13px] leading-[21px] text-ink-3">{message}</p>

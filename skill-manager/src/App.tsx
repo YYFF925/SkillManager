@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Bot, Blocks, FileText, FolderTree, Layers, RefreshCw, Settings, Share2, Wrench } from "lucide-react";
+import { Bot, FileText, FolderTree, Layers, RefreshCw, Settings, Share2, Wrench } from "lucide-react";
 
 import { AppShell, type NavGroup, type NavItem } from "./components/AppShell";
+import { SidebarPresets } from "./components/SidebarPresets";
 import { LibraryPage } from "./pages/LibraryPage";
 import { AgentPage } from "./pages/AgentPage";
 import { HermesPage } from "./pages/HermesPage";
@@ -135,6 +136,10 @@ export function App() {
   const [titleOverride, setTitleOverride] = useState<string | null>(null);
   /** 从 Hermes 详情“前往技能库编辑”时，技能库要直接打开的技能引用。 */
   const [libraryFocus, setLibraryFocus] = useState<string | null>(null);
+  /** 侧栏预设区当前管理域与选中项。 */
+  const [presetDomain, setPresetDomain] = useState<Domain>("code");
+  const [presetId, setPresetId] = useState<string | null>(null);
+  const [presetReload, setPresetReload] = useState(0);
   /** 指令编辑器是否打开。 */
   const [instructionOpen, setInstructionOpen] = useState(false);
   /** 本机设置（主题/字号等）；由本页统一读取并应用到 `<html>`。 */
@@ -323,7 +328,6 @@ export function App() {
           { key: "library-lobster", label: "龙虾技能库", icon: Layers },
           { key: "hermes", label: "Hermes 档案", icon: Bot },
           { key: "tools", label: "工具中心", icon: Wrench },
-          { key: "presets", label: "预设", icon: Blocks },
         ],
       },
       {
@@ -415,6 +419,46 @@ export function App() {
           </button>
         </>
       }
+      betweenNav={
+        <SidebarPresets
+          agents={agents}
+          domain={presetDomain}
+          selectedId={presetId}
+          active={activeKey === "presets"}
+          reloadToken={reloadToken + presetReload}
+          onDomainChange={(domain) => {
+            setPresetDomain(domain);
+            setActiveKey("presets");
+            setCount(null);
+            setSubtitle(null);
+            setTitleOverride(null);
+          }}
+          onSelect={(id) => {
+            setPresetId(id);
+            setActiveKey("presets");
+            setCount(null);
+            setSubtitle(null);
+            setTitleOverride(null);
+          }}
+          onCreateNavigate={(id) => {
+            setPresetId(id);
+            setActiveKey("presets");
+            setPresetReload((value) => value + 1);
+            setCount(null);
+            setSubtitle(null);
+            setTitleOverride(null);
+          }}
+          onNotice={(message) => {
+            setNotice(message);
+            setError(null);
+          }}
+          onChanged={() => {
+            setPresetReload((value) => value + 1);
+            setReloadToken((value) => value + 1);
+            void saveFlow.afterSave();
+          }}
+        />
+      }
       vaultStatus={{ label: "SkillManagerVault", detail: vault.root, ok: true }}
     >
       {error && <div className="mb-3"><Notice tone="danger">{error}</Notice></div>}
@@ -457,7 +501,10 @@ export function App() {
         <PresetPage
           os={os}
           agents={agents}
-          reloadToken={reloadToken}
+          reloadToken={reloadToken + presetReload}
+          domain={presetDomain}
+          selectedId={presetId}
+          onSelectedIdChange={setPresetId}
           onCount={setCount}
           onTitle={setTitleOverride}
           onLibrarySaved={saveFlow.afterSave}
