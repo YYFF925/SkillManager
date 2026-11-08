@@ -141,6 +141,8 @@ export function App() {
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [schedule, setSchedule] = useState<ScheduleReportView | null>(null);
   const [appUpdate, setAppUpdate] = useState<AppUpdate | null>(null);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateAutoInstall, setUpdateAutoInstall] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,6 +182,7 @@ export function App() {
     void checkForAppUpdate({ silent: true }).then((update) => {
       if (!cancelled && update) {
         setAppUpdate(update);
+        setUpdateOpen(true);
       }
     });
     return () => {
@@ -375,6 +378,17 @@ export function App() {
       title={pageTitle}
       subtitle={subtitle ?? undefined}
       count={count ?? undefined}
+      update={
+        appUpdate
+          ? {
+              version: appUpdate.version,
+              onInstall: () => {
+                setUpdateAutoInstall(true);
+                setUpdateOpen(true);
+              },
+            }
+          : undefined
+      }
       headerExtra={
         <>
           {notice && <span className="text-[12px] text-muted">{notice}</span>}
@@ -485,6 +499,10 @@ export function App() {
             setTitleOverride(null);
             setNotice(null);
           }}
+          onAppUpdateFound={(update) => {
+            setAppUpdate(update);
+            setUpdateOpen(true);
+          }}
           reloadToken={reloadToken}
         />
       ) : (
@@ -502,8 +520,15 @@ export function App() {
       />
     )}
     {saveFlow.dialog}
-    {appUpdate && (
-      <AppUpdateDialog update={appUpdate} onDismiss={() => setAppUpdate(null)} />
+    {appUpdate && updateOpen && (
+      <AppUpdateDialog
+        update={appUpdate}
+        autoInstall={updateAutoInstall}
+        onDismiss={() => {
+          setUpdateOpen(false);
+          setUpdateAutoInstall(false);
+        }}
+      />
     )}
     </>
   );

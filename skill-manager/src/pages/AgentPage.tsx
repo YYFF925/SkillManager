@@ -619,7 +619,7 @@ function DeploymentList({
   useEffect(() => {
     onMeta({
       count: visible.length,
-      subtitle: "本机部署清单 · 同一个技能可部署到多个目标",
+      subtitle: "",
     });
   }, [onMeta, visible.length]);
 
