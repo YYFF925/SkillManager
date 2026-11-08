@@ -9,7 +9,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
-import { AppUpdateDialog } from "../components/AppUpdateDialog";
 import { Segmented, Notice, Badge, Button } from "../components/ui";
 import { checkForAppUpdate, currentAppVersion, type AppUpdate } from "../lib/appUpdate";
 import { AgentSettings } from "../components/AgentSettings";
@@ -46,6 +45,8 @@ export interface SettingsPageProps {
   onAgentsChanged: (agents: AgentView[]) => void;
   /** 点击 Agent 名称前往该目标的本地技能视图。 */
   onOpenTarget: (target: string) => void;
+  /** 手动检查到新版本后交给整页共享的更新提示处理。 */
+  onAppUpdateFound: (update: AppUpdate) => void;
   reloadToken: number;
 }
 
@@ -88,21 +89,18 @@ function Panel({
   );
 }
 
-/** 配置行（原型 .settings-panel 的一行）：左标签与说明，右控件或只读值。 */
+/** 配置行（原型 .settings-panel 的一行）：左标签，右控件或只读值。 */
 function SettingRow({
   label,
-  description,
   children,
 }: {
   label: string;
-  description?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-faint py-3 first:pt-0 last:border-b-0 last:pb-0">
       <div className="min-w-0">
         <p className="text-[13px] text-ink-2">{label}</p>
-        {description && <p className="mt-1 text-[12px] text-muted">{description}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-2.5">{children}</div>
     </div>
@@ -131,6 +129,7 @@ export function SettingsPage({
   agents,
   onAgentsChanged,
   onOpenTarget,
+  onAppUpdateFound,
   reloadToken,
   schedule,
 }: SettingsPageProps) {
@@ -142,7 +141,6 @@ export function SettingsPage({
   const [checking, setChecking] = useState(false);
   const [appVersion, setAppVersion] = useState("…");
   const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
-  const [appUpdate, setAppUpdate] = useState<AppUpdate | null>(null);
   const [manualSchedule, setManualSchedule] = useState<ScheduleReportView | null>(null);
   const latestSchedule = manualSchedule ?? schedule;
   useEffect(() => setManualSchedule(null), [schedule]);
@@ -246,7 +244,7 @@ export function SettingsPage({
     try {
       const found = await checkForAppUpdate();
       if (found) {
-        setAppUpdate(found);
+        onAppUpdateFound(found);
         setNotice(`发现新版本 ${found.version}。`);
       } else {
         setNotice("当前已是最新版本。");
@@ -287,7 +285,6 @@ export function SettingsPage({
 
           <SettingRow
             label="共享技能目录"
-            description="自动识别当前用户主目录下的 .agents/skills，无需设置。"
           >
             <ReadOnlyValue mono>{sharedDir ?? "读取中…"}</ReadOnlyValue>
           </SettingRow>
@@ -324,14 +321,12 @@ export function SettingsPage({
 
           <SettingRow
             label="关闭行为"
-            description="关闭窗口后留在后台；托盘右键「退出」才结束运行。"
           >
             <ReadOnlyValue>托盘模式</ReadOnlyValue>
           </SettingRow>
 
           <SettingRow
             label="软件版本"
-            description="启动时检查 GitHub 更新源；发现新版本需确认后安装。"
           >
             <ReadOnlyValue mono>{appVersion}</ReadOnlyValue>
             <Button compact disabled={checkingAppUpdate} onClick={() => void checkAppUpdate()}>
@@ -385,7 +380,6 @@ export function SettingsPage({
         <div className="flex flex-col">
           <SettingRow
             label="检查频率"
-            description="后台检查自己的库、上游仓库和工具版本；上游更新仍由你确认（默认 1 小时）。"
           >
             <Segmented
               options={FREQUENCY_OPTIONS}
@@ -397,7 +391,6 @@ export function SettingsPage({
 
           <SettingRow
             label="立即检查"
-            description="检查上游变化、同步自己的库并检查工具版本；上游更新仍需确认。"
           >
             <Button compact disabled={checking || checking} onClick={() => void checkNow()}>
               <RefreshCw className="size-3.5" strokeWidth={1.75} />
@@ -448,9 +441,6 @@ export function SettingsPage({
       </Panel>
 
       {notice && <Notice>{notice}</Notice>}
-      {appUpdate && (
-        <AppUpdateDialog update={appUpdate} onDismiss={() => setAppUpdate(null)} />
-      )}
     </div>
   );
 }

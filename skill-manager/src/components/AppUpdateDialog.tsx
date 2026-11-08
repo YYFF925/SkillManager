@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { AppUpdate } from "../lib/appUpdate";
 import { Button, Dialog, Notice } from "./ui";
@@ -6,14 +6,18 @@ import { Button, Dialog, Notice } from "./ui";
 /** 发现应用新版本后的确认与安装进度。 */
 export function AppUpdateDialog({
   update,
+  autoInstall = false,
   onDismiss,
 }: {
   update: AppUpdate;
+  /** 从左下角「立即更新」进入时直接开始下载安装。 */
+  autoInstall?: boolean;
   onDismiss: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
+  const started = useRef(false);
 
   async function install() {
     setBusy(true);
@@ -29,6 +33,14 @@ export function AppUpdateDialog({
       setProgress(null);
     }
   }
+
+  useEffect(() => {
+    if (!autoInstall || started.current) {
+      return;
+    }
+    started.current = true;
+    void install();
+  }, [autoInstall, install]);
 
   return (
     <Dialog

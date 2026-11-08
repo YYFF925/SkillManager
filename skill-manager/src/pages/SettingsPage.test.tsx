@@ -148,6 +148,7 @@ function renderSettings() {
       agents={[codex, hermes]}
       onAgentsChanged={() => {}}
       onOpenTarget={() => {}}
+      onAppUpdateFound={() => {}}
       reloadToken={0}
     />,
   );

@@ -33,6 +33,12 @@ export interface VaultStatus {
   ok: boolean;
 }
 
+/** 左下角常驻的应用更新提示；关闭弹窗后仍保留，直到装上或退出。 */
+export interface SidebarUpdate {
+  version: string;
+  onInstall: () => void;
+}
+
 export interface AppShellProps {
   groups: NavGroup[];
   settingsItem: NavItem;
@@ -44,6 +50,7 @@ export interface AppShellProps {
   count?: number;
   headerExtra?: ReactNode;
   vaultStatus?: VaultStatus;
+  update?: SidebarUpdate;
   children: ReactNode;
 }
 
@@ -108,6 +115,7 @@ export function AppShell({
   count,
   headerExtra,
   vaultStatus,
+  update,
   children,
 }: AppShellProps) {
   const SettingsIcon = settingsItem.icon;
@@ -162,6 +170,21 @@ export function AppShell({
         </nav>
 
         <div className="border-t border-line-soft px-2 py-2">
+          {update && (
+            <div className="mb-1.5 rounded-md border border-line bg-panel px-2.5 py-2">
+              <p className="truncate text-[12px] text-ink-2">
+                发现新版本{" "}
+                <span className="font-mono text-[11px] text-muted">{update.version}</span>
+              </p>
+              <button
+                type="button"
+                onClick={update.onInstall}
+                className="mt-1.5 flex h-[26px] w-full items-center justify-center rounded-md bg-accent text-[12px] font-medium text-white transition-opacity hover:opacity-90"
+              >
+                立即更新
+              </button>
+            </div>
+          )}
           {vaultStatus && (
             <div className="flex items-start gap-2 px-2 py-1.5">
               <span

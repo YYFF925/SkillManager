@@ -390,7 +390,7 @@
   可用的按钮、侧栏导航、可点击卡片、文件入口及选择控件在鼠标悬停时必须显示手型光标；禁用控件不显示可点击手型。
 - **FR-053**: 应用必须提供可获取的崩溃记录、诊断信息与日志用于 Agent 排查，以及技能库容量报告（占用与较大技能）；两者均必须同时可由 GUI 与 CLI 获取，诊断导出返回真实文件路径。排查资料包含版本、平台、有关路径、操作/错误与发生时间，由用户主动获取；不记录认证凭据或令牌，不自动上传诊断资料。
 - **FR-054**: 界面语言仅提供简体中文；不做旧版数据兼容与迁移。
-- **FR-059**: 桌面应用必须在启动后检查 GitHub 公开更新源是否有更高 SemVer 版本；发现更新后提示版本与说明，经用户确认才下载、验签、安装并重启。检查失败或已是最新不得打断使用。设置页「全局配置」展示当前版本并提供手动检查。更新源为公开仓库 `YYFF925/SkillManager` 的 HTTPS 静态清单（`updater-manifests`）与 GitHub Releases 产物，使用 Tauri updater 验签；不得把令牌写进应用。仓库不接 Issue / Pull Request。macOS（当前交付 Apple Silicon）与 Windows（x64 NSIS）都必须能检查并安装各自平台的更新，两平台可错开发布。本能力不属于技能管理双入口，不要求 CLI。尚未含 updater 的旧安装包不能被远程升级，需手动安装一次含 updater 的版本。版本号为 SemVer `MAJOR.MINOR.PATCH`：每次发布应用更新升 PATCH；MINOR 不自动升；MAJOR 仅用户明确要求大更新时升。
+- **FR-059**: 桌面应用必须在启动后检查 GitHub 公开更新源是否有更高 SemVer 版本；发现更新后提示版本与说明，经用户确认才下载、验签、安装并重启。检查失败或已是最新不得打断使用。设置页「全局配置」展示当前版本并提供手动检查；用户关闭更新提示后，应用左下角必须常驻「发现新版本 + 立即更新」入口，直到安装完成或退出，不得只靠一次弹窗。更新源为公开仓库 `YYFF925/SkillManager` 的 HTTPS 静态清单（`updater-manifests`）与 GitHub Releases 产物，使用 Tauri updater 验签；不得把令牌写进应用。仓库不接 Issue / Pull Request。macOS（当前交付 Apple Silicon）与 Windows（x64 NSIS）都必须能检查并安装各自平台的更新，两平台可错开发布。本能力不属于技能管理双入口，不要求 CLI。尚未含 updater 的旧安装包不能被远程升级，需手动安装一次含 updater 的版本。版本号为 SemVer `MAJOR.MINOR.PATCH`：每次发布应用更新升 PATCH；MINOR 不自动升；MAJOR 仅用户明确要求大更新时升。
 
 ### Key Entities *(include if feature involves data)*
 
