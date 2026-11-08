@@ -94,7 +94,7 @@
 | 5.7 | 配套 Skill 候选入库 | 列出具体候选与资料，勾选入库，不自动部署（US9-6） |
 | 5.8 | 定时器（缩短周期验证） | 到期自动执行上游检查+库同步+工具检查命令，结果分别提示（FR-029 共用周期） |
 | 5.9 | 主题/字号/关窗收托盘/托盘检查/诊断导出/容量报告 | US10 各场景 |
-| 5.10 | 配套维护 Skill：`skill import <本项目 Gitea 远端> --domain code --skills skill-manager/assets/skills/skill-manager-maintenance` 入库 → 本仓库技能源推进新版本 → `skill check`/`skill update` | 走普通上游流程入库与更新，来源记录正确；任务书引用路径可解析（FR-051、D9） |
+| 5.10 | 配套维护 Skill：`skill import <本项目 GitHub 远端> --domain code --skills skill-manager/assets/skills/skill-manager-maintenance` 入库 → 本仓库技能源推进新版本 → `skill check`/`skill update` | 走普通上游流程入库与更新，来源记录正确；任务书引用路径可解析（FR-051、D9） |
 | 5.11 | **SC-001 完整旅程**：真实库上依次 入库→维护→部署→吸收一次上游更新→上传→机 B 拉取继续使用 | 全链贯通，每步与规格场景一致 |
 | 5.12 | 分别调整预设间顺序、某预设内成员顺序，使用 GUI 及 `preset reorder-members <domain> <id> --order <name,...>`，另一机拉取 | 两种显示顺序均共享；成员排序只改变数组顺序，不增减成员、不动目录、不改变已有部署（FR-025） |
 | 5.13 | 为一个技能和多个技能分别生成 `skill task <ref>... --requirement <text>` | 所选技能上下文完整且可定位；保留用户要求、库/技能路径、管理资料概况与已有部署，规范只引用维护 Skill；生成不改库/部署/上传（FR-051） |
@@ -102,11 +102,11 @@
 ### 5.10 固定来源与实际命令（配套维护 Skill）
 
 配套维护 Skill 的源文件维护在本项目仓库 `skill-manager/assets/skills/skill-manager-maintenance/`（技能目录名即技能名
-`skill-manager-maintenance`）。按 D9/FR-051，它作为**普通上游技能**入库：本项目推送用户 Gitea 远端后，
+`skill-manager-maintenance`）。按 D9/FR-051，它作为**普通上游技能**入库：本项目推送用户 GitHub 远端后，
 以该项目远端为上游仓库、以 `skill-manager/assets/skills/skill-manager-maintenance` 为来源子路径入库。
 
-本项目 `origin` = `http://192.168.200.7:3000/yfpoyuas/SkillManager.git`（Gitea，2026-10-15 核对）；
-另有 `github` 远端。**远端写入（提交/推送）未获用户授权**，因此 Gitea 路径的入库/更新保持“待授权”。
+本项目公开上游为 `https://github.com/YYFF925/SkillManager.git`。开发推送仍是 GitHub `github` 与 Gitea `origin` 双端。
+2026-10-17 用户已授权并完成真实发布与入库验收（T124，见 m5-report 第十二节）。
 
 实际命令（`<repo-url>` 为本项目远端地址）：
 

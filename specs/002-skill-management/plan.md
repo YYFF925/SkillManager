@@ -1,6 +1,6 @@
 # Implementation Plan: Skill Manager 正式产品
 
-**Branch**: 当前 `main`，未创建功能分支；项目已初始化 Git 并配置 Gitea `origin` 与 GitHub `github`，按 feature 目录推进 | **Date**: 2026-10-15 | **Spec**: [spec.md](spec.md)
+**Branch**: 当前 `main`，未创建功能分支；项目已初始化 Git，远端为 GitHub `github` 与 Gitea `origin`，按 feature 目录推进 | **Date**: 2026-10-15 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `specs/002-skill-management/spec.md`
 
@@ -17,7 +17,7 @@
 - 上游更新"同项上游值优先"按上述字段粒度执行；
 - 软件执行上传时提交工作区全部改动，不区分改动来源（用户裁决 2026-10-15）；
 - SQLite 仅存本机状态，绝不镜像共享资产（吸取旧项目 sidecar 双写教训）；
-- 配套维护 Skill 为单一技能，从本项目 Gitea 远端作为普通上游技能入库与更新，维护任务书引用该技能而非内联规范（D9）。
+- 配套维护 Skill 为单一技能，从本项目 GitHub 远端作为普通上游技能入库与更新，维护任务书引用该技能而非内联规范（D9）。
 
 ## Technical Context
 
@@ -104,7 +104,7 @@ skill-manager/
 ├── src-tauri/               # Tauri 2 壳：command 层薄封装 core，无业务逻辑
 ├── assets/
 │   └── skills/              # 配套维护 Skill 源文件（随本仓库开发维护，
-│                            #   经本项目 Gitea 远端作为普通上游技能入库，见 D9）
+│                            #   经本项目 GitHub 远端作为普通上游技能入库，见 D9）
 └── tests/                   # 集成测试（CLI 验收、双入口一致性）
 ```
 
