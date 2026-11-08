@@ -469,4 +469,4 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 
 - [X] T138 [US10] 接入 `tauri-plugin-updater` 与 `tauri-plugin-process`：签名公钥、GitHub 清单 endpoint、updater 产物、启动检查与设置页手动检查；检查失败不打断使用。
 - [X] T139 [US10] 版本号改为每次发布升 patch；增加 bump / publish 脚本；公开源码仓库 `YYFF925/SkillManager` 的 GitHub Releases 放产物与各平台清单，Issues / Pull Request 关闭。
-- [ ] T140 [US10] 用凭据注入私钥构建并发布 0.1.1 到 GitHub 更新源（macOS 本机或 Actions，Windows 用 GitHub Actions）。尚未含 updater 的 0.1.0 安装包不能被远程升级；从含 updater 的安装包验证启动提示与确认安装，要等下一更高 patch。
+- [X] T140 [US10] 0.1.1 已签名发布到 GitHub Releases（macOS DMG / Darwin updater 与 Windows NSIS），清单在 `updater-manifests`。0.1.0 不能远程升级，需手动安装 0.1.1。从含 updater 的包验证启动提示与确认安装，要等下一更高 patch。
