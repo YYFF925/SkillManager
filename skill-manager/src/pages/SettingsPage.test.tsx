@@ -49,6 +49,11 @@ const hermes: AgentView = {
   order: 1,
 };
 
+vi.mock("../lib/appUpdate", () => ({
+  currentAppVersion: vi.fn(async () => "0.1.1"),
+  checkForAppUpdate: vi.fn(async () => null),
+}));
+
 vi.mock("../services/client", () => ({
   checkNow: vi.fn(async () => ({
     trigger: "manual", interval_minutes: 60, timer_enabled: true, skipped_by_interval: false, not_due: false,
@@ -215,6 +220,18 @@ describe("SettingsPage · 只读展示行", () => {
     await waitFor(() => expect(within(panel).getByText("/tmp/home/.agents/skills")).toBeTruthy());
     expect(within(panel).queryByRole("textbox")).toBeNull();
     expect(within(panel).queryByRole("button", { name: /修改/ })).toBeNull();
+  });
+});
+
+describe("SettingsPage · 软件版本", () => {
+  it("全局配置展示当前版本，并提供检查更新", async () => {
+    renderSettings();
+    const global = await screen.findByRole("heading", { name: "全局配置" });
+    const panel = global.closest("section")!;
+    await waitFor(() => expect(within(panel).getByText("0.1.1")).toBeTruthy());
+    expect(within(panel).getByRole("button", { name: "检查更新" })).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("button", { name: "检查更新" }));
+    expect(await screen.findByText("当前已是最新版本。")).toBeTruthy();
   });
 });
 

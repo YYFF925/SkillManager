@@ -11,7 +11,9 @@ import { ToolCenterPage } from "./pages/ToolCenterPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { InstructionEditor } from "./components/InstructionEditor";
 import { FastTooltip } from "./components/FastTooltip";
+import { AppUpdateDialog } from "./components/AppUpdateDialog";
 import { Button, Notice } from "./components/ui";
+import { checkForAppUpdate, type AppUpdate } from "./lib/appUpdate";
 import { useAppearance } from "./lib/appearance";
 import { useLibrarySaveFlow } from "./lib/librarySave";
 import {
@@ -138,6 +140,7 @@ export function App() {
   /** 本机设置（主题/字号等）；由本页统一读取并应用到 `<html>`。 */
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [schedule, setSchedule] = useState<ScheduleReportView | null>(null);
+  const [appUpdate, setAppUpdate] = useState<AppUpdate | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +174,18 @@ export function App() {
     },
     [],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void checkForAppUpdate({ silent: true }).then((update) => {
+      if (!cancelled && update) {
+        setAppUpdate(update);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -487,6 +502,9 @@ export function App() {
       />
     )}
     {saveFlow.dialog}
+    {appUpdate && (
+      <AppUpdateDialog update={appUpdate} onDismiss={() => setAppUpdate(null)} />
+    )}
     </>
   );
 }

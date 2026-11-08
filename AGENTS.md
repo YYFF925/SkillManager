@@ -7,7 +7,7 @@
 
 | 位置 | 职责 | 何时读取 |
 |---|---|---|
-| [README.md](README.md) | 项目概况、当前阶段与主要入口 | 缺少项目上下文时 |
+| [README.md](README.md) | 对外项目概况与安装/开发入口；不写本机路径、内网地址或验收过程 | 缺少项目上下文时 |
 | [.specify/memory/constitution.md](.specify/memory/constitution.md) | 长期原则、技术栈与架构基线 | 制定需求、设计或实现方案，以及判断是否偏离原则时 |
 | [GLOSSARY.md](GLOSSARY.md) | 领域术语与边界 | 对库、管理域、同步、部署等概念有疑问时 |
 | [docs/requirements.md](docs/requirements.md) | 核心需求、访谈结论、修订与未决事项 | 确认用户意图、查找业务规则或继续需求讨论时，定位相关章节阅读 |
@@ -26,6 +26,10 @@
 - `release/` 按平台各保留一份安装包。生成新包前删除同平台的旧包，无论旧包的版本是否相同；仓库不累积历史安装包。
 - 提交前检查 `git status` 和暂存区差异，确认 `release/` 中各平台的安装包均已被 Git 跟踪。
 - 推送是双端交付：用户说"提交并推送"时，`github`（GitHub）与 `origin`（自建 Gitea）两个远端都要推到，只推其一不算完成。
+- 制作可分发安装包或发布应用更新的提交，必须先把 SemVer 的 patch（第三位）加一，并同步 `skill-manager/Cargo.toml` 的 `workspace.package.version`、`skill-manager/package.json` 与 `skill-manager/src-tauri/tauri.conf.json`。不得因「只是重造包」而不升版。可用 `node skill-manager/scripts/bump-version.mjs`。major / minor 仅在用户明确要求时提升，并重置更低位。
+- GitHub 源码仓库 `YYFF925/SkillManager` 公开，Issues / Pull Request / Wiki / Discussions 关闭，不接外部贡献。在线更新源就是该仓库的 GitHub Releases：安装包挂版本 tag，各平台 `latest-*.json` 挂稳定 tag `updater-manifests`。不是 git 里的 `release/`。`release/` 仍按平台各留一份安装包并纳入本仓库提交。
+- 构建更新包前用凭据 `/service/skillmanager/updater` 注入 `TAURI_SIGNING_PRIVATE_KEY`，再执行 `tauri build`；当前平台发布用 `node skill-manager/scripts/publish-github-update.mjs`。
+- 双平台发版走 GitHub Actions：推送 `v*` tag（或手动 `workflow_dispatch`）后，macOS 与 Windows 标准 runner 签名构建并发布到 GitHub Releases。私钥只放 GitHub secret `TAURI_SIGNING_PRIVATE_KEY`，不进仓库。公开仓标准 runner 不收费。
 
 ## 按任务阅读
 
@@ -40,6 +44,22 @@
 - 技术参考足够回答问题时，无需回读旧项目。确有证据缺口时才按来源定位核查，
   不因参考来自旧项目就继承旧架构、旧数据格式或旧业务规则。
 
+## 长期记忆库（Hindsight）
+
+本项目的跨会话记忆存放在 Hindsight 记忆库（自托管于 NAS，Vectorize AI）。
+记忆库是仓库文档的补充，不是替代：与仓库文档冲突时以文档为准，并修正记忆库中的过时条目。
+
+- 项目库：`bank_id = skillmanager`（名称 SkillManager）；个人通用偏好存 `Fei` 库，不混入本项目库。
+- 访问方式：`hindsight-memory` 技能（`~/.agents/skills/hindsight-memory/SKILL.md`）。
+  优先 MCP 工具 `mcp__hindsight__*`；该 MCP 为 multi-bank 端点，调用时显式传 `bank_id: "skillmanager"`。
+  MCP 未覆盖的操作走技能自带的 REST 脚本（如知识库导出）。
+- 开工前：用 `recall` 检索当前任务相关的历史事实——验收方式与实操经验、跨机同步踩坑、已定裁决、
+  用户对本项目的工作方式要求，避免重复踩坑。检索为空不等于事实不存在，换 query 再试或如实报告未命中。
+- 收工时：把新出现的稳定结论用 `sync_retain` 写回 `skillmanager` 库，标签带 `skillmanager`
+  及主题标签（现用：`acceptance`、`gui-acceptance`、`computer-use`、`git-sync`、`vault`、`feedback`）。
+  存入范围：需求裁决、架构与数据边界决定、实施与验收经验、部署与跨机同步约定、用户反馈。
+- 不入库：代码与文档中已可查到的实现细节、一次性的任务过程数据、可从 Git 推导的内容。
+
 ## 解释与维护规则
 
 - 每次修改都必须按对应 Spec（规格说明）的规范同步维护文档：先确认适用规格与范围，行为变化更新 `spec.md`，实现方案更新已有 `plan.md`／契约，开发工作与验证结果更新 `tasks.md`、`quickstart.md` 及对应验收记录。纯实现修复不虚构新需求，不为普通改动另建文档层级；交付时说明修改对应的规格及实际验证结果。
@@ -51,3 +71,4 @@
 - 新结论写到对应职责的文档中，优先更新已有定义，其他位置引用即可，避免多份现行规则独立维护。
   原型调整若引入新业务需求，应同步记录到需求文档或对应功能规格；纯视觉调整写入相关设计资料。
 - 不为一次普通改动新增文档层级、重复总结或额外流程；任务需要哪些资料，就读取和维护哪些资料。
+- 根 README 面向公开仓库：只保留产品说明、安装入口与开发索引。本机绝对路径、内网地址、验收日志和访谈过程写在 `specs/` 或 `docs/`，不写进根 README。

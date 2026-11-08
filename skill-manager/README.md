@@ -54,8 +54,9 @@ cargo run -p skill-manager-cli -- --help   # CLI
 Tauri 打包：`npm run tauri build`（`bundle.targets` 为 `app` 与 `dmg`）。
 macOS DMG 内含应用与 `Applications` 快捷方式；安装时把 `Skill Manager.app` 拖入 `Applications`，不要直接从只读挂载卷双击运行。
 Windows 由平台覆盖配置 `src-tauri/tauri.windows.conf.json` 把 target 改为 `nsis`，
-产物为 `target/release/bundle/nsis/Skill Manager_0.1.0_x64-setup.exe`（默认按当前用户安装，
+产物为 `target/release/bundle/nsis/Skill Manager_<version>_x64-setup.exe`（默认按当前用户安装，
 WebView2 用官方下载引导）。
+发布应用更新前先 `node scripts/bump-version.mjs` 升 patch，再用凭据 `/service/skillmanager/updater` 注入 `TAURI_SIGNING_PRIVATE_KEY` 后构建；`node scripts/publish-github-update.mjs` 把当前平台 updater 产物发到本仓库 GitHub Releases。
 CLI 通过 Tauri 原生 `bundle.externalBin` 随安装包交付。开发与打包钩子会先执行
 `scripts/prepare-cli.mjs`，从同一 workspace 构建对应目标的 CLI；发布构建使用 release，
 通过 Tauri 的 `TAURI_ENV_TARGET_TRIPLE` 指定目标，生成文件在忽略的 `src-tauri/binaries/`。
@@ -126,11 +127,9 @@ skill-manager agent read-local shared <name>
 ## 配套维护 Skill
 
 `assets/skills/skill-manager-maintenance/` 是**单一**配套维护 Skill（库维护规范 + CLI 使用参考 +
-工具安装登记流程合一，见 research.md D9）。它按 FR-051 作为**普通上游技能**入库：
-本项目已发布到 [Gitea 上游仓库](http://192.168.200.7:3000/yfpoyuas/SkillManager)，以该仓库为上游、以
+工具安装登记流程合一，见 research.md D9）。它按 FR-051 作为**普通上游技能**入库：以本仓库为上游、以
 `skill-manager/assets/skills/skill-manager-maintenance` 为来源子路径执行 `skill import`；
 后续更新走既有 `skill check` / `skill update`，不新增专用分发机制。
-2026-10-17 已获用户授权并完成发布；真实来源入库与普通版本更新已在隔离临时库验证，见 [M5 报告](../specs/002-skill-management/checklists/m5-report.md)。
 软件生成的维护任务/工具任务引用该技能的真实库内路径与"按其规范执行"，未入库时如实显示"未入库"。
 
 ## 已知缺口与未验证项

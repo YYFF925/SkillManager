@@ -292,3 +292,12 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 - **Hermes 档案技能池**：候选池取龙虾库中已安装进 Hermes 的部署记录，`hermes:default` 与 `agent:hermes` 视为同一次安装并按技能名去重；启用前置条件改为 default 目录下实际存在该技能目录，不再依赖特定记录名。设计登记见 `data-model.md` 2.2。实现：`crates/core/src/hermes/enables.rs`。
 - **托盘左键**：关掉左键展开菜单，左键切换主窗口显示/隐藏并在显示时取消最小化，菜单交由右键（FR-052）。实现：`src-tauri/src/tray.rs`。
 - **库列表不支持项位置**与**悬浮提示自绘定位**属显示层：前者只调整已过滤结果的排列顺序，不改查询条件（FR-007）；后者把提示层移入 portal 并按视口边缘翻转收边。
+
+## 应用自动更新（2026-11-08）
+
+对应 spec.md FR-059。桌面应用用官方 `tauri-plugin-updater` 检查公开 GitHub 更新源，不自建更新服务器。
+
+- 源码仓库 `YYFF925/SkillManager` 公开，社区入口关闭。更新源是该仓库 GitHub Releases：安装包挂版本 tag，各平台独立 `latest-{{target}}-{{arch}}.json` 挂 `updater-manifests`，避免 macOS / Windows 错开发布时互相覆盖，也不往 `main` 写发版提交。
+- 构建时 `bundle.createUpdaterArtifacts = true`，用 Infisical 路径 `/service/skillmanager/updater` 的 `TAURI_SIGNING_PRIVATE_KEY` 签名；公钥写入 `tauri.conf.json`。
+- 启动后静默检查，有更新才弹窗；设置页展示当前版本并提供手动检查。安装走 `downloadAndInstall` + `relaunch`。
+- 发布脚本 `skill-manager/scripts/publish-github-update.mjs` 上传当前平台产物并更新对应清单。版本脚本 `skill-manager/scripts/bump-version.mjs` 同步三处 SemVer。

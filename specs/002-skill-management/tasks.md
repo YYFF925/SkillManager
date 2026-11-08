@@ -462,3 +462,11 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 
 - [X] T136 [US3] [US1] 新增 `skill-manager/crates/core/src/yaml_safe.rs`：按 PyYAML resolver 的 1.1 隐式类型谓词 `needs_quotes` 与保守发射器，写回统一走 `to_yaml_string`（无危险字符串时与 yaml_serde 输出逐字节一致；含 `Value::Tagged` 回退）；`deploy/compose.rs` 注入改为文本级最小编辑（定位唯一顶层 `description:` 行，块标量前缀进首条内容行、引号值前缀进引号内、plain 值原位拼接，编辑后整块重解析校验，不符即未注入），删除整块重序列化；meta.yaml/tool.yaml/source.yaml/presets/decisions 及 `--stdin` 共 7 处写回点全部换用安全序列化。测试：`yaml_safe` 谓词/往返/分派、`compose` 注入形态（引号/块标量/行内注释/CRLF/幂等/无 frontmatter）、`deployment.rs` 与 `tests/cli_deploy.rs` 端到端字节保真、`vault_management.rs` 未知字段类型保真、`toolcenter` stdin 危险值。同步修订 data-model.md §1.3 写入规则、spec.md US3/FR-016、contracts/cli.md tool register 条款 per FR-016/FR-006、D3
 - [X] T137 [US10] 构建并替换 `release/` 的 macOS 安装包（Windows NSIS 需在 Windows 机器重建，本轮保持旧版并在交付说明注明）；用新安装包内 CLI 验证部署保型与冒烟，重部署受污染的既有部署副本（如 agent:hermes 的 ego-browser）；记录 quickstart M6 补充四及 m6-report 第二十一节 per FR-050、T135 惯例
+
+## Phase 22: 增量 — 桌面应用自动更新（2026-11-08）
+
+**目标**：启动检查 GitHub 公开更新源，确认后安装并重启（FR-059、US10-6）。不改技能管理规则。
+
+- [X] T138 [US10] 接入 `tauri-plugin-updater` 与 `tauri-plugin-process`：签名公钥、GitHub 清单 endpoint、updater 产物、启动检查与设置页手动检查；检查失败不打断使用。
+- [X] T139 [US10] 版本号改为每次发布升 patch；增加 bump / publish 脚本；公开源码仓库 `YYFF925/SkillManager` 的 GitHub Releases 放产物与各平台清单，Issues / Pull Request 关闭。
+- [ ] T140 [US10] 用凭据注入私钥构建并发布 0.1.1 到 GitHub 更新源（macOS 本机或 Actions，Windows 用 GitHub Actions）。尚未含 updater 的 0.1.0 安装包不能被远程升级；从含 updater 的安装包验证启动提示与确认安装，要等下一更高 patch。

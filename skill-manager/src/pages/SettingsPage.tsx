@@ -9,7 +9,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
+import { AppUpdateDialog } from "../components/AppUpdateDialog";
 import { Segmented, Notice, Badge, Button } from "../components/ui";
+import { checkForAppUpdate, currentAppVersion, type AppUpdate } from "../lib/appUpdate";
 import { AgentSettings } from "../components/AgentSettings";
 import { SyncStatus } from "../components/SyncStatus";
 import { DiagnosticsPanel } from "../components/DiagnosticsPanel";
@@ -138,6 +140,9 @@ export function SettingsPage({
   const [notice, setNotice] = useState<string | null>(null);
   const [syncToken, setSyncToken] = useState(0);
   const [checking, setChecking] = useState(false);
+  const [appVersion, setAppVersion] = useState("…");
+  const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
+  const [appUpdate, setAppUpdate] = useState<AppUpdate | null>(null);
   const [manualSchedule, setManualSchedule] = useState<ScheduleReportView | null>(null);
   const latestSchedule = manualSchedule ?? schedule;
   useEffect(() => setManualSchedule(null), [schedule]);
@@ -147,6 +152,10 @@ export function SettingsPage({
       .then(setSharedDir)
       .catch((err) => setError(String(err)));
   }, [reloadToken]);
+
+  useEffect(() => {
+    void currentAppVersion().then(setAppVersion);
+  }, []);
 
   const changeTheme = useCallback(
     async (value: string) => {
@@ -231,6 +240,24 @@ export function SettingsPage({
     setSyncToken((value) => value + 1);
   }
 
+  async function checkAppUpdate() {
+    setCheckingAppUpdate(true);
+    setError(null);
+    try {
+      const found = await checkForAppUpdate();
+      if (found) {
+        setAppUpdate(found);
+        setNotice(`发现新版本 ${found.version}。`);
+      } else {
+        setNotice("当前已是最新版本。");
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setCheckingAppUpdate(false);
+    }
+  }
+
   const upstreamChanged = (latestSchedule?.upstream_report?.skills ?? []).filter(skillHasChange).length;
   const upstreamCandidates = latestSchedule?.upstream_report?.candidates.length ?? 0;
 
@@ -300,6 +327,16 @@ export function SettingsPage({
             description="关闭窗口后留在后台；托盘右键「退出」才结束运行。"
           >
             <ReadOnlyValue>托盘模式</ReadOnlyValue>
+          </SettingRow>
+
+          <SettingRow
+            label="软件版本"
+            description="启动时检查 GitHub 更新源；发现新版本需确认后安装。"
+          >
+            <ReadOnlyValue mono>{appVersion}</ReadOnlyValue>
+            <Button compact disabled={checkingAppUpdate} onClick={() => void checkAppUpdate()}>
+              {checkingAppUpdate ? "正在检查…" : "检查更新"}
+            </Button>
           </SettingRow>
 
           <SettingRow
@@ -411,6 +448,9 @@ export function SettingsPage({
       </Panel>
 
       {notice && <Notice>{notice}</Notice>}
+      {appUpdate && (
+        <AppUpdateDialog update={appUpdate} onDismiss={() => setAppUpdate(null)} />
+      )}
     </div>
   );
 }

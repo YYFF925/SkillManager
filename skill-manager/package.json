@@ -1,7 +1,7 @@
 {
   "name": "skill-manager",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "prepare:cli": "node scripts/prepare-cli.mjs",
@@ -9,11 +9,15 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "bump:patch": "node scripts/bump-version.mjs",
+    "publish:update": "node scripts/publish-github-update.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.8.3",
+    "@tauri-apps/plugin-process": "2.3.1",
+    "@tauri-apps/plugin-updater": "2.12.0",
     "lucide-react": "^0.545.0",
     "react": "^19",
     "react-dom": "^19"

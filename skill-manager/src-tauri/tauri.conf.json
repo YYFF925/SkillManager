@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Skill Manager",
   "mainBinaryName": "skill-manager-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.fei.skillmanager",
   "build": {
     "beforeDevCommand": "npm run prepare:cli && npm run dev",
@@ -26,8 +26,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
-    "externalBin": ["binaries/skill-manager"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "externalBin": [
+      "binaries/skill-manager"
+    ],
     "macOS": {
       "signingIdentity": "-"
     },
@@ -37,6 +42,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM2NjQwQzgzREQ2QzEzNzAKUldSd0UyemRnd3hrTmgrbFpuTndsT0d2c2lkREdwV0s3cG05VVdjUDFqRzQxTHA1TllEM28xckYK",
+      "endpoints": [
+        "https://github.com/YYFF925/SkillManager/releases/download/updater-manifests/latest-{{target}}-{{arch}}.json"
+      ]
+    }
   }
 }
