@@ -1,7 +1,8 @@
 # 视觉与交互素材
 
-现有产品视觉继续以[本项目视觉说明](../../specs/001-skill-management-prototype/visual-reference.md)、
-[交互核查](../../specs/001-skill-management-prototype/ui-interaction-audit.md)和当前原型为准。
+现有产品视觉以[设计层](../../design/README.md)为入口，以当前原型、[DESIGN.md](../../design/DESIGN.md)、
+[本项目视觉说明](../../specs/001-skill-management-prototype/visual-reference.md)和
+[交互核查](../../specs/001-skill-management-prototype/ui-interaction-audit.md)为准。
 本页提取可用素材，不重建旧页面与旧路由。
 
 ## 已保存到本项目的素材

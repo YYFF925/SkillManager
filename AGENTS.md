@@ -15,6 +15,7 @@
 | `docs/adr/` | ADR（架构决策记录），说明跨功能边界及原因 | 任务涉及对应决策时，例如共享库与本机状态的边界 |
 | [docs/technical-reference/README.md](docs/technical-reference/README.md) | 本项目技术参考索引 | 需要接入数据、素材、实现经验或旧行为教训时，先查索引，再读对应主题 |
 | `docs/tasks/` | 提取、调查等专项任务单 | 执行或复查对应专项任务时；不是功能开发任务的统一入口 |
+| [design/](design/README.md) | 前端设计层：看设计、改原型、把正式界面改到与原型一致 | 任何会改变 GUI 外观或交互的工作；先读本入口再改原型 |
 | `specs/<编号-功能名>/` | 按功能组织的 Spec（规格说明）、设计、计划、开发任务与验收资料 | 开展该功能工作时，只读对应目录中与任务有关的文件 |
 
 `.specify/templates/` 与 `.agents/skills/` 是流程模板和技能说明，不是产品需求。
@@ -36,11 +37,12 @@
 - 先判断任务属于哪个功能及哪类工作，再用搜索定位相关章节；需要理解边界时补读上下文。
 - 功能目录中，`spec.md` 描述行为与验收，`plan.md` 描述实现设计，`tasks.md` 描述开发工作。
   后两者存在且与任务相关时再读，不假设每个目录都已具备完整开发资料。
+- 任何会改变 GUI 外观或交互的工作，先走 [design/](design/README.md) 设计层：改 `ui-prototype/prototype.css` 与 `index.html`，同一轮按 `.agents/skills/frontend-design/SKILL.md` 对照表把 `skill-manager/` 前端改到与原型所有可见细节一致。不要按页面停下来确认。
 - 修改原型时，按需读取该功能的 `visual-reference.md`、`ui-interaction-audit.md` 及
   `ui-prototype/README.md`，再定位原型实现。
 - `specs/002-skill-management/` 是正式产品规格（spec.md 为行为与验收，checklists/ 为需求质检），
   `specs/001-skill-management-prototype/` 定义交互原型；原型中模拟数据和演示实现
-  不代表正式产品已经实现，也不自动决定正式接口、存储或同步方案。
+  不代表正式产品已经实现，也不自动决定正式接口、存储或同步方案。正式界面的视觉真值是设计层当前原型，不是旧版 FeiSkillDock 截图。
 - 技术参考足够回答问题时，无需回读旧项目。确有证据缺口时才按来源定位核查，
   不因参考来自旧项目就继承旧架构、旧数据格式或旧业务规则。
 
@@ -49,14 +51,14 @@
 本项目的跨会话记忆存放在 Hindsight 记忆库（自托管于 NAS，Vectorize AI）。
 记忆库是仓库文档的补充，不是替代：与仓库文档冲突时以文档为准，并修正记忆库中的过时条目。
 
-- 项目库：`bank_id = skillmanager`（名称 SkillManager）；个人通用偏好存 `Fei` 库，不混入本项目库。
+- 项目库：`bank_id = coding-agent::SkillManager`（旧库 `skillmanager` 已于 2026-11-08 并入该库并删除）；个人通用偏好存 `Fei` 库，不混入本项目库。
 - 访问方式：仓库内 `.cursor/skills/hindsight-memory/SKILL.md` 与 always-on 规则 `.cursor/rules/hindsight-memory.mdc`（本机还可有 `~/.agents/skills/hindsight-memory/SKILL.md`）。
-  优先 MCP 工具；已验证的 HTTP 端点是根 multi-bank `https://hindsight.feiron.top/mcp/`，调用时显式传 `bank_id: "skillmanager"`。
+  优先 MCP 工具；已验证的 HTTP 端点是根 multi-bank `https://hindsight.feiron.top/mcp/`，调用时显式传 `bank_id: "coding-agent::SkillManager"`。
   Cloud Agents 不读仓库 `.cursor/mcp.json`，须在 cursor.com/agents MCP 面板登记同一 URL；Bearer 来自 Infisical `/service/hindsight` 的 `MCP_BEARER_TOKEN`，不得写入仓库。
   MCP 未覆盖的操作走技能自带的 REST 脚本（如知识库导出）。
 - 开工前：用 `recall` 检索当前任务相关的历史事实——验收方式与实操经验、跨机同步踩坑、已定裁决、
   用户对本项目的工作方式要求，避免重复踩坑。检索为空不等于事实不存在，换 query 再试或如实报告未命中。
-- 收工时：把新出现的稳定结论用 `sync_retain` 写回 `skillmanager` 库，标签带 `skillmanager`
+- 收工时：把新出现的稳定结论用 `sync_retain` 写回 `coding-agent::SkillManager` 库，标签带 `skillmanager`
   及主题标签（现用：`acceptance`、`gui-acceptance`、`computer-use`、`git-sync`、`vault`、`feedback`）。
   存入范围：需求裁决、架构与数据边界决定、实施与验收经验、部署与跨机同步约定、用户反馈。
 - 不入库：代码与文档中已可查到的实现细节、一次性的任务过程数据、可从 Git 推导的内容。

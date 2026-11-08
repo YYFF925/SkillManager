@@ -19,4 +19,5 @@
 
 - 行为与验收：[specs/002-skill-management/spec.md](specs/002-skill-management/spec.md)
 - 术语：[GLOSSARY.md](GLOSSARY.md)
+- 前端设计层：[design/](design/README.md)
 - 交互原型：[specs/001-skill-management-prototype/ui-prototype/index.html](specs/001-skill-management-prototype/ui-prototype/index.html)

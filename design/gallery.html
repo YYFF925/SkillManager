@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Skill Manager 设计层</title>
+<style>
+:root{--bg:#fafafa;--secondary:#f4f4f5;--surface:#fff;--border:#e4e4e7;--text:#18181b;--muted:#71717a;--faint:#8b8b94;--green:#059669}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.5 "SF Pro Text","PingFang SC","Noto Sans SC","Microsoft YaHei",-apple-system,sans-serif}
+header{position:sticky;top:0;z-index:2;background:rgba(250,250,250,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:16px 28px 14px}
+h1{margin:0;font-size:17px;font-weight:600}p{margin:6px 0 0;color:var(--muted)}
+nav{display:flex;gap:16px;margin-top:10px}nav a{color:var(--green);text-decoration:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;padding:22px 28px 40px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 1px 2px #18181b0a;display:flex;flex-direction:column}
+.card img{display:block;width:100%;aspect-ratio:1720/1040;object-fit:cover;background:var(--secondary)}
+.card footer{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid #eeeef0}
+.card strong{font-size:13px}.card code{color:var(--faint);font-size:11px}
+.card a{color:var(--green);text-decoration:none;white-space:nowrap}
+</style>
+</head>
+<body>
+<header>
+  <h1>Skill Manager 设计层</h1>
+  <p>先看／改原型，确认后再把正式界面改到与这些画面所有可见细节一致。</p>
+  <nav>
+    <a href="../specs/001-skill-management-prototype/ui-prototype/index.html">打开可操作原型</a>
+    <a href="DESIGN.md">DESIGN.md</a>
+    <a href="README.md">使用说明</a>
+  </nav>
+</header>
+<main class="grid" id="grid"></main>
+<script>
+const proto = "../specs/001-skill-management-prototype/ui-prototype/";
+const screens = [
+  ["技能库","01-code-library.png","view=code"],
+  ["龙虾技能库","02-lobster-library.png","view=lobster"],
+  ["共享 Agent","03-shared-agent.png","view=shared"],
+  ["Codex","04-codex-agent.png","view=codex"],
+  ["Hermes 档案","05-hermes-profiles.png","view=hermes"],
+  ["档案选择展开","06-hermes-profile-picker.png","view=hermes&picker=1"],
+  ["上游变化预览","07-upstream-changes.png","view=code&modal=updates"],
+  ["预设页","08-preset-overview.png","view=presets"],
+  ["Matt 预设详情","09-preset-detail.png","view=preset-detail&preset=matt"],
+  ["预设已加入筛选","10-preset-members-filter.png","view=preset-detail&preset=matt&filter=member"],
+  ["预设部署预览","11-preset-deployment.png","view=preset-detail&preset=matt&modal=preset-deploy"],
+  ["新建预设","12-preset-create.png","view=presets&modal=preset-create"],
+  ["全局预设全库浏览","13-global-preset.png","view=preset-detail&preset=global"],
+  ["全局指令","14-global-instructions.png","view=code&modal=instructions"],
+  ["Cursor 专属指令","15-cursor-instructions.png","view=code&modal=instructions&instruction=cursor"],
+  ["侧栏预设悬停操作","16-preset-sidebar-actions.png","view=preset-detail&domain=lobster&preset=home"],
+  ["技能卡片拖动手柄","17-skill-drag-handle.png","view=preset-detail&domain=lobster&preset=home"],
+  ["预设名称与图标修改","18-preset-icon-picker.png","view=preset-detail&domain=lobster&preset=auto&modal=preset-rename"],
+  ["设置与 Agent 检测","19-settings.png","view=settings"],
+  ["技能目录行内编辑","20-settings-edit-path.png","view=settings"],
+  ["Hermes 技能统一详情","21-hermes-skill-detail.png","view=hermes"],
+  ["技能文件目录树","22-skill-file-tree.png","view=hermes"],
+  ["技能卡片三点菜单","23-skill-card-menu.png","view=preset-detail&preset=global"],
+  ["添加标签","24-skill-add-tags.png","view=code"],
+  ["单技能更新预览","25-single-skill-update.png","view=code"],
+  ["部署目标亮暗状态","26-deployment-indicators.png","view=code"],
+  ["Windows 下 Mac 专用技能灰显","27-windows-unsupported.png","view=code"],
+  ["已有部署不适用警告","28-existing-deployment-warning.png","view=code"],
+  ["Agent 询问上传","29-agent-upload-question.png","view=code"],
+  ["Hermes 只读管理详情","30-hermes-readonly-manager.png","view=hermes"],
+  ["紧凑管理资料","31-manager-compact-layout.png","view=code"],
+  ["入库单页","32-intake-single-page.png","view=code"],
+  ["原位预览仓库","33-intake-inline-preview.png","view=code"],
+  ["仓库变化决定页","34-repository-update-review.png","view=code"],
+  ["上游新增列表","35-upstream-additions-list.png","view=code"],
+  ["收编管理资料","36-adopt-metadata.png","view=codex"],
+  ["批量收编逐项配置","37-batch-adopt-metadata.png","view=codex"],
+  ["维护任务","38-maintenance-task.png","view=code"],
+  ["跳过当前版本","39-skip-upstream-version.png","view=code"],
+  ["已跳过列表","40-skipped-versions.png","view=code"],
+  ["工具中心","41-tool-center.png","view=tools"],
+  ["工具概览","42-tool-overview.png","view=tools&tool=browser-use"],
+  ["维护指南","43-tool-maintenance-guide.png","view=tools&tool=browser-use"],
+  ["更新任务","44-tool-update-task.png","view=tools&tool=browser-use"],
+  ["配套 Skill 入库","45-tool-skill-intake.png","view=tools&tool=browser-use"],
+  ["安装／登记","46-tool-registration.png","view=tools"]
+];
+const grid = document.getElementById("grid");
+for (const [title, file, query] of screens) {
+  const card = document.createElement("article");
+  card.className = "card";
+  card.innerHTML = `<img src="${proto}renders/${file}" alt="${title}" loading="lazy">
+    <footer><div><strong>${title}</strong><br><code>${file}</code></div>
+    <a href="${proto}index.html?${query}" target="_blank" rel="noopener">打开原型</a></footer>`;
+  grid.appendChild(card);
+}
+</script>
+</body>
+</html>

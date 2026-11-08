@@ -7,11 +7,11 @@ Hindsight is this repo's long-term agent memory (self-hosted at `https://hindsig
 
 The machine-local `npx @vectorize-io/hindsight-coding-agents install` plugin is **not** present on Cursor Cloud Agent VMs. Cloud does **not** run `sessionStart` / `sessionEnd`, does not load `~/.cursor/mcp.json` or `~/.cursor/skills`, and ignores a committed project `.cursor/mcp.json`. Memory tools exist only if an HTTP Hindsight MCP server was added in the cursor.com/agents MCP dashboard (or an editor already registered one).
 
-**Bank:** `skillmanager` (lowercase; verified via `list_banks`). Do not use `coding-agent::SkillManager`. Personal preferences belong in other banks (e.g. `Fei`) and must not be mixed into this project bank.
+**Bank:** `coding-agent::SkillManager` (the per-repo bank the laptop plugin resolves automatically; the old lowercase `skillmanager` bank was merged into it and deleted on 2026-11-08). Personal preferences belong in other banks (e.g. `Fei`) and must not be mixed into this project bank.
 
 **Do not invent tool names.** Call only tools that appear in your current tool list. Two naming styles may show up:
 
-1. **HTTP multi-bank MCP (proven / Cloud dashboard)** — base URL `https://hindsight.feiron.top/mcp/` (root, trailing slash). Tools typically include `recall`, `retain`, `reflect` (and may include `list_banks` / knowledge-page tools). Pass `bank_id` / `bankId` = `skillmanager` on every call that accepts a bank argument. A bank-scoped URL `{api}/mcp/{bankId}/` may also work for editor-style tools; prefer the proven root URL.
+1. **HTTP multi-bank MCP (proven / Cloud dashboard)** — base URL `https://hindsight.feiron.top/mcp/` (root, trailing slash). Tools typically include `recall`, `retain`, `reflect` (and may include `list_banks` / knowledge-page tools). Pass `bank_id` / `bankId` = `coding-agent::SkillManager` on every call that accepts a bank argument. A bank-scoped URL `{api}/mcp/{bankId}/` may also work for editor-style tools; prefer the proven root URL.
 2. **coding-agents stdio (laptop plugin)** — tools named `hindsight_search_knowledge_pages`, `hindsight_list_knowledge_pages`, `hindsight_read_knowledge_page`, `hindsight_reflect`, `hindsight_capture_initiative`, `hindsight_ingest_document`, `hindsight_sync_status`, `hindsight_diagnose`. There is typically no bare `recall` in this style.
 
 Auth for HTTP MCP is a Bearer token. On the cloud computer it comes from Infisical `/service/hindsight` key `MCP_BEARER_TOKEN`. Never put the token in the repo, in rules, or in chat.
@@ -19,7 +19,7 @@ Auth for HTTP MCP is a Bearer token. On the cloud computer it comes from Infisic
 **On Cloud (no sessionStart injection):** for any non-trivial task (design, past decisions, sync/vault/acceptance conventions, “how we do X here”), proactively search memory **before** reinventing:
 
 - If `hindsight_search_knowledge_pages` exists, use it first, then read matching pages.
-- Otherwise call `recall` with `bank_id=skillmanager` (and `reflect` / `hindsight_reflect` for why/decided-value questions).
+- Otherwise call `recall` with `bank_id=coding-agent::SkillManager` (and `reflect` / `hindsight_reflect` for why/decided-value questions).
 - Empty results are not proof that nothing was stored; try a second query or report the miss.
 
-If a `stop` hook is configured in `.cursor/hooks.json` and `HINDSIGHT_API_URL` plus a token are set in the environment, transcripts may be auto-retained into `skillmanager`. Still call `retain` (or `hindsight_capture_initiative` / `hindsight_ingest_document` when those tools exist) for durable decisions that should not wait for the hook. Do not call tools that are not listed.
+If a `stop` hook is configured in `.cursor/hooks.json` and `HINDSIGHT_API_URL` plus a token are set in the environment, transcripts may be auto-retained into `coding-agent::SkillManager`. Still call `retain` (or `hindsight_capture_initiative` / `hindsight_ingest_document` when those tools exist) for durable decisions that should not wait for the hook. Do not call tools that are not listed.

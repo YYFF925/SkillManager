@@ -1,8 +1,8 @@
-# UI 视觉参考：沿用 FeiSkillDock 界面风格
+# UI 视觉参考：Skill Manager 界面沿革
 
-本说明依据用户的最新要求：整体界面风格不准备大动。
-业务与交互范围以同目录的 [原型规格](spec.md) 为准；本文件说明已有视觉语言如何延续。
-颜色、字号和布局数字来自旧版源码，用于建立视觉基线，不作为正式产品不可修订的规格。
+本项目是 Skill Manager。FeiSkillDock 仓库已不存在，不能作为现行源码、对照物或设计入口。
+现行入口是 [设计层](../../design/README.md) 与当前可操作原型；本文保留风格沿革与历史尺寸。
+业务与交互范围以同目录的 [原型规格](spec.md) 为准。颜色、字号和布局数字来自已提取进本仓库的基线，不作为不可修订的规格。
 
 界面细节的源码核查与原型差异见[交互细节核查](ui-interaction-audit.md)。后续改动先核对对应旧组件的布局、悬停、选择、反馈与操作位置，再按新业务调整；不要只保留配色而另造整套交互，也不要机械恢复旧业务。
 
@@ -36,7 +36,7 @@
 | 面板与卡片 | 圆角约 12px，细边框，轻阴影 | 保留整体形态；新面板采用同一语言 |
 | 小控件 | 按钮／输入框圆角约 8px，导航行约 6px | 延续旧控件的尺度 |
 
-以上是旧版参考尺寸。设计者可为可读性和新内容适度调整，不要求像素级复刻。
+以上是历史参考尺寸，用于延续已定气质。正式产品相对**当前原型**必须所有可见细节一致；现行 token 与 Don'ts 见 [设计层 DESIGN.md](../../design/DESIGN.md)。
 
 **后续修订（2026-10-17）**：当前实现为让宽窗口下的技能卡片更充分，主内容最大宽调整为约 1440px，分类列由 152px 收窄为 132px，列间距为 16px。旧版 1200px/152px 仅保留为历史参考。
 
@@ -102,21 +102,13 @@
 
 ## 参考材料与可访问性
 
-本项目的视觉依据是本说明、当前可操作原型及下方保存的原始界面截图。
-旧 OpenDesign 设计夹具索引已清理，不再作为本项目的设计入口。
+现行设计入口是 [设计层](../../design/README.md) 与当前可操作原型。本说明保留沿革、旧版对照和历史尺寸。
+外部 OpenDesign 桌面应用不是前置；旧 OpenDesign 设计夹具索引已清理。
 本项目已保存[视觉与交互素材](../../docs/technical-reference/ui-assets.md)，包括图标和颜色／阴影变量，
 实现时可直接查阅，不依赖旧视图、路由或业务流程。
 
-若设计环境可读取旧源码，可参考：
-
-- /Users/fei/Projects/workspace/FeiSkillDock/src/index.css：颜色、阴影、公共面板和工具栏样式。
-- /Users/fei/Projects/workspace/FeiSkillDock/tailwind.config.js：字体和样式变量映射。
-- /Users/fei/Projects/workspace/FeiSkillDock/src/components/Sidebar.tsx：侧栏形态与密度。
-- /Users/fei/Projects/workspace/FeiSkillDock/src/components/WorkspaceSkillCard.tsx：技能卡片与列表。
-- /Users/fei/Projects/workspace/FeiSkillDock/src/components/Layout.tsx：应用外壳及内容区。
-
-如果环境不能读本机路径，直接提供本说明、spec.md，以及原界面截图。
-用户本轮补充的六张截图已原样保存到本规格目录的 references，不再依赖临时目录。
+旧项目源码路径已失效，不要再去打开。颜色、图标和交互要点以本仓库 [设计层](../../design/README.md)、[视觉素材](../../docs/technical-reference/ui-assets.md) 和当前原型为准。
+用户本轮补充的截图已原样保存在本规格目录的 references。
 
 | 原始截图 | 用途 |
 |---|---|
@@ -136,4 +128,5 @@
 建议截图至少包括：技能库整体界面、同时包含“仅本地／已同步／本地有变更”的 Agent 页面、
 技能详情或常用弹窗。前两类优先，其他截图可按设计需要补充。
 
-2026-10-15：用户决定直接在本项目迭代可点击原型，openDesign 不再是必需交接环节。本文仍作为视觉基线。
+2026-10-15：用户决定直接在本项目迭代可点击原型，外部 openDesign 不再是必需交接环节。
+2026-11-08：仓库内 `design/` 成为设计层入口；本文改为沿革说明，现行 token 以 DESIGN.md 与原型为准。

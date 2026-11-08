@@ -20,7 +20,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 **测试**：依据 `quickstart.md` 明确要求，将 M1～M3 CLI 场景纳入集成测试；针对部署产物、同项合并和状态边界补核心断言。列出的自动化测试先于对应实现编写，确认失败后实现；GUI、双机、大仓库与 M4/M5 场景按既定人工验收执行，不把每项低影响改动都拆成测试任务。
 
-**实施参考与界面基线**：技术任务先查 `docs/technical-reference/README.md` 的对应主题，按本项目需求评估其中实现经验；仅有证据缺口才回查旧源码。所有 GUI 任务开工前须查 `specs/001-skill-management-prototype/ui-prototype/README.md` 的对应页面与效果图，并结合 `visual-reference.md`、`ui-interaction-audit.md` 和可操作的 `ui-prototype/index.html`；最终视觉与交互须与原型一致，不能只借用图标和配色。各期收尾按 `quickstart.md` 的 GUI 对照要求记录证据，正式业务与演示有差异时以 002 spec 为准并说明。
+**实施参考与界面基线**：技术任务先查 `docs/technical-reference/README.md` 的对应主题，按本项目需求评估其中实现经验；仅有证据缺口才回查旧源码。所有 GUI 任务开工前先走 `design/` 设计层：查 gallery 与 `ui-prototype/README.md` 对应页面与效果图，并结合 `design/DESIGN.md`、`visual-reference.md`、`ui-interaction-audit.md` 和可操作的 `ui-prototype/index.html`。改外观或交互时先改原型，用户确认后再实现；最终视觉与交互须与原型所有可见细节一致，不能只借用图标和配色，也不能先改 React 再补原型。各期收尾按 `quickstart.md` 的 GUI 对照要求记录证据，正式业务与演示有差异时以 002 spec 为准并说明。
 
 ## Format: `[ID] [P?] [Story] Description`
 

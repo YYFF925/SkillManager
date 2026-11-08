@@ -7,9 +7,9 @@ description: When to search, capture, credit, and correct Hindsight long-term me
 
 This repo wires Hindsight without the laptop plugin (`npx @vectorize-io/hindsight-coding-agents install`). Memory is MCP tools plus an optional `stop` retain hook. There is no local `~/.hindsight` runtime on Cloud VMs.
 
-Self-hosted API: `https://hindsight.feiron.top`. Project bank: `skillmanager` (lowercase; verified via `list_banks`). Do not use `coding-agent::SkillManager`.
+Self-hosted API: `https://hindsight.feiron.top`. Project bank: `coding-agent::SkillManager` (the old lowercase `skillmanager` bank was merged into it and deleted on 2026-11-08).
 
-Proven MCP URL for Cloud / Grok Bot: `https://hindsight.feiron.top/mcp/` (root multi-bank). Pass `bank_id=skillmanager` on every tool that takes a bank. A bank-scoped `{api}/mcp/{bankId}/` URL may also work; prefer the root URL.
+Proven MCP URL for Cloud / Grok Bot: `https://hindsight.feiron.top/mcp/` (root multi-bank). Pass `bank_id=coding-agent::SkillManager` on every tool that takes a bank. A bank-scoped `{api}/mcp/{bankId}/` URL may also work; prefer the root URL.
 
 HTTP MCP auth is a Bearer token from Infisical `/service/hindsight` key `MCP_BEARER_TOKEN`. Never commit it.
 
@@ -23,7 +23,7 @@ HTTP MCP auth is a Bearer token from Infisical `/service/hindsight` key `MCP_BEA
 
 Call **only** tools that appear in the current tool list.
 
-HTTP multi-bank MCP (dashboard / Grok Bot): `recall`, `retain`, `reflect` (and possibly `list_banks` / knowledge-page tools). Always pass `bank_id=skillmanager`.
+HTTP multi-bank MCP (dashboard / Grok Bot): `recall`, `retain`, `reflect` (and possibly `list_banks` / knowledge-page tools). Always pass `bank_id=coding-agent::SkillManager`.
 
 coding-agents stdio (laptop plugin): `hindsight_search_knowledge_pages`, `hindsight_list_knowledge_pages`, `hindsight_read_knowledge_page`, `hindsight_reflect`, `hindsight_capture_initiative`, `hindsight_ingest_document`, `hindsight_sync_status`, `hindsight_diagnose`.
 
@@ -34,7 +34,7 @@ If neither family is present, say memory tools are unavailable and continue from
 On any non-trivial task, search **before** reinventing project decisions, acceptance practice, vault/sync conventions, or prior user preferences:
 
 1. `hindsight_search_knowledge_pages` if it exists, then read matching pages.
-2. Otherwise `recall` with `bank_id=skillmanager`.
+2. Otherwise `recall` with `bank_id=coding-agent::SkillManager`.
 3. `reflect` / `hindsight_reflect` for why / exact decided values.
 
 Empty hits are not proof of absence — retry a narrower query or report the miss.

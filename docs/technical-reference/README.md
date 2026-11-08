@@ -25,7 +25,7 @@
 | 诊断与资料阅读 | [诊断与阅读参考](diagnostics-and-documents.md) | 结构化结果、日志脱敏、Markdown 与文件访问边界 |
 | 平台工程 | [平台工程参考](desktop-cli.md) | CLI 可发现性、平台现象、按需验证要点 |
 | 应用自动更新 | [应用自动更新](app-updater.md) | Tauri updater、GitHub Releases、签名与发版 |
-| 视觉与交互素材 | [视觉与交互素材](ui-assets.md) | 配色变量、图标、31 个预设图标选项和交互要点 |
+| 视觉与交互素材 | [设计层](../../design/README.md) + [视觉与交互素材](ui-assets.md) | 设计入口、DESIGN.md、配色变量、图标、31 个预设图标选项和交互要点 |
 
 参考数据：[Agent 清单](agent-catalog.json)、[预设图标](preset-icons.json)。
 原始可复用素材在 [assets](assets/)：图标、应用标志和颜色／阴影变量，保留源项目许可。

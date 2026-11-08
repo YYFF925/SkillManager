@@ -21,7 +21,7 @@ import urllib.parse
 import urllib.request
 
 DEFAULT_API_URL = "https://hindsight.feiron.top"
-DEFAULT_BANK_ID = "skillmanager"
+DEFAULT_BANK_ID = "coding-agent::SkillManager"
 USER_AGENT = "skillmanager-hindsight-stop-hook/1"
 MAX_CONTENT_CHARS = 200_000
 HTTP_TIMEOUT_SEC = 12

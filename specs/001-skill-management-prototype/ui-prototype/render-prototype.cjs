@@ -26,7 +26,7 @@ const frames = [
   ['20-settings-edit-path', 'view=settings'],
   ['21-hermes-skill-detail', 'view=hermes'],
   ['22-skill-file-tree', 'view=hermes'],
-  ['23-skill-card-menu', 'view=preset-detail&preset=global'],
+  ['23-skill-card-menu', 'view=code'],
   ['24-skill-add-tags', 'view=code'],
   ['25-single-skill-update', 'view=code'],
   ['26-deployment-indicators', 'view=code'],
