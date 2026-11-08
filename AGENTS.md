@@ -50,8 +50,9 @@
 记忆库是仓库文档的补充，不是替代：与仓库文档冲突时以文档为准，并修正记忆库中的过时条目。
 
 - 项目库：`bank_id = skillmanager`（名称 SkillManager）；个人通用偏好存 `Fei` 库，不混入本项目库。
-- 访问方式：`hindsight-memory` 技能（`~/.agents/skills/hindsight-memory/SKILL.md`）。
-  优先 MCP 工具 `mcp__hindsight__*`；该 MCP 为 multi-bank 端点，调用时显式传 `bank_id: "skillmanager"`。
+- 访问方式：仓库内 `.cursor/skills/hindsight-memory/SKILL.md` 与 always-on 规则 `.cursor/rules/hindsight-memory.mdc`（本机还可有 `~/.agents/skills/hindsight-memory/SKILL.md`）。
+  优先 MCP 工具；已验证的 HTTP 端点是根 multi-bank `https://hindsight.feiron.top/mcp/`，调用时显式传 `bank_id: "skillmanager"`。
+  Cloud Agents 不读仓库 `.cursor/mcp.json`，须在 cursor.com/agents MCP 面板登记同一 URL；Bearer 来自 Infisical `/service/hindsight` 的 `MCP_BEARER_TOKEN`，不得写入仓库。
   MCP 未覆盖的操作走技能自带的 REST 脚本（如知识库导出）。
 - 开工前：用 `recall` 检索当前任务相关的历史事实——验收方式与实操经验、跨机同步踩坑、已定裁决、
   用户对本项目的工作方式要求，避免重复踩坑。检索为空不等于事实不存在，换 query 再试或如实报告未命中。

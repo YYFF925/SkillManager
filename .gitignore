@@ -18,3 +18,7 @@ skill-manager/src-tauri/gen/schemas/
 
 # 本地 Agent 会话产物
 .zcode/
+
+# 本机 Cursor MCP（可能含 token）；提交的是 mcp.json.example
+.cursor/mcp.json
+.cursor/rules/hindsight-session.mdc
