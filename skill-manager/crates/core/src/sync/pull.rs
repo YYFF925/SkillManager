@@ -4,9 +4,11 @@
 //! 变化时刷新本机**已有启用**指令目标；冲突暂停本次同步并保留 Git 冲突现场，交 Agent
 //! 检查、用户裁决后再次 `sync pull` 继续；远端不可用时显示未连接，本地操作继续。
 //!
-//! 工作区有未提交改动（Agent 改库、检查上游写入 `upstream-decisions.yaml` 等）时，
-//! 先暂存再合并，成功后恢复；不把脏工作区当成“无法拉取”。与远端同一文件无法自动合并
-//! 时按冲突暂停。`upstream-decisions.yaml` 按 `(repo, domain)` 对拒绝列表与发现基线取并集。
+//! 未提交改动与远端**未重叠**时，直接合并（Git 允许脏工作区改无关文件），本机改动保留。
+//! 与远端改了同一技能/正文路径时**不开始合并**，返回 `blocked_uncommitted`，工作区不动，
+//! 交 Agent 询问用户先上传或丢弃——不把未提交改动 stash 成冲突标记。仅共享账本
+//! `upstream-decisions.yaml` 按 `(repo, domain)` 对拒绝列表与发现基线取并集。
+//! 已提交之间的 Git 冲突仍按 FR-039 暂停。
 //!
 //! 不提供克隆修复、断开远端或历史恢复入口；后台/手动拉取都不提交、不推送。
 
@@ -24,7 +26,7 @@ use super::SyncService;
 /// `sync pull` 结果。
 #[derive(Clone, Debug, Serialize)]
 pub struct PullReport {
-    /// `up_to_date` / `pulled` / `conflict` / `disconnected` / `no_remote` / `no_upstream` / `error`。
+    /// `up_to_date` / `pulled` / `conflict` / `blocked_uncommitted` / `disconnected` / `no_remote` / `no_upstream` / `error`。
     pub outcome: String,
     pub connected: bool,
     pub remote: Option<String>,
@@ -36,6 +38,9 @@ pub struct PullReport {
     pub behind: Option<u64>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub conflicts: Vec<String>,
+    /// 未提交改动与远端更新重叠、因此未开始合并的路径。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub blocked_paths: Vec<String>,
     /// 刷新已有部署的结果。
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub deployments: Vec<DeployItemView>,
@@ -64,6 +69,7 @@ impl PullReport {
             upstream: None,
             behind: None,
             conflicts: Vec::new(),
+            blocked_paths: Vec::new(),
             deployments: Vec::new(),
             deployment_errors: Vec::new(),
             instructions_changed: false,
@@ -181,19 +187,42 @@ impl SyncService<'_> {
                 });
             }
 
-            let porcelain = git.status_porcelain()?;
-            let dirty = !porcelain.trim().is_empty();
-            let local_decisions = if dirty && porcelain_has_decisions(&porcelain) {
+            let uncommitted = git.uncommitted_paths()?;
+            let incoming = git.incoming_paths("HEAD", &upstream_ref)?;
+            let overlap: Vec<String> = uncommitted
+                .iter()
+                .filter(|path| incoming.iter().any(|incoming| incoming == *path))
+                .cloned()
+                .collect();
+            let content_overlap: Vec<String> = overlap
+                .iter()
+                .filter(|path| path.as_str() != DECISIONS_FILE)
+                .cloned()
+                .collect();
+            if !content_overlap.is_empty() {
+                return Ok(self.blocked_uncommitted_report(
+                    remote,
+                    branch,
+                    upstream,
+                    behind,
+                    content_overlap,
+                ));
+            }
+
+            let local_decisions = if overlap.iter().any(|path| path == DECISIONS_FILE) {
                 Some(decisions::load(&root)?)
             } else {
                 None
             };
-            if dirty {
-                git.stash_push_pull_guard()?;
+            if local_decisions.is_some() {
+                clear_decisions_for_merge(&git, &root)?;
             }
 
             let out = git.run(&["merge", "--no-edit", &upstream_ref])?;
             if !out.success() {
+                if let Some(local) = &local_decisions {
+                    let _ = decisions::save(&root, local);
+                }
                 let conflicts = git.unmerged_paths()?;
                 if !conflicts.is_empty() {
                     return Ok(self.conflict_report(
@@ -202,13 +231,8 @@ impl SyncService<'_> {
                         upstream,
                         behind,
                         conflicts,
-                        dirty.then_some(
-                            "本机未提交改动已暂存；处理冲突并再次 sync pull 后会自动恢复",
-                        ),
+                        None,
                     ));
-                }
-                if dirty {
-                    let _ = git.stash_pop_pull_guard();
                 }
                 let detail = out.stderr.trim();
                 return Ok(PullReport {
@@ -227,29 +251,9 @@ impl SyncService<'_> {
                 });
             }
 
-            let merged_decisions = if local_decisions.is_some() {
-                Some(decisions::load(&root)?)
-            } else {
-                None
-            };
-            if dirty {
-                let (restored, conflicts) = self.restore_pull_autostash(
-                    &git,
-                    &root,
-                    local_decisions.as_deref(),
-                    merged_decisions.as_deref(),
-                )?;
-                if !conflicts.is_empty() {
-                    return Ok(self.conflict_report(
-                        remote,
-                        branch,
-                        upstream,
-                        behind,
-                        conflicts,
-                        Some("远端已合并；恢复本机未提交改动时发生冲突，请处理后再继续"),
-                    ));
-                }
-                restored_uncommitted = restored;
+            if let Some(local) = &local_decisions {
+                let merged = decisions::load(&root)?;
+                write_union_decisions(&root, &git, local, &merged)?;
             }
         }
 
@@ -307,6 +311,7 @@ impl SyncService<'_> {
             upstream,
             behind,
             conflicts: Vec::new(),
+            blocked_paths: Vec::new(),
             deployments: deploy.items,
             deployment_errors: deploy.failures,
             instructions_changed,
@@ -350,6 +355,31 @@ impl SyncService<'_> {
         Ok((false, conflicts))
     }
 
+    fn blocked_uncommitted_report(
+        &self,
+        remote: Option<String>,
+        branch: Option<String>,
+        upstream: Option<String>,
+        behind: Option<u64>,
+        blocked_paths: Vec<String>,
+    ) -> PullReport {
+        let listed = blocked_paths.join("、");
+        PullReport {
+            connected: true,
+            remote,
+            branch,
+            upstream,
+            behind,
+            blocked_paths,
+            ..PullReport::bare(
+                "blocked_uncommitted",
+                format!(
+                    "本机未提交改动与远端更新了同一文件，本次未拉取（工作区未改）。重叠路径：{listed}。请询问用户先 sync push 上传，或丢弃这些文件后再 sync pull；不要自行 stash / checkout 覆盖"
+                ),
+            )
+        }
+    }
+
     fn conflict_report(
         &self,
         remote: Option<String>,
@@ -378,8 +408,16 @@ impl SyncService<'_> {
     }
 }
 
-fn porcelain_has_decisions(porcelain: &str) -> bool {
-    porcelain.lines().any(|line| line.contains(DECISIONS_FILE))
+fn clear_decisions_for_merge(git: &Git, root: &std::path::Path) -> Result<()> {
+    let file = decisions::path(root);
+    let checkout = git.run(&["checkout", "--", DECISIONS_FILE])?;
+    if checkout.success() {
+        return Ok(());
+    }
+    if file.exists() {
+        std::fs::remove_file(&file).map_err(|err| crate::error::CoreError::io(file, err))?;
+    }
+    Ok(())
 }
 
 fn write_union_decisions(

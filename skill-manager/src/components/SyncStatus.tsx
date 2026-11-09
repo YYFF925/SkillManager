@@ -127,7 +127,7 @@ export function SyncStatus({ reloadToken = 0, failure = null, onRetryUpload }: S
                 有 {status.uncommitted.length} 项未提交改动：
                 {status.uncommitted.slice(0, 5).join("、")}
                 {status.uncommitted.length > 5 ? " 等" : ""}
-                。拉取会先暂存这些改动，成功后恢复；与远端同一文件无法自动合并时暂停。
+                。与远端同一文件重叠时拉取会暂停，请先上传或丢弃这些改动。
               </span>
             ) : (
               "无未提交改动"

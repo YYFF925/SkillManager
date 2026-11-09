@@ -230,7 +230,11 @@ impl Git {
 
     /// 进行中的合并冲突路径（`git diff --name-only --diff-filter=U`）。
     pub fn unmerged_paths(&self) -> Result<Vec<String>> {
-        let out = self.run(&["diff", "--name-only", "--diff-filter=U"])?;
+        self.name_only(&["diff", "--name-only", "--diff-filter=U"])
+    }
+
+    fn name_only(&self, args: &[&str]) -> Result<Vec<String>> {
+        let out = self.run(args)?;
         if !out.success() {
             return Ok(Vec::new());
         }
@@ -241,6 +245,29 @@ impl Git {
             .filter(|line| !line.is_empty())
             .map(str::to_string)
             .collect())
+    }
+
+    /// 工作区未提交路径（已暂存、未暂存、未跟踪，不含忽略文件）。
+    pub fn uncommitted_paths(&self) -> Result<Vec<String>> {
+        let mut paths = self.name_only(&["diff", "--name-only"])?;
+        for path in self.name_only(&["diff", "--name-only", "--cached"])? {
+            if !paths.iter().any(|existing| existing == &path) {
+                paths.push(path);
+            }
+        }
+        let untracked = self.ok(&["ls-files", "--others", "--exclude-standard"])?;
+        for path in untracked.lines().map(str::trim).filter(|line| !line.is_empty()) {
+            if !paths.iter().any(|existing| existing == path) {
+                paths.push(path.to_string());
+            }
+        }
+        Ok(paths)
+    }
+
+    /// `from...to` 之间有内容变化的路径（三方点范围，与 merge 将触及的文件一致）。
+    pub fn incoming_paths(&self, from: &str, to: &str) -> Result<Vec<String>> {
+        let spec = format!("{from}...{to}");
+        self.name_only(&["diff", "--name-only", &spec])
     }
 
     /// 是否处于未完成的合并（`MERGE_HEAD` 存在）。

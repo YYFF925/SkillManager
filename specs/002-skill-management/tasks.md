@@ -472,8 +472,8 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 - [X] T140 [US10] 0.1.1 已签名发布到 GitHub Releases（macOS DMG / Darwin updater 与 Windows NSIS），清单在 `updater-manifests`。0.1.0 不能远程升级，需手动安装 0.1.1。从含 updater 的包验证启动提示与确认安装，要等下一更高 patch。
 - [X] T141 [US10] 0.1.2 在已装 0.1.1 的 macOS 上走通「启动弹窗 → 关闭后仍可手动检查」，确认弹窗不是唯一入口；同轮把设置页各行的说明小字去掉（只留标题），并把「发现新版本 + 立即更新」常驻到左下角，关闭弹窗不再清除更新状态。`AppShell.test.tsx` 覆盖常驻提示与按钮回调，`SettingsPage.test.tsx` 保持通过。
 
-## Phase 23: 增量 — 脏工作区不阻断库拉取（2026-11-09）
+## Phase 23: 增量 — 脏工作区拉取与 Agent 限制（2026-11-09）
 
-**目标**：Agent 改库或检查上游写入 `upstream-decisions.yaml` 后尚未上传时，`sync pull` 不得因 “local changes would be overwritten by merge” 整库中止。未提交改动先暂存再合并，成功后恢复；决定文件并集；真正路径冲突仍按 FR-039 暂停。不提交、不推送，不新增合并界面。
+**目标**：未提交改动与远端未重叠时仍能拉取；与远端同一路径则暂停且不开始合并，由维护 Skill 限制 Agent 先问上传、禁止 stash 绕过。决定文件并集。已提交冲突仍按 FR-039。
 
-- [X] T142 [US5] 在 `skill-manager/crates/core/src/sync/pull.rs` 对脏工作区先 `stash` 再 merge、成功后恢复；`upstream-decisions.yaml` 按 `(repo, domain)` 并集 `rejected_subpaths`/`seen_subpaths`。`skill-manager/tests/cli_sync.rs` 覆盖：无关未提交改动保留且远端技能拉下、重叠正文进入冲突且其它技能已应用、决定文件并集。同步修订 spec.md FR-037/US5、data-model.md 同步运行边界、contracts/cli.md、维护 Skill、requirements.md。per FR-037/038/039、US5-4/5
+- [X] T142 [US5] `sync pull`：未重叠脏文件直接 merge；正文路径重叠返回 `blocked_uncommitted` 且工作区不动；`upstream-decisions.yaml` 并集。维护 Skill 增加硬性限制（改库后立刻问上传、拉取前 `sync status`、禁止改部署副本与自行 stash）。`cli_sync` 覆盖无关改动保留、重叠阻断、决定文件并集。同步修订 spec.md FR-037/US5、data-model、cli 契约、requirements。per FR-037/038/039、US5-2/4/5

@@ -80,6 +80,13 @@ fn pull(ctx: &AppContext) -> Result<(CliResult, String)> {
             }
             CliResult::partial(data, errors)
         }
+        "blocked_uncommitted" => {
+            let mut errors = vec![ItemError::new(&report.message)];
+            for path in &report.blocked_paths {
+                errors.push(ItemError::new("未提交改动与远端重叠，请询问用户先上传或丢弃").path(path.clone()));
+            }
+            CliResult::partial(data, errors)
+        }
         _ => CliResult {
             result: Outcome::Failed,
             data,

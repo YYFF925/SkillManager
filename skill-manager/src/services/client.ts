@@ -1265,6 +1265,7 @@ export interface PullReportView {
     | "up_to_date"
     | "pulled"
     | "conflict"
+    | "blocked_uncommitted"
     | "disconnected"
     | "no_remote"
     | "no_upstream"
@@ -1275,6 +1276,7 @@ export interface PullReportView {
   upstream?: string | null;
   behind?: number | null;
   conflicts: string[];
+  blocked_paths?: string[];
   deployments: DeployItemView[];
   deployment_errors: ItemErrorView[];
   instructions_changed: boolean;

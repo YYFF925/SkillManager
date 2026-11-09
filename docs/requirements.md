@@ -267,7 +267,7 @@ Agent 检测按本次最新要求恢复，指令管理仍不扩展到 Hermes 档
 
 用户已确认 SkillManagerVault 跨电脑同步发生冲突时，软件暂停本次库同步并提示冲突，由 Agent（代理）检查具体改动，用户裁决如何处理，处理完成后再继续同步。不提供专门的冲突裁决界面，也不沿用旧版界面中的“保留本地、保留远端、保留双方”选择流程。
 
-2026-11-09 修订：Agent 改库或检查上游写入 `upstream-decisions.yaml` 后，这些改动按既定规则不能自动上传，工作区常为未提交状态。Git 会在真正进入冲突前因 “local changes would be overwritten by merge” 整库中止拉取。产品必须把未提交改动与 Git 冲突分开：拉取先暂存再合并，成功后恢复；该决定文件按 `(repo, domain)` 并集；只有同一路径无法自动合并时才按冲突暂停。拉取路径仍不提交、不推送。
+2026-11-09 修订：Agent 改库后不能自动上传，脏工作区是常态。与远端未重叠的未提交改动不阻断拉取；与远端同一路径则暂停且不开始合并（`blocked_uncommitted`），由维护 Skill 要求 Agent 立刻问是否上传、拉取前先看 `sync status`，禁止自行 stash / checkout 绕过。`upstream-decisions.yaml` 按 `(repo, domain)` 并集。已提交之间的冲突仍按既定 Git 冲突流程。当日早先「一律 stash 再 merge」的方案已撤回。
 
 此前不提供常驻的独立提交、推送按钮；主动同步主要拉取 SkillManagerVault。Agent 维护后的上传由其主动询问、用户确认后执行，这不等于恢复完整 Git 操作面板。已获同意的上传失败时显示原因，可重试；尚未获同意的改动不能借同步或重试上传。
 

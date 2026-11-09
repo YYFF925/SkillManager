@@ -430,7 +430,7 @@ fn background_and_readonly_paths_do_not_push() {
 }
 
 // ---------------------------------------------------------------------------
-// 未提交改动不阻断拉取：无关文件保留，重叠文件进入冲突而不是整库失败
+// 未提交改动：无关文件不阻断拉取；与远端同一路径则暂停且不改工作区
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -448,7 +448,6 @@ fn pull_succeeds_with_unrelated_uncommitted_local_edits() {
 
     let pulled = cli_json(&env.b, &["sync", "pull"]);
     assert_eq!(pulled["outcome"], "pulled", "{pulled}");
-    assert_eq!(pulled["restored_uncommitted"], true, "{pulled}");
     assert_eq!(read(&env.b.vault, "code/alpha/SKILL.md").as_deref(), Some("# alpha v2\n"));
     assert_eq!(
         read(&env.b.vault, "code/beta/SKILL.md").as_deref(),
@@ -463,7 +462,7 @@ fn pull_succeeds_with_unrelated_uncommitted_local_edits() {
 }
 
 #[test]
-fn pull_applies_remote_when_uncommitted_would_overwrite_and_reports_overlap_as_conflict() {
+fn pull_blocks_when_uncommitted_overlaps_incoming_and_leaves_workspace() {
     let env = TwoMachines::new();
     add_skill(&env.a.vault, &env.a.home, "alpha", "# alpha v1\n", None);
     git_ok(&env.a.vault, &["push"], &env.a.home);
@@ -475,31 +474,22 @@ fn pull_applies_remote_when_uncommitted_would_overwrite_and_reports_overlap_as_c
     git_ok(&env.a.vault, &["push"], &env.a.home);
 
     let (code, body) = cli_json_raw(&env.b, &["sync", "pull"]);
-    let message = body["data"]["message"].as_str().unwrap_or("");
+    assert_eq!(code, 2, "{body}");
+    assert_eq!(body["data"]["outcome"], "blocked_uncommitted", "{body}");
+    let blocked = body["data"]["blocked_paths"].as_array().unwrap();
     assert!(
-        !message.to_lowercase().contains("would be overwritten"),
-        "未提交改动不得让整库拉取在 merge 前中止：{body}"
+        blocked.iter().any(|path| path.as_str() == Some("code/alpha/SKILL.md")),
+        "应列出重叠路径：{body}"
     );
     assert_eq!(
-        read(&env.b.vault, "code/beta/SKILL.md").as_deref(),
-        Some("# beta from remote\n"),
-        "无关远端技能应已进入库：{body}"
+        read(&env.b.vault, "code/alpha/SKILL.md").as_deref(),
+        Some("# alpha local agent edit\n"),
+        "工作区应保持未提交改动：{body}"
     );
-    match body["data"]["outcome"].as_str() {
-        Some("conflict") => {
-            assert_eq!(code, 2, "{body}");
-            let conflicts = body["data"]["conflicts"].as_array().unwrap();
-            assert!(
-                conflicts.iter().any(|path| path.as_str() == Some("code/alpha/SKILL.md")),
-                "重叠的本机改动应进入冲突：{body}"
-            );
-        }
-        Some("pulled") => {
-            assert_eq!(code, 0, "{body}");
-            assert_eq!(body["data"]["restored_uncommitted"], true);
-        }
-        other => panic!("应拉取成功或按冲突暂停，得到 {other:?}：{body}"),
-    }
+    assert!(
+        read(&env.b.vault, "code/beta/SKILL.md").is_none(),
+        "未开始合并，远端其它技能也不应写入：{body}"
+    );
 }
 
 #[test]

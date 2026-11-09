@@ -231,7 +231,7 @@ sync status
 sync conflicts
 ```
 
-- `sync pull` 无冲突静默应用并刷新已有部署/已启用指令目标；**新增技能不自动部署**；冲突时暂停本次同步并保留现场。工作区有未提交改动时先暂存再合并、成功后恢复，不因此整库中止；`upstream-decisions.yaml` 按仓库与管理域并集。
+- `sync pull` 无冲突静默应用并刷新已有部署/已启用指令目标；**新增技能不自动部署**。未提交改动与远端未重叠则照常拉取并保留本机改动；与远端同一路径则 `blocked_uncommitted`（不开始合并，工作区不动），问用户先上传或丢弃。已提交之间的冲突才是 `conflict`。`upstream-decisions.yaml` 按仓库与管理域并集。不要自行 stash 绕过。
 - `sync push` 提交并推送**整个工作区**改动；须先获得用户明确同意，CLI 写库/`deploy sync`/文件监听/定时同步都不构成授权。
 - `sync status` 只读事实（连接/未提交/未拉取/冲突），不提交、不推送、不改库。
 - `sync conflicts` 输出未合并路径与状态供你在 Git 层处理，之后再次 `sync pull` 继续。
