@@ -430,6 +430,119 @@ fn background_and_readonly_paths_do_not_push() {
 }
 
 // ---------------------------------------------------------------------------
+// 未提交改动不阻断拉取：无关文件保留，重叠文件进入冲突而不是整库失败
+// ---------------------------------------------------------------------------
+
+#[test]
+fn pull_succeeds_with_unrelated_uncommitted_local_edits() {
+    let env = TwoMachines::new();
+    add_skill(&env.a.vault, &env.a.home, "alpha", "# alpha v1\n", None);
+    add_skill(&env.a.vault, &env.a.home, "beta", "# beta v1\n", None);
+    git_ok(&env.a.vault, &["push"], &env.a.home);
+    cli_json(&env.b, &["sync", "pull"]);
+
+    write(&env.b.vault, "code/beta/SKILL.md", "# beta local agent edit\n");
+    write(&env.a.vault, "code/alpha/SKILL.md", "# alpha v2\n");
+    commit(&env.a.vault, &env.a.home, "A 更新 alpha");
+    git_ok(&env.a.vault, &["push"], &env.a.home);
+
+    let pulled = cli_json(&env.b, &["sync", "pull"]);
+    assert_eq!(pulled["outcome"], "pulled", "{pulled}");
+    assert_eq!(pulled["restored_uncommitted"], true, "{pulled}");
+    assert_eq!(read(&env.b.vault, "code/alpha/SKILL.md").as_deref(), Some("# alpha v2\n"));
+    assert_eq!(
+        read(&env.b.vault, "code/beta/SKILL.md").as_deref(),
+        Some("# beta local agent edit\n")
+    );
+    let status = git(&env.b.vault, &["status", "--porcelain"], &env.b.home);
+    assert!(
+        String::from_utf8_lossy(&status.stdout).contains("beta"),
+        "无关的本机改动应仍是未提交：{}",
+        String::from_utf8_lossy(&status.stdout)
+    );
+}
+
+#[test]
+fn pull_applies_remote_when_uncommitted_would_overwrite_and_reports_overlap_as_conflict() {
+    let env = TwoMachines::new();
+    add_skill(&env.a.vault, &env.a.home, "alpha", "# alpha v1\n", None);
+    git_ok(&env.a.vault, &["push"], &env.a.home);
+    cli_json(&env.b, &["sync", "pull"]);
+
+    write(&env.b.vault, "code/alpha/SKILL.md", "# alpha local agent edit\n");
+    write(&env.a.vault, "code/alpha/SKILL.md", "# alpha v2\n");
+    add_skill(&env.a.vault, &env.a.home, "beta", "# beta from remote\n", None);
+    git_ok(&env.a.vault, &["push"], &env.a.home);
+
+    let (code, body) = cli_json_raw(&env.b, &["sync", "pull"]);
+    let message = body["data"]["message"].as_str().unwrap_or("");
+    assert!(
+        !message.to_lowercase().contains("would be overwritten"),
+        "未提交改动不得让整库拉取在 merge 前中止：{body}"
+    );
+    assert_eq!(
+        read(&env.b.vault, "code/beta/SKILL.md").as_deref(),
+        Some("# beta from remote\n"),
+        "无关远端技能应已进入库：{body}"
+    );
+    match body["data"]["outcome"].as_str() {
+        Some("conflict") => {
+            assert_eq!(code, 2, "{body}");
+            let conflicts = body["data"]["conflicts"].as_array().unwrap();
+            assert!(
+                conflicts.iter().any(|path| path.as_str() == Some("code/alpha/SKILL.md")),
+                "重叠的本机改动应进入冲突：{body}"
+            );
+        }
+        Some("pulled") => {
+            assert_eq!(code, 0, "{body}");
+            assert_eq!(body["data"]["restored_uncommitted"], true);
+        }
+        other => panic!("应拉取成功或按冲突暂停，得到 {other:?}：{body}"),
+    }
+}
+
+#[test]
+fn pull_unions_dirty_upstream_decisions_yaml() {
+    let env = TwoMachines::new();
+    add_skill(&env.a.vault, &env.a.home, "alpha", "# alpha\n", None);
+    write(
+        &env.a.vault,
+        "upstream-decisions.yaml",
+        "- repo: https://example.com/demo.git\n  domain: code\n  rejected_subpaths: []\n  seen_subpaths:\n    - old\n",
+    );
+    commit(&env.a.vault, &env.a.home, "基线决定");
+    git_ok(&env.a.vault, &["push"], &env.a.home);
+    cli_json(&env.b, &["sync", "pull"]);
+
+    write(
+        &env.a.vault,
+        "upstream-decisions.yaml",
+        "- repo: https://example.com/demo.git\n  domain: code\n  rejected_subpaths:\n    - keep-remote\n  seen_subpaths:\n    - old\n    - from-a\n",
+    );
+    write(&env.a.vault, "code/alpha/SKILL.md", "# alpha remote\n");
+    commit(&env.a.vault, &env.a.home, "A 更新决定与技能");
+    git_ok(&env.a.vault, &["push"], &env.a.home);
+
+    write(
+        &env.b.vault,
+        "upstream-decisions.yaml",
+        "- repo: https://example.com/demo.git\n  domain: code\n  rejected_subpaths:\n    - keep-local\n  seen_subpaths:\n    - old\n    - from-b\n",
+    );
+
+    let pulled = cli_json(&env.b, &["sync", "pull"]);
+    assert_eq!(pulled["outcome"], "pulled", "{pulled}");
+    assert_eq!(read(&env.b.vault, "code/alpha/SKILL.md").as_deref(), Some("# alpha remote\n"));
+    let decisions = read(&env.b.vault, "upstream-decisions.yaml").expect("决定文件应存在");
+    for needle in ["keep-local", "keep-remote", "from-a", "from-b", "old"] {
+        assert!(
+            decisions.contains(needle),
+            "并集应保留 {needle}：{decisions}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 指令：四态拼接、保存分发、拉取后刷新已有启用目标且不新增
 // ---------------------------------------------------------------------------
 

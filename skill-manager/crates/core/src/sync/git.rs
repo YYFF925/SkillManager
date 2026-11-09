@@ -248,6 +248,76 @@ impl Git {
         self.has_rev("MERGE_HEAD")
     }
 
+    /// 拉取前暂存未提交改动时使用的 stash 说明，便于识别并在合并后恢复。
+    pub const PULL_AUTOSTASH_MESSAGE: &str = "skill-manager: autostash before pull";
+
+    /// 工作区是否有未提交改动（含未跟踪文件）。
+    pub fn is_dirty(&self) -> Result<bool> {
+        Ok(!self.status_porcelain()?.trim().is_empty())
+    }
+
+    /// 暂存当前工作区（含未跟踪文件），让随后的 merge 能在干净树上执行。
+    ///
+    /// 没有可暂存改动时返回 `false`，不视为错误。
+    pub fn stash_push_pull_guard(&self) -> Result<bool> {
+        let out = self.run(&[
+            "stash",
+            "push",
+            "--include-untracked",
+            "--quiet",
+            "-m",
+            Self::PULL_AUTOSTASH_MESSAGE,
+        ])?;
+        if out.success() {
+            return Ok(true);
+        }
+        let combined = format!("{}{}", out.stdout, out.stderr);
+        if combined.contains("No local changes to save") {
+            return Ok(false);
+        }
+        Err(CoreError::Git {
+            args: "stash push --include-untracked".to_string(),
+            cwd: self.cwd.clone(),
+            stderr: out.stderr.trim().to_string(),
+        })
+    }
+
+    /// 查找本程序留下的拉取暂存；`stash list` 新条目在前。
+    pub fn pull_autostash_ref(&self) -> Result<Option<String>> {
+        let out = self.ok(&["stash", "list"])?;
+        for line in out.lines() {
+            if !line.contains(Self::PULL_AUTOSTASH_MESSAGE) {
+                continue;
+            }
+            let spec = line.split(':').next().unwrap_or("").trim();
+            if !spec.is_empty() {
+                return Ok(Some(spec.to_string()));
+            }
+        }
+        Ok(None)
+    }
+
+    /// 恢复拉取前的暂存。没有对应 stash 视为已恢复。
+    ///
+    /// 成功返回 `Ok(true)`；`git stash pop` 非零（冲突或无法覆盖）返回 `Ok(false)`，
+    /// 由调用方读取未合并路径或标准错误后决定。
+    pub fn stash_pop_pull_guard(&self) -> Result<bool> {
+        let Some(spec) = self.pull_autostash_ref()? else {
+            return Ok(true);
+        };
+        let out = self.run(&["stash", "pop", "--quiet", &spec])?;
+        Ok(out.success())
+    }
+
+    /// 丢弃本程序留下的拉取暂存（恢复成功或已手工落实内容后）。
+    pub fn drop_pull_autostash(&self) -> Result<()> {
+        let Some(spec) = self.pull_autostash_ref()? else {
+            return Ok(());
+        };
+        let _ = self.run(&["stash", "drop", "--quiet", &spec])?;
+        Ok(())
+    }
+
     /// 远端是否可访问（`git ls-remote --exit-code <remote>`）；失败返回原因文本。
     pub fn remote_reachable(&self, remote: &str) -> std::result::Result<(), String> {
         match self.run(&["ls-remote", "--exit-code", remote]) {
@@ -501,5 +571,26 @@ mod tests {
             .unwrap();
         let oid = git.rev_parse("HEAD").unwrap();
         assert_eq!(oid.len(), 40, "应采用完整提交 OID：{oid}");
+    }
+
+    #[test]
+    fn pull_autostash_roundtrip_restores_uncommitted_and_untracked() {
+        let repo = temp_repo();
+        let git = Git::new(repo.path());
+        git.ok(&["config", "user.email", "t@example.invalid"]).unwrap();
+        git.ok(&["config", "user.name", "t"]).unwrap();
+        std::fs::write(repo.path().join("tracked.txt"), "base\n").unwrap();
+        git.ok(&["add", "-A"]).unwrap();
+        git.ok(&["commit", "--quiet", "-m", "init"]).unwrap();
+        std::fs::write(repo.path().join("tracked.txt"), "edited\n").unwrap();
+        std::fs::write(repo.path().join("new.txt"), "untracked\n").unwrap();
+        assert!(git.is_dirty().unwrap());
+        assert!(git.stash_push_pull_guard().unwrap());
+        assert!(!git.is_dirty().unwrap());
+        assert!(git.pull_autostash_ref().unwrap().is_some());
+        assert!(git.stash_pop_pull_guard().unwrap());
+        assert_eq!(std::fs::read_to_string(repo.path().join("tracked.txt")).unwrap(), "edited\n");
+        assert_eq!(std::fs::read_to_string(repo.path().join("new.txt")).unwrap(), "untracked\n");
+        assert!(git.pull_autostash_ref().unwrap().is_none());
     }
 }

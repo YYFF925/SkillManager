@@ -1281,6 +1281,8 @@ export interface PullReportView {
   instruction_targets: InstructionTargetResult[];
   connection_error?: string | null;
   message: string;
+  /** 本次是否暂存并恢复了本机未提交改动。 */
+  restored_uncommitted?: boolean;
 }
 
 export interface ScheduleReportView {

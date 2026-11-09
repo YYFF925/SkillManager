@@ -4,6 +4,10 @@
 //! 变化时刷新本机**已有启用**指令目标；冲突暂停本次同步并保留 Git 冲突现场，交 Agent
 //! 检查、用户裁决后再次 `sync pull` 继续；远端不可用时显示未连接，本地操作继续。
 //!
+//! 工作区有未提交改动（Agent 改库、检查上游写入 `upstream-decisions.yaml` 等）时，
+//! 先暂存再合并，成功后恢复；不把脏工作区当成“无法拉取”。与远端同一文件无法自动合并
+//! 时按冲突暂停。`upstream-decisions.yaml` 按 `(repo, domain)` 对拒绝列表与发现基线取并集。
+//!
 //! 不提供克隆修复、断开远端或历史恢复入口；后台/手动拉取都不提交、不推送。
 
 use serde::Serialize;
@@ -11,8 +15,10 @@ use serde::Serialize;
 use crate::deploy::apply::{DeployItemView, DeploymentService};
 use crate::error::Result;
 use crate::output::ItemError;
+use crate::upstream::decisions::{self, DecisionEntry, DECISIONS_FILE};
 use crate::vault::instructions::{InstructionTargetResult, InstructionsService};
 
+use super::git::Git;
 use super::SyncService;
 
 /// `sync pull` 结果。
@@ -44,6 +50,8 @@ pub struct PullReport {
     pub message: String,
     /// 库文件已应用，但部署或指令目标尚未完成的逐项原因。
     pub errors: Vec<ItemError>,
+    /// 本次是否暂存并恢复了本机未提交改动。
+    pub restored_uncommitted: bool,
 }
 
 impl PullReport {
@@ -63,6 +71,7 @@ impl PullReport {
             connection_error: None,
             message: message.into(),
             errors: Vec::new(),
+            restored_uncommitted: false,
         }
     }
 }
@@ -116,15 +125,39 @@ impl SyncService<'_> {
         }
 
         let mut behind = None;
+        let mut restored_uncommitted = false;
 
         if git.merge_in_progress() {
             let conflicts = git.unmerged_paths()?;
             if !conflicts.is_empty() {
-                return Ok(self.conflict_report(remote, branch, upstream, behind, conflicts));
+                return Ok(self.conflict_report(remote, branch, upstream, behind, conflicts, None));
             }
             // 上一次冲突已由用户/Agent 在 Git 层处理完毕，完成合并后继续刷新。
             git.ok(&["commit", "--no-edit", "-m", "合并远端 SkillManagerVault 变更"])?;
+            let (restored, conflicts) = self.restore_pull_autostash(&git, &root, None, None)?;
+            if !conflicts.is_empty() {
+                return Ok(self.conflict_report(
+                    remote,
+                    branch,
+                    upstream,
+                    behind,
+                    conflicts,
+                    Some("合并已完成；恢复本机未提交改动时发生冲突，请处理后再继续"),
+                ));
+            }
+            restored_uncommitted = restored;
         } else {
+            let leftover = git.unmerged_paths()?;
+            if !leftover.is_empty() {
+                return Ok(self.conflict_report(
+                    remote,
+                    branch,
+                    upstream,
+                    behind,
+                    leftover,
+                    Some("工作区仍有未合并路径（可能来自上次恢复本机改动）；请处理后再同步"),
+                ));
+            }
             let Some(upstream_ref) = upstream.clone() else {
                 return Ok(PullReport {
                     remote,
@@ -147,11 +180,35 @@ impl SyncService<'_> {
                     ..PullReport::bare("up_to_date", "远端无新提交，已是最新")
                 });
             }
+
+            let porcelain = git.status_porcelain()?;
+            let dirty = !porcelain.trim().is_empty();
+            let local_decisions = if dirty && porcelain_has_decisions(&porcelain) {
+                Some(decisions::load(&root)?)
+            } else {
+                None
+            };
+            if dirty {
+                git.stash_push_pull_guard()?;
+            }
+
             let out = git.run(&["merge", "--no-edit", &upstream_ref])?;
             if !out.success() {
                 let conflicts = git.unmerged_paths()?;
                 if !conflicts.is_empty() {
-                    return Ok(self.conflict_report(remote, branch, upstream, behind, conflicts));
+                    return Ok(self.conflict_report(
+                        remote,
+                        branch,
+                        upstream,
+                        behind,
+                        conflicts,
+                        dirty.then_some(
+                            "本机未提交改动已暂存；处理冲突并再次 sync pull 后会自动恢复",
+                        ),
+                    ));
+                }
+                if dirty {
+                    let _ = git.stash_pop_pull_guard();
                 }
                 let detail = out.stderr.trim();
                 return Ok(PullReport {
@@ -168,6 +225,31 @@ impl SyncService<'_> {
                         ),
                     )
                 });
+            }
+
+            let merged_decisions = if local_decisions.is_some() {
+                Some(decisions::load(&root)?)
+            } else {
+                None
+            };
+            if dirty {
+                let (restored, conflicts) = self.restore_pull_autostash(
+                    &git,
+                    &root,
+                    local_decisions.as_deref(),
+                    merged_decisions.as_deref(),
+                )?;
+                if !conflicts.is_empty() {
+                    return Ok(self.conflict_report(
+                        remote,
+                        branch,
+                        upstream,
+                        behind,
+                        conflicts,
+                        Some("远端已合并；恢复本机未提交改动时发生冲突，请处理后再继续"),
+                    ));
+                }
+                restored_uncommitted = restored;
             }
         }
 
@@ -210,6 +292,9 @@ impl SyncService<'_> {
                 String::new()
             }
         );
+        if restored_uncommitted {
+            message.push_str("；已恢复本机未提交改动");
+        }
         for error in &errors {
             message.push_str(&format!("\n未完成：{} {} {}", error.target.as_deref().unwrap_or(""), error.path.as_deref().unwrap_or(""), error.message));
         }
@@ -229,7 +314,40 @@ impl SyncService<'_> {
             connection_error: None,
             message,
             errors,
+            restored_uncommitted,
         })
+    }
+
+    /// 恢复 `stash_push_pull_guard` 留下的本机改动。
+    ///
+    /// `upstream-decisions.yaml` 在有快照时按并集写回，不把账本文件冲突当成技能内容冲突。
+    fn restore_pull_autostash(
+        &self,
+        git: &Git,
+        root: &std::path::Path,
+        local_decisions: Option<&[DecisionEntry]>,
+        merged_decisions: Option<&[DecisionEntry]>,
+    ) -> Result<(bool, Vec<String>)> {
+        let had_stash = git.pull_autostash_ref()?.is_some();
+        let popped = git.stash_pop_pull_guard()?;
+        if let (Some(local), Some(merged)) = (local_decisions, merged_decisions) {
+            write_union_decisions(root, git, local, merged)?;
+        }
+        if popped {
+            return Ok((had_stash, Vec::new()));
+        }
+        let mut conflicts = git.unmerged_paths()?;
+        if let (Some(local), Some(merged)) = (local_decisions, merged_decisions) {
+            if conflicts.iter().any(|path| path == DECISIONS_FILE) {
+                write_union_decisions(root, git, local, merged)?;
+                conflicts.retain(|path| path != DECISIONS_FILE);
+            }
+        }
+        if conflicts.is_empty() {
+            git.drop_pull_autostash()?;
+            return Ok((had_stash, Vec::new()));
+        }
+        Ok((false, conflicts))
     }
 
     fn conflict_report(
@@ -239,7 +357,15 @@ impl SyncService<'_> {
         upstream: Option<String>,
         behind: Option<u64>,
         conflicts: Vec<String>,
+        extra: Option<&str>,
     ) -> PullReport {
+        let mut message =
+            "拉取发生冲突，本次同步已暂停；请用 sync conflicts 查看未合并路径，处理后再 sync pull 继续"
+                .to_string();
+        if let Some(extra) = extra {
+            message.push('；');
+            message.push_str(extra);
+        }
         PullReport {
             connected: true,
             remote,
@@ -247,10 +373,27 @@ impl SyncService<'_> {
             upstream,
             behind,
             conflicts,
-            ..PullReport::bare(
-                "conflict",
-                "拉取发生冲突，本次同步已暂停；请用 sync conflicts 查看未合并路径，处理后再 sync pull 继续",
-            )
+            ..PullReport::bare("conflict", message)
         }
     }
+}
+
+fn porcelain_has_decisions(porcelain: &str) -> bool {
+    porcelain.lines().any(|line| line.contains(DECISIONS_FILE))
+}
+
+fn write_union_decisions(
+    root: &std::path::Path,
+    git: &Git,
+    local: &[DecisionEntry],
+    remote: &[DecisionEntry],
+) -> Result<()> {
+    let merged = decisions::union_merge(local, remote);
+    decisions::save(root, &merged)?;
+    let conflicts = git.unmerged_paths()?;
+    if conflicts.iter().any(|path| path == DECISIONS_FILE) {
+        git.ok(&["add", "--", DECISIONS_FILE])?;
+        let _ = git.run(&["reset", "-q", "HEAD", "--", DECISIONS_FILE]);
+    }
+    Ok(())
 }

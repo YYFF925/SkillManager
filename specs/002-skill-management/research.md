@@ -49,6 +49,12 @@
 - **Rationale**: 完全避免该场景需要"改动归属账本"，需求记录明确不预设；概率与后果均低。
 - **Alternatives**: 按文件路径暂存提交（被拒：用户裁决不区分；同文件双改仍无法拆分）。
 
+### D5a 拉取遇脏工作区：暂存后合并，不自动提交
+
+- **Decision**: `sync pull` 发现未提交改动时先 `git stash`（含未跟踪）再 merge，成功后恢复；不在拉取路径提交或推送。`upstream-decisions.yaml` 按 `(repo, domain)` 并集。与远端同一路径无法自动合并才按 FR-039 暂停。不得让 Git 的 “would be overwritten by merge” 在进入冲突前整库中止。
+- **Rationale**: Agent 改库后必须先询问才上传（FR-038），检查上游也会写未提交的决定文件；脏工作区是常态，不是冲突。自动提交会绕过上传同意；拒绝拉取则其它电脑的技能更新进不来。
+- **Alternatives**: 拉取前自动提交（违反 FR-038）；要求用户先上传或丢弃（把常态操作责任推给用户）；对技能正文做应用层三方合并（FR-039 明确不做合并界面）。
+
 ### D6 CLI 形状：领域子命令 + --json + 无交互
 
 - **Decision**: 顶层子命令按领域：`skill` / `deploy` / `preset` / `hermes` / `tool` / `sync` / `agent` / `instruction`。全局 `--json` 输出结构化结果（Agent 解析）；默认人类可读。CLI 不提问不等待输入——需用户决策的动作由 Agent 对话确认后作为参数传入；检查只保存检查事实、不应用变更，应用类命令显式执行。

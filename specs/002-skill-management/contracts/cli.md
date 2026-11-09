@@ -142,6 +142,7 @@ sync conflicts                                              # Git 冲突信息�
 ```
 
 - GUI 保存沿用已有自动上传确认（设置键 `git_auto_push`，见 data-model.md §2.6）：首次保存时询问一次，确认后每次保存自动 `push`；Agent 修改后每次询问得到明确同意才 `push`。CLI 写库、`deploy sync`、文件监听及后台检查/重试都不构成上传授权，也不读 `git_auto_push`。
+- `sync pull` 遇到未提交改动时先暂存再合并，成功后恢复；不提交、不推送。`upstream-decisions.yaml` 按 `(repo, domain)` 并集。与远端同一文件无法自动合并才按冲突暂停，不得因 “local changes would be overwritten by merge” 整库中止。
 - 已同意的上传失败可由用户主动重试（再次 `sync push`）；后台路径不提交或推送。冲突由 Agent 按用户裁决完成 Git 层处理后，再 `sync pull` 继续；不新增应用内合并流程或“保留本地/远端/双方”选项。冲突时本次同步暂停并保留 Git 冲突现场，`sync conflicts` 输出未合并路径与状态供 Agent 检查。
 - `sync status` 只读事实：连接状态（远端可用/不可用）、未提交改动、相对 upstream 的未拉取提交数、进行中的冲突；不提交、不推送、不改库。
 - 远端不可用时 `sync pull`/`sync push` 明确报“未连接”，本地库管理、部署与 `deploy sync` 继续可用；不提供断开远端或重新克隆修复入口。

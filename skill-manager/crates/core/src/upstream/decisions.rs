@@ -167,6 +167,37 @@ fn dedup(values: &[String]) -> Vec<String> {
     out
 }
 
+fn union_list(left: &[String], right: &[String]) -> Vec<String> {
+    let mut out = left.to_vec();
+    for value in right {
+        if !out.iter().any(|existing| existing == value) {
+            out.push(value.clone());
+        }
+    }
+    out
+}
+
+/// 按 `(repo, domain)` 合并两份决定：拒绝列表与发现基线都取并集。
+///
+/// 用于跨机拉取时本机未提交的 `upstream-decisions.yaml` 与远端提交重叠：两边都是追加型账本，
+/// 并集保留两侧的拒绝与基线，不把整文件冲突当成技能内容冲突。
+pub fn union_merge(local: &[DecisionEntry], remote: &[DecisionEntry]) -> Vec<DecisionEntry> {
+    let mut merged = local.to_vec();
+    for incoming in remote {
+        if let Some(existing) = merged
+            .iter_mut()
+            .find(|entry| entry.matches(&incoming.repo, incoming.domain))
+        {
+            existing.rejected_subpaths =
+                union_list(&existing.rejected_subpaths, &incoming.rejected_subpaths);
+            existing.seen_subpaths = union_list(&existing.seen_subpaths, &incoming.seen_subpaths);
+            continue;
+        }
+        merged.push(incoming.clone());
+    }
+    merged
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,5 +230,35 @@ mod tests {
             vec!["tools/c".to_string()]
         );
         assert!(rejected(root, "https://x/y.git", Domain::Lobster).unwrap().is_empty());
+    }
+
+    #[test]
+    fn union_merge_unions_rejected_and_seen_per_repo_domain() {
+        let local = vec![DecisionEntry {
+            repo: "https://x/y.git".to_string(),
+            domain: Domain::Code,
+            rejected_subpaths: vec!["keep-local".to_string()],
+            seen_subpaths: vec!["old".to_string(), "from-local".to_string()],
+        }];
+        let remote = vec![DecisionEntry {
+            repo: "https://x/y.git/".to_string(),
+            domain: Domain::Code,
+            rejected_subpaths: vec!["keep-remote".to_string()],
+            seen_subpaths: vec!["old".to_string(), "from-remote".to_string()],
+        }];
+        let merged = union_merge(&local, &remote);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(
+            merged[0].rejected_subpaths,
+            vec!["keep-local".to_string(), "keep-remote".to_string()]
+        );
+        assert_eq!(
+            merged[0].seen_subpaths,
+            vec![
+                "old".to_string(),
+                "from-local".to_string(),
+                "from-remote".to_string()
+            ]
+        );
     }
 }
