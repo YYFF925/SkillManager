@@ -173,14 +173,14 @@ export function CategoryRail({
   return (
     <aside className="category-rail w-[148px] shrink-0">
       <div className={rowClass(selected === null)}>
-        <span className="inline-block w-4 shrink-0" aria-hidden="true" />
+        <span className="grid size-4 shrink-0" aria-hidden="true" />
         <button
           type="button"
           onClick={() => onSelect(null)}
-          className="flex min-w-0 flex-1 items-center gap-1.5 truncate px-1 text-left"
+          className="min-w-0 flex-1 truncate px-1 text-left"
         >
           全部分类
-          <span className="grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
+          <span className="ml-1.5 inline-grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted align-middle">
             {total}
           </span>
         </button>
@@ -198,19 +198,19 @@ export function CategoryRail({
       </div>
 
       {uncategorizedCount > 0 && (
-        <button
-          type="button"
-          onClick={() => onSelect(UNCATEGORIZED)}
-          className={`mb-0.5 flex h-[35px] w-full items-center gap-1.5 rounded-md px-2.5 text-left text-[14px] ${
-            selected === UNCATEGORIZED ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
-          }`}
-        >
-          <span className="inline-block w-4 shrink-0" aria-hidden="true" />
-          未分类
-          <span className="ml-auto grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
-            {uncategorizedCount}
-          </span>
-        </button>
+        <div className={rowClass(selected === UNCATEGORIZED)}>
+          <span className="grid size-4 shrink-0" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => onSelect(UNCATEGORIZED)}
+            className="min-w-0 flex-1 truncate px-1 text-left"
+          >
+            未分类
+            <span className="ml-1.5 inline-grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted align-middle">
+              {uncategorizedCount}
+            </span>
+          </button>
+        </div>
       )}
 
       {categories.map((name) => {
@@ -262,7 +262,7 @@ export function CategoryRail({
                 <GripVertical className="size-3.5" strokeWidth={1.75} />
               </button>
             ) : (
-              <span className="inline-block w-4 shrink-0" aria-hidden="true" />
+              <span className="grid size-4 shrink-0" aria-hidden="true" />
             )}
             <button
               type="button"

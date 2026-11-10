@@ -162,6 +162,10 @@ it("renames categories inline without a dialog", async () => {
   const named = screen.getByText("家庭运维");
   expect(all.compareDocumentPosition(uncategorized) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(uncategorized.compareDocumentPosition(named) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(uncategorized.className).toContain("px-1");
+  expect(uncategorized.className).not.toContain("px-2.5");
+  expect(uncategorized.previousElementSibling?.className).toContain("size-4");
+  expect(named.closest("button")?.className).toContain("px-1");
   expect(screen.getByRole("button", { name: "新建分类" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "拖动排序 家庭运维" })).toBeTruthy();
 

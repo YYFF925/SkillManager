@@ -297,7 +297,7 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 
 对应 spec.md FR-003/050/056/060。本批按 Todoist 三项一并落地，未改版本号。
 
-- **「未分类」钉在「全部分类」下方**：分类栏先渲染「全部分类」，紧接着「未分类」（仅当该域有未分类技能），再渲染具名分类。未分类不参与拖拽排序，也没有重命名入口。实现：`src/components/CategoryRail.tsx`；原型 `ui-prototype/index.html` 的 `rail()` 同步。
+- **「未分类」钉在「全部分类」下方**：分类栏先渲染「全部分类」，紧接着「未分类」（仅当该域有未分类技能），再渲染具名分类。未分类不参与拖拽排序，也没有重命名入口；行结构与具名分类相同，预留手柄空位使名称左对齐。实现：`src/components/CategoryRail.tsx`；原型 `ui-prototype/index.html` 的 `rail()` 同步。
 - **分类管理入口全局化**：`CategoryRail` 默认 `editable`。技能库、预设成员浏览、Hermes 档案技能列表都使用同一组件；重命名走 `vault::manage::rename_category`（预设按当前域，Hermes 固定龙虾库）。
 - **技能归档**：库根 `archive/<domain>/[<category>/]<name>/` 完整保留目录与 `.manager`。`DeploymentService::archive_skills` 先 `uninstall_all`（外改副本则整项失败、不移动），成功后才 `move_to_archive`。还原不部署；从归档删除需确认。CLI `skill archive add|list|restore|delete`，Tauri `skill_archive_*`，GUI 入口为技能库归档与设置页「查看归档」。
 

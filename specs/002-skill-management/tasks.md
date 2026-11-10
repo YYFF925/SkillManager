@@ -478,6 +478,6 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 
 **目标**：分类栏「未分类」紧邻「全部分类」；技能库 / 预设 / Hermes 共用可编辑分类栏；技能可归档到库内 `archive/`，归档前卸载全部受管部署（FR-003/050/056/060）。
 
-- [X] T142 [US1] 分类栏顺序改为「全部分类」→「未分类」→具名分类；未分类不拖拽、不重命名。原型 `rail()` 与 `CategoryRail.tsx` 同步；`LibraryPage.test.tsx` 断言文档顺序。
+- [X] T142 [US1] 分类栏顺序改为「全部分类」→「未分类」→具名分类；未分类不拖拽、不重命名，名称与具名分类左对齐。原型 `rail()` 与 `CategoryRail.tsx` 同步；`LibraryPage.test.tsx` 断言文档顺序与行结构。
 - [X] T143 [US1] [US6] [US7] 预设成员浏览与 Hermes 档案技能列表使用可编辑 `CategoryRail`，重命名调用 `renameCategory`（Hermes 固定龙虾库）。`PresetPage.test.tsx` / `HermesPage.test.tsx` 断言「新建分类」。
 - [X] T144 [US1] 实现库内归档：`vault/archive.rs`、`DeploymentService::archive_skills`（先卸载）、CLI `skill archive *`、Tauri `skill_archive_*`、技能库归档入口、设置页「查看归档」与 `ArchiveDialog`。core / CLI 测试覆盖隐藏、还原保元数据、卸载、外改中止、删除；设置页测试覆盖入口。
