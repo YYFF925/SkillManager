@@ -5,7 +5,7 @@
  * 不实现搜索、校验或同名判断。部署位置在 M2 接入前如实说明尚未接入。
  */
 import { useEffect, useState } from "react";
-import { File as FileIcon, Folder, Trash2 } from "lucide-react";
+import { Archive, File as FileIcon, Folder, Trash2 } from "lucide-react";
 
 import {
   getSkill,
@@ -101,6 +101,8 @@ export interface SkillDetailProps {
   onDeploy: (reference: string) => void;
   /** 删除库内技能并清理受管部署。 */
   onDelete: (reference: string) => void;
+  /** 归档技能：卸载全部受管部署后移出正常列表。 */
+  onArchive?: (reference: string) => void;
   /** 保存影响合成结果的资料后，刷新本机已有部署（复用 deploy sync 语义）。 */
   onSyncDeployments: () => void;
   /** 「文件与部署」中直接切换部署后刷新父页面记录。 */
@@ -119,6 +121,7 @@ export function SkillDetail({
   onOpenMove,
   onDeploy,
   onDelete,
+  onArchive,
   onSyncDeployments,
   onDeploymentsChanged,
 }: SkillDetailProps) {
@@ -191,6 +194,17 @@ export function SkillDetail({
             库内位置 · {skill?.vault_rel_dir ?? reference}
           </span>
           <div className="flex shrink-0 items-center gap-2.5">
+            {onArchive && (
+              <Button
+                onClick={() => {
+                  onClose();
+                  onArchive(reference);
+                }}
+              >
+                <Archive className="size-3.5" strokeWidth={1.75} />
+                归档
+              </Button>
+            )}
             <Button
               onClick={() => {
                 onClose();

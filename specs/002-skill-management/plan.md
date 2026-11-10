@@ -293,6 +293,14 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 - **托盘左键**：关掉左键展开菜单，左键切换主窗口显示/隐藏并在显示时取消最小化，菜单交由右键（FR-052）。实现：`src-tauri/src/tray.rs`。
 - **库列表不支持项位置**与**悬浮提示自绘定位**属显示层：前者只调整已过滤结果的排列顺序，不改查询条件（FR-007）；后者把提示层移入 portal 并按视口边缘翻转收边。
 
+## 分类栏顺序、全局分类管理与技能归档（2026-11-10）
+
+对应 spec.md FR-003/050/056/060。本批按 Todoist 三项一并落地，未改版本号。
+
+- **「未分类」钉在「全部分类」下方**：分类栏先渲染「全部分类」，紧接着「未分类」（仅当该域有未分类技能），再渲染具名分类。未分类不参与拖拽排序，也没有重命名入口。实现：`src/components/CategoryRail.tsx`；原型 `ui-prototype/index.html` 的 `rail()` 同步。
+- **分类管理入口全局化**：`CategoryRail` 默认 `editable`。技能库、预设成员浏览、Hermes 档案技能列表都使用同一组件；重命名走 `vault::manage::rename_category`（预设按当前域，Hermes 固定龙虾库）。
+- **技能归档**：库根 `archive/<domain>/[<category>/]<name>/` 完整保留目录与 `.manager`。`DeploymentService::archive_skills` 先 `uninstall_all`（外改副本则整项失败、不移动），成功后才 `move_to_archive`。还原不部署；从归档删除需确认。CLI `skill archive add|list|restore|delete`，Tauri `skill_archive_*`，GUI 入口为技能库归档与设置页「查看归档」。
+
 ## 应用自动更新（2026-11-08）
 
 对应 spec.md FR-059。桌面应用用官方 `tauri-plugin-updater` 检查公开 GitHub 更新源，不自建更新服务器。

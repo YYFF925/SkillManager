@@ -77,6 +77,10 @@ skill tag remove <tag>
 skill category rename --domain <domain> <old> <new>
 skill move <ref> (--category <c> | --uncategorized)
 skill delete <ref>...
+skill archive add <ref>...
+skill archive list [--domain <domain>]
+skill archive restore <ref>...
+skill archive delete <ref>...
 skill translation get <ref>
 skill translation set <ref> (--file <path> | --stdin)
 skill translation remove <ref>
@@ -95,6 +99,7 @@ skill task <ref>... [--requirement <text>]
 - `tag add/detach` 只增减目标标签（不替换）；`tag rename/remove` 两域统一治理，`remove` 只解除关联。
 - `category rename` 重命名一级分类目录，该分类下全部技能一并移动；目标分类已存在则拒绝。不改技能名。
 - `move` 必须给 `--category` 或 `--uncategorized` 之一；不改技能名。
+- `archive add` 先卸载该技能全部受管部署，成功后才移到 `archive/<domain>/[<category>/]<name>/`；外改副本或卸载失败则不归档。`restore` 保留原分类与标签，不重新部署；目标已有同名活技能则拒绝。`delete` 从归档永久删除。
 - `translation set` / `overlay set` 必须给 `--file` 或 `--stdin` 之一，否则报错退出 1。
 - overlay 的 `--agent` / `--os` 省略即该维度通用（`_`）。
 - `task` 生成可复制的维护说明（含配套维护 Skill 库内路径与“按其规范执行”）；不改库、不部署、不上传。

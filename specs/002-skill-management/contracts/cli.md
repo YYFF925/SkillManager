@@ -31,6 +31,10 @@ skill category rename --domain <domain> <old> <new>          # 重命名一级�
 skill move <ref> (--category <c> | --uncategorized)          # 移目录、不改名
 skill copy <ref> --to <domain> [--category <c> | --uncategorized]
 skill delete <ref>...                                       # 删库并清理；本地外改副本暂停
+skill archive add <ref>...                                  # 先卸载全部受管部署，成功后才移入 archive/
+skill archive list [--domain <domain>]                      # 列出已归档技能（含原分类、标签、库内相对路径）
+skill archive restore <ref>...                              # 还原到正常库，保留分类与标签，不重新部署
+skill archive delete <ref>...                               # 从归档永久删除
 skill translation get <ref>
 skill translation set <ref> (--file <path> | --stdin)        # 按当前原文保存译文并更新时效依据
 skill translation remove <ref>
@@ -44,6 +48,7 @@ skill task <ref>... [--requirement <text>]                     # 单项/多选�
 - `--agents all` / `--oses all` 删除对应限制键，`none` 写显式空集合；未传保持原声明，不能清除本机未显示的 Agent 声明。
 - `--tags` 是替换标签集合；`tag add/detach` 仅增减目标标签；空字符串清空集合。`--preset` 须同时给 `--domain`，避免跨域同 id 歧义。
 - overlay 命令省略的维度表示该维度通用；同一相对路径的优先顺序与文件布局由 M2 T021 先落定，不在入口另定规则。
+- `skill archive add` 先卸载该技能全部受管部署，任一项有本地外改或移除失败则该项不移入归档，避免出现已归档但仍安装的状态；卸载已成功但移动失败时如实报告「已卸载、未归档」，技能仍在正常库。`restore` 保留原分类与 `.manager`，不部署；目标处已有同名活技能则拒绝。`delete` 只删归档目录，不触及正常库。
 - `skill task` 对单个或多个明确技能生成一份维护说明；保留 FR-051 规定的用户要求、库/技能路径、管理资料概况和本机已有部署。规范仅引用配套维护 Skill，正文/完整文件由 Agent 到库内读取；生成任务不改库、不部署、不上传。
   `--requirement` 可省略（与 `tool task` 一致），省略时任务文本如实写明"未填写（按技能现有管理资料与配套维护 Skill 规范执行）"，不编造用户要求。契约不把用户要求设为必填：FR-051 只要求"保留用户要求"，省略即如实表达为未填写，比强制报错更贴近"生成可复制任务"的用途，且与工具维护任务的处理一致；实现按此为准。
 
@@ -210,6 +215,7 @@ settings capacity
 | 部署/撤销/同步/暂停处置 | deploy to/undo/sync/status | 同一核心；暂停后交 Agent/用户裁决 |
 | 预设 | preset *（含 reorder/reorder-members），deploy preset/undo-preset | 定义/两种显示排序与部署分开 |
 | 标签/分类/注释/支持范围 | skill tag/set/move、skill category rename | 同一核心资料维护 |
+| 归档/还原/从归档删除 | skill archive add/list/restore/delete | 设置页「查看归档」；技能库卡片/批量/详情归档 |
 | 译文/覆盖层维护 | skill translation * / overlay * | 同一管理资料入口 |
 | Hermes | hermes *，skill adopt-hermes | 只读详情/明确启停/收编 |
 | 技能维护任务 | skill task <ref>... | 单项/多选，保留事实上下文，规范引用维护 Skill |

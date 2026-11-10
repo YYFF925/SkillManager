@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Archive,
   CheckSquare,
   Copy,
   FileText,
@@ -27,6 +28,7 @@ import {
 
 import {
   addSkillTags,
+  archiveSkills,
   copySkill,
   deleteSkills,
   deployStatus,
@@ -155,6 +157,7 @@ export function LibraryPage({
   const [manageTags, setManageTags] = useState(false);
   const [deployTarget, setDeployTarget] = useState<string[] | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string[] | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<string[] | null>(null);
   const [records, setRecords] = useState<DeploymentStatusView[]>([]);
   const [deployFilter, setDeployFilter] = useState<DeployFilter>("all");
   const [deployedTo, setDeployedTo] = useState("");
@@ -505,6 +508,31 @@ export function LibraryPage({
     }
   }
 
+  async function confirmArchive() {
+    const targets = archiveTarget ?? [];
+    setArchiveTarget(null);
+    if (targets.length === 0) {
+      return;
+    }
+    try {
+      const result = await archiveSkills(targets);
+      const parts = [
+        `已归档 ${result.archived.length} 项`,
+        `卸载副本 ${result.cleanup.length} 项`,
+      ];
+      if (result.errors.length > 0) {
+        parts.push(`未完成 ${result.errors.length} 项：${result.errors.map((item) => item.message).join("；")}`);
+      }
+      setNotice(parts.join("，"));
+      setError(result.errors.length > 0 ? result.errors.map((item) => item.message).join("；") : null);
+      setSelected([]);
+      setVersion((value) => value + 1);
+      void syncDeployments();
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
   async function confirmDelete() {
     const targets = deleteTarget ?? [];
     setDeleteTarget(null);
@@ -766,6 +794,14 @@ export function LibraryPage({
           >
             <Rocket className="size-3.5" strokeWidth={1.75} />
             部署…
+          </Button>
+          <Button
+            compact
+            disabled={selected.length === 0}
+            onClick={() => setArchiveTarget(selected)}
+          >
+            <Archive className="size-3.5" strokeWidth={1.75} />
+            归档
           </Button>
           <Button
             compact
@@ -1042,6 +1078,17 @@ export function LibraryPage({
             type="button"
             role="menuitem"
             onClick={() => {
+              setArchiveTarget([menu.reference]);
+              setMenu(null);
+            }}
+          >
+            <Archive className="size-3.5 text-muted" strokeWidth={1.75} />
+            归档…
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
               setDeleteTarget([menu.reference]);
               setMenu(null);
             }}
@@ -1068,6 +1115,7 @@ export function LibraryPage({
           onOpenMove={(skill) => setMoveTarget(skill)}
           onDeploy={(reference) => setDeployTarget([reference])}
           onDelete={(reference) => setDeleteTarget([reference])}
+          onArchive={(reference) => setArchiveTarget([reference])}
           onSyncDeployments={syncDeployments}
           onDeploymentsChanged={refreshRecords}
         />
@@ -1153,6 +1201,17 @@ export function LibraryPage({
             setError(null);
             setVersion((value) => value + 1);
           }}
+        />
+      )}
+
+      {archiveTarget && (
+        <ConfirmDialog
+          title="归档技能"
+          subtitle="归档会先从所有已安装的 Agent 卸载，再移出技能库；有本地变更的副本会中止归档。"
+          message={`将归档 ${archiveTarget.length} 项：${archiveTarget.join("、")}。还原后保留分类与标签，不自动重新部署。`}
+          confirmLabel="归档"
+          onCancel={() => setArchiveTarget(null)}
+          onConfirm={() => void confirmArchive()}
         />
       )}
 

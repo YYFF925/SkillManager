@@ -81,6 +81,28 @@ pub struct SkillDeleteOutcome {
     pub failures: Vec<ItemError>,
 }
 
+/// 归档：先卸载全部受管部署，成功后才移入归档目录。
+#[derive(Clone, Debug, Default)]
+pub struct SkillArchiveOutcome {
+    pub archived: Vec<String>,
+    pub cleanup: Vec<DeployItemView>,
+    pub failures: Vec<ItemError>,
+}
+
+/// 从归档还原到正常库（不重新部署）。
+#[derive(Clone, Debug, Default)]
+pub struct SkillRestoreOutcome {
+    pub restored: Vec<String>,
+    pub failures: Vec<ItemError>,
+}
+
+/// 从归档永久删除。
+#[derive(Clone, Debug, Default)]
+pub struct SkillArchiveDeleteOutcome {
+    pub deleted: Vec<String>,
+    pub failures: Vec<ItemError>,
+}
+
 /// 一次技能/目标组合的结论。
 pub(crate) enum PairOutcome {
     Done(DeployItemView),
@@ -113,7 +135,8 @@ impl<'a> DeploymentService<'a> {
 
     pub(crate) fn index(&self) -> Result<SkillIndex> {
         SkillIndex::build(&self.vault_root).inspect_err(|err| {
-            let _ = crate::diagnostics::record(self.state, "error", "deploy.index", &err.to_string());
+            let _ =
+                crate::diagnostics::record(self.state, "error", "deploy.index", &err.to_string());
         })
     }
 
@@ -122,11 +145,7 @@ impl<'a> DeploymentService<'a> {
     }
 
     /// 批量部署：技能 × 目标，逐项独立处理。
-    pub fn deploy_to(
-        &self,
-        references: &[SkillRef],
-        targets: &[Target],
-    ) -> Result<DeployReport> {
+    pub fn deploy_to(&self, references: &[SkillRef], targets: &[Target]) -> Result<DeployReport> {
         let index = self.index()?;
         let targets = dedup_targets(targets);
         let mut report = DeployReport::default();
@@ -135,7 +154,11 @@ impl<'a> DeploymentService<'a> {
                 match self.deploy_pair(&index, reference, target) {
                     Ok(PairOutcome::Done(item)) => report.push_item(item),
                     Ok(PairOutcome::Failed(error)) => report.push_failure(error),
-                    Err(err) => report.push_failure(ItemError::from_error(&err).skill(reference.to_string()).target(target.as_str())),
+                    Err(err) => report.push_failure(
+                        ItemError::from_error(&err)
+                            .skill(reference.to_string())
+                            .target(target.as_str()),
+                    ),
                 }
             }
         }
@@ -144,7 +167,10 @@ impl<'a> DeploymentService<'a> {
 
     /// 收编时接管原副本（供 US2/US6 调用）：按库合成覆盖并登记为受管部署。
     pub fn adopt_existing(&self, reference: &SkillRef, target: &Target) -> Result<DeployReport> {
-        self.deploy_to(std::slice::from_ref(reference), std::slice::from_ref(target))
+        self.deploy_to(
+            std::slice::from_ref(reference),
+            std::slice::from_ref(target),
+        )
     }
 
     /// 本机部署记录（供 `deploy status` 与 GUI 展示）。
@@ -177,7 +203,9 @@ impl<'a> DeploymentService<'a> {
                 _ => None,
             };
             out.push(DeploymentStatusView {
-                deployment_blocks: entry.map(|entry| entry.deployment_blocks()).unwrap_or_default(),
+                deployment_blocks: entry
+                    .map(|entry| entry.deployment_blocks())
+                    .unwrap_or_default(),
                 skill: record.reference().to_string(),
                 target: record.target.clone(),
                 target_path: record.target_path.clone(),
@@ -274,9 +302,9 @@ impl<'a> DeploymentService<'a> {
 
         let mut message = match &admission {
             Admission::Allowed => None,
-            Admission::Unsupported(reason) => Some(format!(
-                "支持范围已收窄，已有部署保留并警告：{reason}"
-            )),
+            Admission::Unsupported(reason) => {
+                Some(format!("支持范围已收窄，已有部署保留并警告：{reason}"))
+            }
         };
         if let Some(note) = &composed.comment_note {
             message = Some(match message {

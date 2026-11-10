@@ -193,6 +193,18 @@ skill-manager skill update code/skill-manager-maintenance
 | 6.18 | 从新安装包内 CLI 重部署既有受污染副本（如 agent:hermes 的 ego-browser），用严格 1.1 消费者（`python3 -c "import yaml; …"`）重解析 | 危险形状值全部解析为 `str`，无 `date`/`int`/`bool` 类型化，下游 JSON 序列化不再崩溃 |
 | 6.19 | 检查 `release/` | macOS 新包替换旧包；Windows NSIS 待 Windows 机器重建前保持旧版并在交付说明注明 |
 
+## M6 补充五 — 分类栏顺序、全局分类管理与技能归档（2026-11-10）
+
+对应 spec.md FR-003/050/056/060、US1-10～12、SC-011；实施见 tasks.md Phase 23。自动化覆盖 CLI 与组件测试；GUI 人工核对原型与正式界面分类栏顺序、预设/Hermes 新建分类、设置页归档管理。
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 6.20 | 技能库同时有具名分类与未分类技能时查看分类栏 | 顺序为「全部分类」、紧邻的「未分类」、其余具名分类；「未分类」无重命名与拖动手柄（FR-003、US1-10） |
+| 6.21 | 在预设成员浏览与 Hermes 档案技能列表点击「新建分类」并重命名一个具名分类 | 与技能库分类栏相同；预设作用于当前管理域，Hermes 作用于龙虾库；「全部分类」「未分类」仍无重命名入口（FR-003、US1-11） |
+| 6.22 | 部署 `code/alpha` 到 Codex 后执行 `skill archive add code/alpha`；再 `skill list`、`skill archive list`、`skill archive restore code/alpha` | 归档前副本与部署记录已清除；正常列表不再含 alpha；归档目录保留原分类与标签；还原后目录回到原分类，部署记录仍为空（FR-060、SC-011） |
+| 6.23 | 部署后手改副本，再 `skill archive add` | 退出非零，库内条目仍在原处，副本保留，归档目录未出现该项（FR-060） |
+| 6.24 | 设置页「全局配置」点击「查看归档」，还原一项、删除一项（删除需确认） | 弹出归档管理；还原后技能回到库列表；删除后归档中消失（FR-056/060） |
+
 ## 自动化与人工分工
 
 - M1~M3 的 CLI 场景（1.4~1.8、2.x 命令部分、3.x）纳入集成测试（`tests/`，cargo test 驱动 CLI 断言 JSON 输出与文件系统结果）；

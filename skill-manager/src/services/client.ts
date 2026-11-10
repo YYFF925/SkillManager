@@ -682,6 +682,56 @@ export async function deleteSkills(references: string[]): Promise<SkillDeleteVie
   return invoke<SkillDeleteView>("skill_delete", { references });
 }
 
+/** 已归档技能。 */
+export interface ArchivedSkillView {
+  domain: Domain;
+  name: string;
+  category: string | null;
+  vault_rel_dir: string;
+  comment: string | null;
+  tags: string[];
+}
+
+export interface SkillArchiveView {
+  archived: string[];
+  cleanup: DeployItemView[];
+  errors: ItemErrorView[];
+}
+
+export interface SkillRestoreView {
+  restored: string[];
+  errors: ItemErrorView[];
+}
+
+export interface SkillArchiveDeleteView {
+  deleted: string[];
+  errors: ItemErrorView[];
+}
+
+/** 列出已归档技能。 */
+export async function listArchivedSkills(domain?: Domain): Promise<ArchivedSkillView[]> {
+  requireDesktop();
+  return invoke<ArchivedSkillView[]>("skill_archive_list", { domain });
+}
+
+/** 归档技能：先卸载全部受管部署，成功后才移入归档目录。 */
+export async function archiveSkills(references: string[]): Promise<SkillArchiveView> {
+  requireDesktop();
+  return invoke<SkillArchiveView>("skill_archive", { references });
+}
+
+/** 从归档还原到正常库（不重新部署）。 */
+export async function restoreArchivedSkills(references: string[]): Promise<SkillRestoreView> {
+  requireDesktop();
+  return invoke<SkillRestoreView>("skill_archive_restore", { references });
+}
+
+/** 从归档永久删除。 */
+export async function deleteArchivedSkills(references: string[]): Promise<SkillArchiveDeleteView> {
+  requireDesktop();
+  return invoke<SkillArchiveDeleteView>("skill_archive_delete", { references });
+}
+
 // ---------------------------------------------------------------------------
 // Hermes 档案（US6）
 // ---------------------------------------------------------------------------

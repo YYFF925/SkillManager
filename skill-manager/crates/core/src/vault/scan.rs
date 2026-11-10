@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::domain::{Domain, validate_category_name, validate_skill_name};
+use crate::domain::{validate_category_name, validate_skill_name, Domain};
 use crate::error::{CoreError, Result};
 
 /// 候选入口文件名，`SKILL.md` 在前、`skill.md` 在后（精确匹配）。
@@ -124,12 +124,16 @@ pub struct ScannedSkill {
 
 /// 扫描一个管理域；域目录不存在时返回空（尚未使用过该库）。
 pub fn scan_domain(root: &Path, domain: Domain) -> Result<Vec<ScannedSkill>> {
-    let base = root.join(domain.dir_name());
+    scan_domain_from(&root.join(domain.dir_name()), domain)
+}
+
+/// 扫描指定目录下的一个管理域（归档目录复用同一识别规则）。
+pub fn scan_domain_from(base: &Path, domain: Domain) -> Result<Vec<ScannedSkill>> {
     if !base.exists() {
         return Ok(Vec::new());
     }
     if !base.is_dir() {
-        return Err(CoreError::NotADirectory(base));
+        return Err(CoreError::NotADirectory(base.to_path_buf()));
     }
 
     let mut out = Vec::new();
@@ -143,7 +147,12 @@ pub fn scan_domain(root: &Path, domain: Domain) -> Result<Vec<ScannedSkill>> {
         for grand in subdirs(&child_path)? {
             let (grand_path, grand_name) = grand;
             if is_skill_dir(&grand_path) {
-                out.push(scanned(domain, Some(child_name.clone()), grand_name, grand_path)?);
+                out.push(scanned(
+                    domain,
+                    Some(child_name.clone()),
+                    grand_name,
+                    grand_path,
+                )?);
             }
         }
     }
@@ -228,10 +237,16 @@ mod tests {
 
     #[test]
     fn frontmatter_requires_closed_block() {
-        assert_eq!(parse_frontmatter("---\nname: a\n---\n正文").name.as_deref(), Some("a"));
+        assert_eq!(
+            parse_frontmatter("---\nname: a\n---\n正文").name.as_deref(),
+            Some("a")
+        );
         assert_eq!(parse_frontmatter("---\nname: a\n正文").name, None);
         assert_eq!(parse_frontmatter("正文").name, None);
-        assert_eq!(parse_frontmatter("---\nname: a\n---\n").name.as_deref(), Some("a"));
+        assert_eq!(
+            parse_frontmatter("---\nname: a\n---\n").name.as_deref(),
+            Some("a")
+        );
     }
 
     #[test]

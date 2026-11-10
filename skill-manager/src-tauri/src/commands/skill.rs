@@ -6,18 +6,20 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
+use skill_manager_core::AppContext;
+use skill_manager_core::deploy::{DeployItemView, DeploymentService};
 use skill_manager_core::domain::{Domain, SkillRef, names_equal};
 use skill_manager_core::error::CoreError;
 use skill_manager_core::manager::{
     SupportDecl, list_overlays, read_overlay, read_translation, remove_overlay, remove_translation,
     write_overlay, write_translation,
 };
+use skill_manager_core::output::ItemError;
 use skill_manager_core::vault::index::{
     AgentSupport, CategoryFilter, DeploymentView, ReadLang, SearchQuery, SkillBody, SkillDetail,
     SkillIndex, SkillSummary,
 };
-use skill_manager_core::vault::{ManageItem, manage};
-use skill_manager_core::AppContext;
+use skill_manager_core::vault::{self, ArchivedSkill, ManageItem, manage};
 
 use super::AppState;
 
@@ -98,6 +100,28 @@ pub struct CategoryRenameResult {
     pub affected: usize,
 }
 
+/// 归档结果。
+#[derive(Clone, Debug, Serialize)]
+pub struct SkillArchiveView {
+    pub archived: Vec<String>,
+    pub cleanup: Vec<DeployItemView>,
+    pub errors: Vec<ItemError>,
+}
+
+/// 从归档还原结果。
+#[derive(Clone, Debug, Serialize)]
+pub struct SkillRestoreView {
+    pub restored: Vec<String>,
+    pub errors: Vec<ItemError>,
+}
+
+/// 从归档删除结果。
+#[derive(Clone, Debug, Serialize)]
+pub struct SkillArchiveDeleteView {
+    pub deleted: Vec<String>,
+    pub errors: Vec<ItemError>,
+}
+
 /// 译文状态视图。
 #[derive(Clone, Debug, Serialize)]
 pub struct TranslationView {
@@ -175,6 +199,21 @@ fn parse_ref(raw: &str) -> Result<SkillRef, String> {
     SkillRef::parse(raw).map_err(|err| err.to_string())
 }
 
+fn parse_refs(raw: &[String]) -> Result<Vec<SkillRef>, String> {
+    raw.iter().map(|item| parse_ref(item)).collect()
+}
+
+fn with_deploy<T, F>(state: &tauri::State<'_, AppState>, run: F) -> Result<T, String>
+where
+    F: FnOnce(&DeploymentService<'_>) -> skill_manager_core::error::Result<T>,
+{
+    let ctx = state.get()?;
+    let root = root_of(&ctx)?;
+    let resolver = ctx.target_resolver().map_err(|err| err.to_string())?;
+    let service = DeploymentService::new(root, &resolver, ctx.state());
+    run(&service).map_err(|err| err.to_string())
+}
+
 fn summary_of(root: &Path, reference: &SkillRef) -> Result<SkillSummary, String> {
     let index = SkillIndex::build(root).map_err(|err| err.to_string())?;
     index
@@ -209,9 +248,9 @@ pub fn skill_list(
     deployed_to: Option<String>,
 ) -> Result<SkillListResult, String> {
     let deployed_target = match &deployed_to {
-        Some(raw) => Some(
-            skill_manager_core::deploy::parse_target_arg(raw).map_err(|err| err.to_string())?,
-        ),
+        Some(raw) => {
+            Some(skill_manager_core::deploy::parse_target_arg(raw).map_err(|err| err.to_string())?)
+        }
         None => None,
     };
 
@@ -233,9 +272,10 @@ pub fn skill_list(
     };
     let agent = match &agent {
         Some(key) => {
-            let entry = ctx.catalog().get(key).ok_or_else(|| {
-                format!("{key} 不在内置 Agent 名单中")
-            })?;
+            let entry = ctx
+                .catalog()
+                .get(key)
+                .ok_or_else(|| format!("{key} 不在内置 Agent 名单中"))?;
             Some(AgentSupport {
                 key: key.clone(),
                 domain: entry.reference_domain,
@@ -507,12 +547,71 @@ pub fn skill_category_rename(
     let ctx = state.get()?;
     let root = root_of(&ctx)?;
     let domain = Domain::from_str(&domain).map_err(|err| err.to_string())?;
-    let affected = manage::rename_category(&root, domain, &old, &new).map_err(|err| err.to_string())?;
+    let affected =
+        manage::rename_category(&root, domain, &old, &new).map_err(|err| err.to_string())?;
     Ok(CategoryRenameResult {
         domain: domain.to_string(),
         from: old,
         to: new,
         affected,
+    })
+}
+
+/// 列出已归档技能。
+#[tauri::command]
+pub fn skill_archive_list(
+    state: tauri::State<'_, AppState>,
+    domain: Option<String>,
+) -> Result<Vec<ArchivedSkill>, String> {
+    let ctx = state.get()?;
+    let root = root_of(&ctx)?;
+    let domain = match domain.as_deref() {
+        Some(raw) => Some(Domain::from_str(raw).map_err(|err| err.to_string())?),
+        None => None,
+    };
+    vault::list_archived(&root, domain).map_err(|err| err.to_string())
+}
+
+/// 归档技能：先卸载全部受管部署，成功后才移入归档目录。
+#[tauri::command]
+pub fn skill_archive(
+    state: tauri::State<'_, AppState>,
+    references: Vec<String>,
+) -> Result<SkillArchiveView, String> {
+    let references = parse_refs(&references)?;
+    let outcome = with_deploy(&state, |service| service.archive_skills(&references))?;
+    Ok(SkillArchiveView {
+        archived: outcome.archived,
+        cleanup: outcome.cleanup,
+        errors: outcome.failures,
+    })
+}
+
+/// 从归档还原到正常库（不重新部署）。
+#[tauri::command]
+pub fn skill_archive_restore(
+    state: tauri::State<'_, AppState>,
+    references: Vec<String>,
+) -> Result<SkillRestoreView, String> {
+    let references = parse_refs(&references)?;
+    let outcome = with_deploy(&state, |service| service.restore_archived(&references))?;
+    Ok(SkillRestoreView {
+        restored: outcome.restored,
+        errors: outcome.failures,
+    })
+}
+
+/// 从归档永久删除。
+#[tauri::command]
+pub fn skill_archive_delete(
+    state: tauri::State<'_, AppState>,
+    references: Vec<String>,
+) -> Result<SkillArchiveDeleteView, String> {
+    let references = parse_refs(&references)?;
+    let outcome = with_deploy(&state, |service| service.delete_archived(&references))?;
+    Ok(SkillArchiveDeleteView {
+        deleted: outcome.deleted,
+        errors: outcome.failures,
     })
 }
 

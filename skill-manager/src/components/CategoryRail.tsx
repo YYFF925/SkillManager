@@ -197,6 +197,22 @@ export function CategoryRail({
         )}
       </div>
 
+      {uncategorizedCount > 0 && (
+        <button
+          type="button"
+          onClick={() => onSelect(UNCATEGORIZED)}
+          className={`mb-0.5 flex h-[35px] w-full items-center gap-1.5 rounded-md px-2.5 text-left text-[14px] ${
+            selected === UNCATEGORIZED ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
+          }`}
+        >
+          <span className="inline-block w-4 shrink-0" aria-hidden="true" />
+          未分类
+          <span className="ml-auto grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
+            {uncategorizedCount}
+          </span>
+        </button>
+      )}
+
       {categories.map((name) => {
         const count = namedCounts.get(name) ?? 0;
         const active = selected === name;
@@ -276,22 +292,6 @@ export function CategoryRail({
           </div>
         );
       })}
-
-      {uncategorizedCount > 0 && (
-        <button
-          type="button"
-          onClick={() => onSelect(UNCATEGORIZED)}
-          className={`mb-0.5 flex h-[35px] w-full items-center gap-1.5 rounded-md px-2.5 text-left text-[14px] ${
-            selected === UNCATEGORIZED ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
-          }`}
-        >
-          <span className="inline-block w-4 shrink-0" aria-hidden="true" />
-          未分类
-          <span className="ml-auto grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
-            {uncategorizedCount}
-          </span>
-        </button>
-      )}
     </aside>
   );
 }

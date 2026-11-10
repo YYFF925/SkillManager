@@ -4,6 +4,8 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 # Tasks: Skill Manager 正式产品
 
+**2026-11-10 分类栏、分类入口与归档**：将「未分类」钉在「全部分类」下方；凡展示分类栏的模块均可新建/重命名/排序；新增库内 `archive/` 技能归档（先卸载受管部署再移动，设置页查看归档）。对应 FR-003/050/056/060，任务见 Phase 23；验收见 `quickstart.md` M6 补充五。
+
 **2026-10-18 CLI 安装交付修订**：补齐 FR-050/051 与 US10 场景 5 的新电脑调用链，新增任务见 Phase 20；验证见 `quickstart.md` M6 补充三及 `checklists/m6-report.md` 第二十节。每次修改同步维护相应规格、设计与验收文档的要求已写入项目 `AGENTS.md`。
 
 **2026-10-16 后续修订**：共享目录按当前用户主目录自动定位 `.agents/skills`，无需配置。下列已完成任务中关于手动设置路径、缺路径报错或前往设置的内容属于此前实施记录，已由本次修订取代；现行行为及验收以 FR-021/042/050/055/056、CLI 契约及 quickstart 为准，结果见 `checklists/m6-report.md` 第十节。
@@ -14,7 +16,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 **Input**：本目录的 `spec.md`、`plan.md`、`research.md`、`data-model.md`、`contracts/cli.md`、`quickstart.md`；约束依据 `.specify/memory/constitution.md` v2.0.2。
 
-**范围**：全部 10 个 User Story（用户故事）与 FR-001～058；构建真实桌面应用与 CLI（命令行接口），不把 `001` 原型的模拟行为当作实现。所有源文件路径均相对仓库根目录，正式产品代码位于 `skill-manager/`。
+**范围**：全部 10 个 User Story（用户故事）与 FR-001～060；构建真实桌面应用与 CLI（命令行接口），不把 `001` 原型的模拟行为当作实现。所有源文件路径均相对仓库根目录，正式产品代码位于 `skill-manager/`。
 
 **组织**：按故事优先级分阶段；同为 P1 的 US3 在 US2 前，先实现部署与接管能力，再接入获取链路。阶段是工作归属，不强制按文档顺序串行；实际执行按末尾 M1～M5 与依赖关系安排。阶段检查用于确认方向，**全部功能完成后才投入使用**，不把 MVP（最小可验证范围）作为提前交付承诺。
 
@@ -471,3 +473,11 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 - [X] T139 [US10] 版本号改为每次发布升 patch；增加 bump / publish 脚本；公开源码仓库 `YYFF925/SkillManager` 的 GitHub Releases 放产物与各平台清单，Issues / Pull Request 关闭。
 - [X] T140 [US10] 0.1.1 已签名发布到 GitHub Releases（macOS DMG / Darwin updater 与 Windows NSIS），清单在 `updater-manifests`。0.1.0 不能远程升级，需手动安装 0.1.1。从含 updater 的包验证启动提示与确认安装，要等下一更高 patch。
 - [X] T141 [US10] 0.1.2 在已装 0.1.1 的 macOS 上走通「启动弹窗 → 关闭后仍可手动检查」，确认弹窗不是唯一入口；同轮把设置页各行的说明小字去掉（只留标题），并把「发现新版本 + 立即更新」常驻到左下角，关闭弹窗不再清除更新状态。`AppShell.test.tsx` 覆盖常驻提示与按钮回调，`SettingsPage.test.tsx` 保持通过。
+
+## Phase 23: 增量 — 分类栏顺序、全局分类管理与技能归档（2026-11-10）
+
+**目标**：分类栏「未分类」紧邻「全部分类」；技能库 / 预设 / Hermes 共用可编辑分类栏；技能可归档到库内 `archive/`，归档前卸载全部受管部署（FR-003/050/056/060）。
+
+- [X] T142 [US1] 分类栏顺序改为「全部分类」→「未分类」→具名分类；未分类不拖拽、不重命名。原型 `rail()` 与 `CategoryRail.tsx` 同步；`LibraryPage.test.tsx` 断言文档顺序。
+- [X] T143 [US1] [US6] [US7] 预设成员浏览与 Hermes 档案技能列表使用可编辑 `CategoryRail`，重命名调用 `renameCategory`（Hermes 固定龙虾库）。`PresetPage.test.tsx` / `HermesPage.test.tsx` 断言「新建分类」。
+- [X] T144 [US1] 实现库内归档：`vault/archive.rs`、`DeploymentService::archive_skills`（先卸载）、CLI `skill archive *`、Tauri `skill_archive_*`、技能库归档入口、设置页「查看归档」与 `ArchiveDialog`。core / CLI 测试覆盖隐藏、还原保元数据、卸载、外改中止、删除；设置页测试覆盖入口。

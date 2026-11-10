@@ -157,6 +157,11 @@ it("renames categories inline without a dialog", async () => {
   expect(await screen.findByRole("button", { name: "重命名分类 家庭运维" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "重命名分类 未分类" })).toBeNull();
   expect(screen.queryByRole("button", { name: "重命名分类 全部分类" })).toBeNull();
+  const all = screen.getByRole("button", { name: /全部分类/ });
+  const uncategorized = screen.getByRole("button", { name: /未分类/ });
+  const named = screen.getByText("家庭运维");
+  expect(all.compareDocumentPosition(uncategorized) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(uncategorized.compareDocumentPosition(named) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByRole("button", { name: "新建分类" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "拖动排序 家庭运维" })).toBeTruthy();
 

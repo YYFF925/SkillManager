@@ -62,6 +62,7 @@ description: 前端设计层｜在 design/ 看与改可操作原型，再把正�
 | 维护／工具任务 | `maintenanceDialog` `toolTaskDialog` `toolRegisterDialog` | `components/TaskDialog.tsx` |
 | 工具配套 Skill | `toolSkillIntakeDialog` | `components/ToolSkillCandidates.tsx` |
 | 确认 | `confirmDialog` | `ui.tsx` `ConfirmDialog` |
+| 归档管理 | `archiveDialog` | `components/ArchiveDialog.tsx` |
 | 软件更新 | — | `components/AppUpdateDialog.tsx` |
 
 QuickDeploy 图标：原型 `quickDeploy()` → `components/QuickDeploy.tsx`。

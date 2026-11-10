@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use skill_manager_core::domain::{Domain, SkillRef};
 use skill_manager_core::manager::{self, SupportDecl};
 use skill_manager_core::vault::index::{AgentSupport, CategoryFilter, SearchQuery, SkillIndex};
-use skill_manager_core::vault::{manage, scan};
+use skill_manager_core::vault::{self, manage, scan};
 
 fn write_file(root: &Path, rel: &str, content: &str) -> PathBuf {
     let path = root.join(rel);
@@ -33,7 +33,11 @@ fn write_skill(
     name: &str,
     body: &str,
 ) -> PathBuf {
-    write_file(root, &format!("{}/SKILL.md", rel_dir(domain, category, name)), body);
+    write_file(
+        root,
+        &format!("{}/SKILL.md", rel_dir(domain, category, name)),
+        body,
+    );
     root.join(rel_dir(domain, category, name))
 }
 
@@ -47,7 +51,8 @@ fn write_meta(root: &Path, domain: &str, category: Option<&str>, name: &str, met
 
 fn read_meta(root: &Path, domain: &str, category: Option<&str>, name: &str) -> String {
     std::fs::read_to_string(
-        root.join(rel_dir(domain, category, name)).join(".manager/meta.yaml"),
+        root.join(rel_dir(domain, category, name))
+            .join(".manager/meta.yaml"),
     )
     .unwrap()
 }
@@ -120,9 +125,15 @@ fn directory_name_is_the_skill_identity_not_frontmatter_name() {
     );
 
     let index = SkillIndex::build(root).unwrap();
-    assert!(index.get(&SkillRef::parse("code/dir-name").unwrap()).is_some());
-    assert!(index.get(&SkillRef::parse("code/frontmatter-name").unwrap()).is_none());
-    let entry = index.get(&SkillRef::parse("code/dir-name").unwrap()).unwrap();
+    assert!(index
+        .get(&SkillRef::parse("code/dir-name").unwrap())
+        .is_some());
+    assert!(index
+        .get(&SkillRef::parse("code/frontmatter-name").unwrap())
+        .is_none());
+    let entry = index
+        .get(&SkillRef::parse("code/dir-name").unwrap())
+        .unwrap();
     assert_eq!(entry.description.as_deref(), Some("来自 frontmatter"));
 }
 
@@ -160,7 +171,11 @@ fn move_category_moves_directory_without_renaming() {
     manage::move_to_category(root, &reference, None).unwrap();
     assert!(root.join("code/alpha/SKILL.md").exists());
     assert_eq!(
-        SkillIndex::build(root).unwrap().get(&reference).unwrap().category,
+        SkillIndex::build(root)
+            .unwrap()
+            .get(&reference)
+            .unwrap()
+            .category,
         None
     );
 }
@@ -184,11 +199,19 @@ fn rename_category_moves_directory_and_all_skills() {
 
     let index = SkillIndex::build(root).unwrap();
     assert_eq!(
-        index.get(&SkillRef::parse("code/alpha").unwrap()).unwrap().category.as_deref(),
+        index
+            .get(&SkillRef::parse("code/alpha").unwrap())
+            .unwrap()
+            .category
+            .as_deref(),
         Some("脚本")
     );
     assert_eq!(
-        index.get(&SkillRef::parse("lobster/alpha").unwrap()).unwrap().category.as_deref(),
+        index
+            .get(&SkillRef::parse("lobster/alpha").unwrap())
+            .unwrap()
+            .category
+            .as_deref(),
         Some("工具")
     );
 }
@@ -340,7 +363,9 @@ fn tag_rename_and_remove_cover_both_domains_without_deleting_skills() {
     // 删除标签只解除关联，技能仍在。
     let index = SkillIndex::build(root).unwrap();
     assert!(index.get(&SkillRef::parse("code/alpha").unwrap()).is_some());
-    assert!(index.get(&SkillRef::parse("lobster/beta").unwrap()).is_some());
+    assert!(index
+        .get(&SkillRef::parse("lobster/beta").unwrap())
+        .is_some());
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +442,10 @@ fn unknown_yaml_fields_survive_metadata_write_back() {
     assert_eq!(meta.comment.as_deref(), Some("新注释"));
 
     // 原地改键，不重排：foo 仍在 tags 之前。
-    assert!(raw.find("foo").unwrap() < raw.find("tags").unwrap(), "{raw}");
+    assert!(
+        raw.find("foo").unwrap() < raw.find("tags").unwrap(),
+        "{raw}"
+    );
 }
 
 #[test]
@@ -443,7 +471,10 @@ fn quoted_unknown_fields_keep_their_string_form_after_write_back() {
     assert!(raw.contains("'my_date': '2026-10-08'"), "{raw}");
     assert!(raw.contains("'my_flag': 'no'"), "{raw}");
     assert!(raw.contains("新注释"), "{raw}");
-    assert!(raw.find("my_date").unwrap() < raw.find("comment").unwrap(), "{raw}");
+    assert!(
+        raw.find("my_date").unwrap() < raw.find("comment").unwrap(),
+        "{raw}"
+    );
 
     // 重解析：仍是字符串值。
     let parsed = yaml_serde::from_str::<yaml_serde::Value>(&raw).unwrap();
@@ -652,7 +683,13 @@ fn combined_search_and_untagged_filter() {
 fn entry_metadata_exposes_vault_path_description_and_source() {
     let tmp = tempfile::TempDir::new().unwrap();
     let root = tmp.path();
-    write_skill(root, "code", Some("工具"), "alpha", "---\ndescription: 说明\n---\n");
+    write_skill(
+        root,
+        "code",
+        Some("工具"),
+        "alpha",
+        "---\ndescription: 说明\n---\n",
+    );
     write_file(
         root,
         "code/工具/alpha/.manager/source.yaml",
@@ -672,13 +709,11 @@ fn entry_metadata_exposes_vault_path_description_and_source() {
     // 无上游的自建技能没有 source.yaml。
     write_skill(root, "code", None, "self-made", "正文\n");
     let index = SkillIndex::build(root).unwrap();
-    assert!(
-        index
-            .get(&SkillRef::parse("code/self-made").unwrap())
-            .unwrap()
-            .source
-            .is_none()
-    );
+    assert!(index
+        .get(&SkillRef::parse("code/self-made").unwrap())
+        .unwrap()
+        .source
+        .is_none());
 }
 
 #[test]
@@ -739,7 +774,11 @@ fn overlay_layout_uses_underscore_for_generic_dimensions() {
             .unwrap(),
         b"codex-only".to_vec()
     );
-    assert!(manager::read_overlay(&dir, Some("codex"), None, "scripts/x.sh").unwrap().is_none());
+    assert!(
+        manager::read_overlay(&dir, Some("codex"), None, "scripts/x.sh")
+            .unwrap()
+            .is_none()
+    );
 
     // 路径逃逸被拒绝。
     assert!(manager::write_overlay(&dir, None, None, "../escape.sh", b"x").is_err());
@@ -749,4 +788,65 @@ fn overlay_layout_uses_underscore_for_generic_dimensions() {
     assert!(manager::remove_overlay(&dir, Some("codex"), None, "SKILL.md").unwrap());
     assert!(!dir.join(".manager/overlay/codex/_/SKILL.md").exists());
     assert!(!manager::remove_overlay(&dir, Some("codex"), None, "SKILL.md").unwrap());
+}
+
+#[test]
+fn archive_preserves_category_and_meta_and_hides_from_library() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let root = tmp.path();
+    write_skill(root, "code", Some("工具"), "alpha", "a");
+    write_meta(
+        root,
+        "code",
+        Some("工具"),
+        "alpha",
+        "tags: [x]\ncomment: 检查依赖\n",
+    );
+    write_skill(root, "code", None, "gamma", "g");
+
+    let reference = SkillRef::parse("code/alpha").unwrap();
+    vault::move_to_archive(root, &reference, Some("工具")).unwrap();
+
+    assert!(!root.join("code/工具/alpha/SKILL.md").exists());
+    assert!(root.join("archive/code/工具/alpha/SKILL.md").exists());
+    assert!(root
+        .join("archive/code/工具/alpha/.manager/meta.yaml")
+        .exists());
+    assert!(SkillIndex::build(root).unwrap().get(&reference).is_none());
+
+    let listed = vault::list_archived(root, Some(Domain::Code)).unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].name, "alpha");
+    assert_eq!(listed[0].category.as_deref(), Some("工具"));
+    assert_eq!(listed[0].comment.as_deref(), Some("检查依赖"));
+    assert_eq!(listed[0].tags, vec!["x"]);
+    assert_eq!(listed[0].vault_rel_dir, "archive/code/工具/alpha");
+
+    vault::restore_from_archive(root, &reference).unwrap();
+    assert!(root.join("code/工具/alpha/SKILL.md").exists());
+    assert!(!root.join("archive/code/工具/alpha").exists());
+    let index = SkillIndex::build(root).unwrap();
+    let restored = index.get(&reference).unwrap();
+    assert_eq!(restored.category.as_deref(), Some("工具"));
+    assert_eq!(restored.comment.as_deref(), Some("检查依赖"));
+    assert_eq!(restored.tags, vec!["x"]);
+}
+
+#[test]
+fn restore_rejects_live_duplicate_and_delete_removes_archive() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let root = tmp.path();
+    write_skill(root, "code", None, "gamma", "g");
+    let reference = SkillRef::parse("code/gamma").unwrap();
+    vault::move_to_archive(root, &reference, None).unwrap();
+    write_skill(root, "code", None, "gamma", "live");
+
+    let err = vault::restore_from_archive(root, &reference).unwrap_err();
+    assert!(err.to_string().contains("同名技能"), "{err}");
+    assert!(root.join("archive/code/gamma/SKILL.md").exists());
+
+    std::fs::remove_dir_all(root.join("code/gamma")).unwrap();
+    vault::delete_archived(root, &reference).unwrap();
+    assert!(vault::list_archived(root, None).unwrap().is_empty());
+    assert!(!root.join("archive/code/gamma").exists());
 }

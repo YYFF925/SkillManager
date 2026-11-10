@@ -62,6 +62,7 @@ vi.mock("../services/client", () => ({
     tool_check: { executed: true, status: "error", detail: "工具检查失败：fixture" }, upstream_report: null,
   })),
   sharedDirGet: vi.fn(async () => "/tmp/home/.agents/skills"),
+  listArchivedSkills: vi.fn(async () => []),
   setTheme: vi.fn(async () => settingsFixture),
   setFontScale: vi.fn(async () => settingsFixture),
   setAutoCheckMinutes: vi.fn(async () => settingsFixture),
@@ -231,8 +232,18 @@ describe("SettingsPage · 软件版本", () => {
     const panel = global.closest("section")!;
     await waitFor(() => expect(within(panel).getByText("0.1.1")).toBeTruthy());
     expect(within(panel).getByRole("button", { name: "检查更新" })).toBeTruthy();
+    expect(within(panel).getByRole("button", { name: "查看归档" })).toBeTruthy();
     fireEvent.click(within(panel).getByRole("button", { name: "检查更新" }));
     expect(await screen.findByText("当前已是最新版本。")).toBeTruthy();
+  });
+
+  it("查看归档打开空归档管理", async () => {
+    renderSettings();
+    const global = await screen.findByRole("heading", { name: "全局配置" });
+    const panel = global.closest("section")!;
+    fireEvent.click(within(panel).getByRole("button", { name: "查看归档" }));
+    expect(await screen.findByRole("heading", { name: "已归档技能" })).toBeTruthy();
+    expect(screen.getByText("当前没有已归档技能。")).toBeTruthy();
   });
 });
 

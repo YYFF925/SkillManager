@@ -10,6 +10,7 @@ vi.mock("../services/client", async (importOriginal) => ({
   deployStatus: vi.fn(async () => []),
   addPresetMembers: vi.fn(),
   deployTo: vi.fn(),
+  renameCategory: vi.fn(async () => ({ domain: "code", from: "a", to: "b", affected: 0 })),
 }));
 
 beforeEach(() => {
@@ -44,6 +45,7 @@ it("shows the selected preset member page without an in-page preset rail", async
   );
   expect(await screen.findByRole("heading", { name: "通用" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "组合部署…" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "新建分类" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "查看成员" })).not.toBeInTheDocument();
   expect(screen.queryByPlaceholderText("搜索预设名称…")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "龙虾库" })).not.toBeInTheDocument();

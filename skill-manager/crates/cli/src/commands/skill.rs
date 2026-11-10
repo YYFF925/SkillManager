@@ -8,18 +8,21 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::{Args, Subcommand, ValueEnum};
-use serde_json::{Value, json};
-use skill_manager_core::domain::{Domain, SkillRef, names_equal};
+use serde_json::{json, Value};
+use skill_manager_core::deploy::DeploymentService;
+use skill_manager_core::domain::{names_equal, Domain, SkillRef};
 use skill_manager_core::manager::{
-    self, SupportDecl, list_overlays, read_overlay, read_translation, remove_overlay,
-    remove_translation, write_overlay, write_translation,
+    self, list_overlays, read_overlay, read_translation, remove_overlay, remove_translation,
+    write_overlay, write_translation, SupportDecl,
 };
 use skill_manager_core::vault::index::{
     AgentSupport, CategoryFilter, DeploymentView, ReadLang, SearchQuery, SkillEntry, SkillIndex,
     SkillSummary,
 };
 use skill_manager_core::vault::{self, manage};
-use skill_manager_core::{AppContext, BatchOutcome, CliResult, CoreError, GlobalOptions, ItemError};
+use skill_manager_core::{
+    AppContext, BatchOutcome, CliResult, CoreError, GlobalOptions, ItemError,
+};
 
 use super::deploy;
 
@@ -49,6 +52,9 @@ pub enum SkillAction {
     Move(MoveArgs),
     /// 删除库内技能并清理其受管部署（本地外改副本暂停）。
     Delete(DeleteArgs),
+    /// 归档：卸载全部受管部署后移出正常技能库。
+    #[command(subcommand)]
+    Archive(ArchiveCommand),
     /// 中文译文维护。
     #[command(subcommand)]
     Translation(TranslationCommand),
@@ -249,6 +255,21 @@ pub struct DeleteArgs {
 }
 
 #[derive(Subcommand, Debug)]
+pub enum ArchiveCommand {
+    /// 归档技能：先卸载全部受管部署，成功后才移入归档目录。
+    Add(DeleteArgs),
+    /// 列出已归档技能。
+    List {
+        #[arg(long, value_name = "domain")]
+        domain: Option<String>,
+    },
+    /// 还原到正常库，保留原分类与标签，不重新部署。
+    Restore(DeleteArgs),
+    /// 从归档永久删除。
+    Delete(DeleteArgs),
+}
+
+#[derive(Subcommand, Debug)]
 pub enum TranslationCommand {
     /// 读取译文本体（无译文如实为空）。
     Get(RefArgs),
@@ -341,6 +362,7 @@ fn dispatch(
         SkillAction::Category(command) => category(ctx, command),
         SkillAction::Move(args) => move_skill(ctx, args),
         SkillAction::Delete(args) => delete(ctx, args),
+        SkillAction::Archive(command) => archive(ctx, command),
         SkillAction::Translation(command) => translation(ctx, command),
         SkillAction::Overlay(command) => overlay(ctx, command),
         SkillAction::AdoptHermes(args) => super::hermes::adopt(ctx, &args.profile, &args.names),
@@ -519,9 +541,10 @@ fn list(ctx: &AppContext, args: ListArgs) -> Result<(CliResult, String)> {
     };
     let agent = match &args.agent {
         Some(key) => {
-            let entry = ctx.catalog().get(key).ok_or_else(|| {
-                CoreError::InvalidTarget(format!("{key} 不在内置 Agent 名单中"))
-            })?;
+            let entry = ctx
+                .catalog()
+                .get(key)
+                .ok_or_else(|| CoreError::InvalidTarget(format!("{key} 不在内置 Agent 名单中")))?;
             Some(AgentSupport {
                 key: key.clone(),
                 domain: entry.reference_domain,
@@ -567,10 +590,7 @@ fn list(ctx: &AppContext, args: ListArgs) -> Result<(CliResult, String)> {
     }
     for summary in &summaries {
         human.push('\n');
-        human.push_str(&format!(
-            "- {}/{}",
-            summary.domain, summary.name
-        ));
+        human.push_str(&format!("- {}/{}", summary.domain, summary.name));
         if let Some(category) = &summary.category {
             human.push_str(&format!("（分类：{category}）"));
         }
@@ -581,7 +601,11 @@ fn list(ctx: &AppContext, args: ListArgs) -> Result<(CliResult, String)> {
             human.push_str(&format!(" 标签：{}", join(&summary.tags)));
         }
         if !summary.presets.is_empty() {
-            let ids: Vec<&str> = summary.presets.iter().map(|preset| preset.id.as_str()).collect();
+            let ids: Vec<&str> = summary
+                .presets
+                .iter()
+                .map(|preset| preset.id.as_str())
+                .collect();
             human.push_str(&format!(" 预设：{}", ids.join("、")));
         }
         if summary.translation_stale {
@@ -602,10 +626,12 @@ fn get(ctx: &AppContext, args: RefArgs) -> Result<(CliResult, String)> {
     let reference = parse_ref(&args.reference)?;
     let root = vault_root(ctx)?;
     let index = SkillIndex::build(&root)?;
-    let entry = index.get(&reference).ok_or_else(|| CoreError::SkillNotFound {
-        domain: reference.domain.to_string(),
-        name: reference.name.clone(),
-    })?;
+    let entry = index
+        .get(&reference)
+        .ok_or_else(|| CoreError::SkillNotFound {
+            domain: reference.domain.to_string(),
+            name: reference.name.clone(),
+        })?;
 
     let detail = vault::index::SkillDetail::load(entry, &root)?;
     let records = ctx
@@ -638,10 +664,19 @@ fn get(ctx: &AppContext, args: RefArgs) -> Result<(CliResult, String)> {
         "  注释：{}\n",
         summary.comment.as_deref().unwrap_or("无")
     ));
-    human.push_str(&format!("  描述：{}\n", summary.description.as_deref().unwrap_or("无")));
+    human.push_str(&format!(
+        "  描述：{}\n",
+        summary.description.as_deref().unwrap_or("无")
+    ));
     human.push_str(&format!("  标签：{}\n", join(&summary.tags)));
-    human.push_str(&format!("  {}\n", support_text(&summary.agents, "支持的 Agent")));
-    human.push_str(&format!("  {}\n", support_text(&summary.oses, "支持的系统")));
+    human.push_str(&format!(
+        "  {}\n",
+        support_text(&summary.agents, "支持的 Agent")
+    ));
+    human.push_str(&format!(
+        "  {}\n",
+        support_text(&summary.oses, "支持的系统")
+    ));
     match &summary.source {
         Some(source) => human.push_str(&format!(
             "  来源：{}（{}） {}\n",
@@ -681,10 +716,12 @@ fn count_nodes(nodes: &[vault::FileNode]) -> usize {
 fn read(ctx: &AppContext, args: ReadArgs) -> Result<(CliResult, String)> {
     let reference = parse_ref(&args.reference)?;
     let index = load_index(ctx)?;
-    let entry = index.get(&reference).ok_or_else(|| CoreError::SkillNotFound {
-        domain: reference.domain.to_string(),
-        name: reference.name.clone(),
-    })?;
+    let entry = index
+        .get(&reference)
+        .ok_or_else(|| CoreError::SkillNotFound {
+            domain: reference.domain.to_string(),
+            name: reference.name.clone(),
+        })?;
 
     let body = vault::index::read_body(entry, args.lang.map(ReadLang::from))?;
     let data = serde_json::to_value(&body)
@@ -736,10 +773,19 @@ fn set(ctx: &AppContext, args: SetArgs) -> Result<(CliResult, String)> {
     let data = json!({ "skill": summary });
 
     let mut human = format!("已更新 {reference}");
-    human.push_str(&format!("\n  注释：{}", summary.comment.as_deref().unwrap_or("无")));
+    human.push_str(&format!(
+        "\n  注释：{}",
+        summary.comment.as_deref().unwrap_or("无")
+    ));
     human.push_str(&format!("\n  标签：{}", join(&summary.tags)));
-    human.push_str(&format!("\n  {}", support_text(&summary.agents, "支持的 Agent")));
-    human.push_str(&format!("\n  {}", support_text(&summary.oses, "支持的系统")));
+    human.push_str(&format!(
+        "\n  {}",
+        support_text(&summary.agents, "支持的 Agent")
+    ));
+    human.push_str(&format!(
+        "\n  {}",
+        support_text(&summary.oses, "支持的系统")
+    ));
     Ok((CliResult::from_data(&data), human))
 }
 
@@ -782,7 +828,8 @@ fn tag(ctx: &AppContext, command: TagCommand) -> Result<(CliResult, String)> {
         TagCommand::Remove { tag } => {
             let affected = manage::remove_tag(&root, &tag)?;
             let data = json!({ "tag": tag, "affected": affected });
-            let human = format!("已解除标签「{tag}」的关联，涉及 {affected} 个技能（技能未被删除）");
+            let human =
+                format!("已解除标签「{tag}」的关联，涉及 {affected} 个技能（技能未被删除）");
             Ok((CliResult::from_data(&data), human))
         }
     }
@@ -802,15 +849,17 @@ fn tag_batch(root: &PathBuf, args: TagBatchArgs, add: bool) -> Result<(CliResult
         if item.ok {
             batch.push_ok(Value::String(item.skill));
         } else {
-            let message = item
-                .message
-                .unwrap_or_else(|| "未知原因".to_string());
+            let message = item.message.unwrap_or_else(|| "未知原因".to_string());
             batch.push_err(ItemError::new(message).skill(item.skill));
         }
     }
 
     let human = if batch.failed.is_empty() {
-        format!("已{}标签 {}", if add { "添加" } else { "移除" }, join(&tags))
+        format!(
+            "已{}标签 {}",
+            if add { "添加" } else { "移除" },
+            join(&tags)
+        )
     } else {
         format!(
             "已{}标签 {}（{} 项未完成）",
@@ -829,6 +878,97 @@ fn tag_batch(root: &PathBuf, args: TagBatchArgs, add: bool) -> Result<(CliResult
 fn delete(ctx: &AppContext, args: DeleteArgs) -> Result<(CliResult, String)> {
     let references = parse_refs(&args.references)?;
     deploy::delete_skills(ctx, &references)
+}
+
+fn archive(ctx: &AppContext, command: ArchiveCommand) -> Result<(CliResult, String)> {
+    match command {
+        ArchiveCommand::List { domain } => archive_list(ctx, domain.as_deref()),
+        ArchiveCommand::Add(args) => archive_add(ctx, &args.references),
+        ArchiveCommand::Restore(args) => archive_restore(ctx, &args.references),
+        ArchiveCommand::Delete(args) => archive_delete(ctx, &args.references),
+    }
+}
+
+fn archive_list(ctx: &AppContext, domain: Option<&str>) -> Result<(CliResult, String)> {
+    let domain = match domain {
+        Some(raw) => Some(Domain::from_str(raw)?),
+        None => None,
+    };
+    let items = vault::list_archived(&vault_root(ctx)?, domain)?;
+    let data = json!({ "skills": items, "total": items.len() });
+    let human = if items.is_empty() {
+        "归档为空".to_string()
+    } else {
+        let mut text = format!("已归档 {} 项", items.len());
+        for item in &items {
+            let category = item.category.as_deref().unwrap_or("未分类");
+            text.push_str(&format!(
+                "\n- {}/{} · {category} · {}",
+                item.domain.as_str(),
+                item.name,
+                item.vault_rel_dir
+            ));
+        }
+        text
+    };
+    Ok((CliResult::from_data(&data), human))
+}
+
+fn with_deploy<T>(
+    ctx: &AppContext,
+    run: impl FnOnce(&DeploymentService<'_>) -> Result<T>,
+) -> Result<T> {
+    let root = vault_root(ctx)?;
+    let resolver = ctx.target_resolver()?;
+    let service = DeploymentService::new(root, &resolver, ctx.state());
+    run(&service)
+}
+
+fn archive_add(ctx: &AppContext, raw: &[String]) -> Result<(CliResult, String)> {
+    let references = parse_refs(raw)?;
+    let outcome = with_deploy(ctx, |service| service.archive_skills(&references))?;
+    let data = json!({
+        "archived": outcome.archived,
+        "cleanup": outcome.cleanup,
+    });
+    let human = format!(
+        "已归档 {} 项，卸载副本 {} 项",
+        outcome.archived.len(),
+        outcome.cleanup.len()
+    );
+    archive_batch_result(data, outcome.failures, outcome.archived.is_empty(), human)
+}
+
+fn archive_restore(ctx: &AppContext, raw: &[String]) -> Result<(CliResult, String)> {
+    let references = parse_refs(raw)?;
+    let outcome = with_deploy(ctx, |service| service.restore_archived(&references))?;
+    let data = json!({ "restored": outcome.restored });
+    let human = format!("已还原 {} 项（未重新部署）", outcome.restored.len());
+    archive_batch_result(data, outcome.failures, outcome.restored.is_empty(), human)
+}
+
+fn archive_delete(ctx: &AppContext, raw: &[String]) -> Result<(CliResult, String)> {
+    let references = parse_refs(raw)?;
+    let outcome = with_deploy(ctx, |service| service.delete_archived(&references))?;
+    let data = json!({ "deleted": outcome.deleted });
+    let human = format!("已从归档删除 {} 项", outcome.deleted.len());
+    archive_batch_result(data, outcome.failures, outcome.deleted.is_empty(), human)
+}
+
+fn archive_batch_result(
+    data: Value,
+    errors: Vec<ItemError>,
+    empty_ok: bool,
+    human: String,
+) -> Result<(CliResult, String)> {
+    let result = if errors.is_empty() {
+        CliResult::success(data)
+    } else if empty_ok {
+        CliResult::failed(errors)
+    } else {
+        CliResult::partial(data, errors)
+    };
+    Ok((result, human))
 }
 
 // ---------------------------------------------------------------------------
@@ -898,12 +1038,12 @@ fn translation(ctx: &AppContext, command: TranslationCommand) -> Result<(CliResu
         TranslationCommand::Set(args) => {
             let reference = parse_ref(&args.reference)?;
             let content = match (&args.file, args.stdin) {
-                (Some(path), false) => decode_utf8(read_file_bytes(path)?, &path.display().to_string())?,
+                (Some(path), false) => {
+                    decode_utf8(read_file_bytes(path)?, &path.display().to_string())?
+                }
                 (None, true) => decode_utf8(read_stdin_bytes()?, "标准输入")?,
                 _ => {
-                    return Err(CoreError::other(
-                        "必须指定 --file <path> 或 --stdin 之一",
-                    ));
+                    return Err(CoreError::other("必须指定 --file <path> 或 --stdin 之一"));
                 }
             };
             let dir = manage::locate(&root, &reference)?;
@@ -1003,9 +1143,7 @@ fn overlay(ctx: &AppContext, command: OverlayCommand) -> Result<(CliResult, Stri
                 (Some(path), false) => read_file_bytes(path)?,
                 (None, true) => read_stdin_bytes()?,
                 _ => {
-                    return Err(CoreError::other(
-                        "必须指定 --file <path> 或 --stdin 之一",
-                    ));
+                    return Err(CoreError::other("必须指定 --file <path> 或 --stdin 之一"));
                 }
             };
             let dir = manage::locate(&root, &reference)?;
@@ -1033,12 +1171,8 @@ fn overlay(ctx: &AppContext, command: OverlayCommand) -> Result<(CliResult, Stri
         OverlayCommand::Remove(args) => {
             let reference = parse_ref(&args.reference)?;
             let dir = manage::locate(&root, &reference)?;
-            let removed = remove_overlay(
-                &dir,
-                args.agent.as_deref(),
-                args.os.as_deref(),
-                &args.path,
-            )?;
+            let removed =
+                remove_overlay(&dir, args.agent.as_deref(), args.os.as_deref(), &args.path)?;
             let data = json!({
                 "skill": reference.to_string(),
                 "agent": args.agent,
@@ -1057,7 +1191,11 @@ fn overlay(ctx: &AppContext, command: OverlayCommand) -> Result<(CliResult, Stri
 }
 
 fn overlay_label(entry: &manager::OverlayEntry) -> String {
-    format!("{}（{}）", entry.rel, dimension_label(&entry.agent, &entry.os))
+    format!(
+        "{}（{}）",
+        entry.rel,
+        dimension_label(&entry.agent, &entry.os)
+    )
 }
 
 fn dimension_label(agent: &Option<String>, os: &Option<String>) -> String {

@@ -26,6 +26,7 @@ import {
   hermesList,
   hermesProfiles,
   hermesRead,
+  renameCategory,
   deployStatus,
   type AgentView,
   type DeploymentStatusView,
@@ -40,9 +41,10 @@ import { toggleTagSelection, pruneSelectedTags, type TagMode } from "../lib/tagF
 import { LocalSkillDetail } from "../components/LocalSkillDetail";
 import { HermesSkillDetail } from "../components/HermesSkillDetail";
 import { QuickDeploy } from "../components/QuickDeploy";
+import { CategoryRail, CATEGORY_UNCATEGORIZED } from "../components/CategoryRail";
 import { Badge, Button, ConfirmDialog, Notice, Segmented } from "../components/ui";
 
-const UNCATEGORIZED = "__none";
+const UNCATEGORIZED = CATEGORY_UNCATEGORIZED;
 const NO_TAG = "__none";
 
 type Layout = "grid" | "list";
@@ -283,10 +285,7 @@ export function HermesPage({
         counts.set(skill.category, (counts.get(skill.category) ?? 0) + 1);
       }
     }
-    return {
-      named: [...counts.entries()].sort((left, right) => (left[0] < right[0] ? -1 : 1)),
-      uncategorized,
-    };
+    return { namedCounts: counts, uncategorized };
   }, [base]);
 
   const activeProfile = profiles.find((profile) => profile.name === active) ?? null;
@@ -320,6 +319,21 @@ export function HermesPage({
     setSelected((current) =>
       current.includes(name) ? current.filter((item) => item !== name) : [...current, name],
     );
+  }
+
+  async function renameRailCategory(from: string, to: string) {
+    try {
+      const result = await renameCategory("lobster", from, to);
+      setNotice(`已将分类「${result.from}」重命名为「${result.to}」，涉及 ${result.affected} 个技能。`);
+      setError(null);
+      if (category === from) {
+        setCategory(result.to);
+      }
+      setVersion((value) => value + 1);
+      await onLibrarySaved?.();
+    } catch (err) {
+      setError(String(err));
+    }
   }
 
   function openDetail(skill: HermesSkillView) {
@@ -627,50 +641,15 @@ export function HermesPage({
       )}
 
       <div className="flex min-h-0 flex-1 items-stretch gap-4">
-        <aside className="category-rail w-[148px] shrink-0">
-          <button
-            type="button"
-            onClick={() => setCategory(null)}
-            className={`mb-0.5 flex h-[35px] w-full items-center gap-1.5 rounded-md px-2.5 text-left text-[14px] ${
-              category === null ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
-            }`}
-          >
-            全部分类
-            <span className="grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
-              {base?.total ?? 0}
-            </span>
-          </button>
-          {railCategories.named.map(([name, count]) => (
-            <button
-              key={name}
-              type="button"
-              title={name}
-              onClick={() => setCategory(name)}
-              className={`mb-0.5 flex h-[35px] w-full items-center gap-1.5 rounded-md px-2.5 text-left text-[14px] ${
-                category === name ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
-              }`}
-            >
-              <span className="truncate">{name}</span>
-              <span className="ml-auto grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
-                {count}
-              </span>
-            </button>
-          ))}
-          {railCategories.uncategorized > 0 && (
-            <button
-              type="button"
-              onClick={() => setCategory(UNCATEGORIZED)}
-              className={`mb-0.5 flex h-[35px] w-full items-center gap-1.5 rounded-md px-2.5 text-left text-[14px] ${
-                category === UNCATEGORIZED ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
-              }`}
-            >
-              未分类
-              <span className="ml-auto grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
-                {railCategories.uncategorized}
-              </span>
-            </button>
-          )}
-        </aside>
+        <CategoryRail
+          domain="lobster"
+          total={base?.total ?? 0}
+          namedCounts={railCategories.namedCounts}
+          uncategorizedCount={railCategories.uncategorized}
+          selected={category}
+          onSelect={setCategory}
+          onRenameNamed={(from, to) => void renameRailCategory(from, to)}
+        />
 
         <div className="card-pane">
           <div

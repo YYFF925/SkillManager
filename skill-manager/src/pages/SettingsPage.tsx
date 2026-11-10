@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
+import { ArchiveDialog } from "../components/ArchiveDialog";
 import { Segmented, Notice, Badge, Button } from "../components/ui";
 import { checkForAppUpdate, currentAppVersion, type AppUpdate } from "../lib/appUpdate";
 import { AgentSettings } from "../components/AgentSettings";
@@ -141,6 +142,7 @@ export function SettingsPage({
   const [checking, setChecking] = useState(false);
   const [appVersion, setAppVersion] = useState("…");
   const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [manualSchedule, setManualSchedule] = useState<ScheduleReportView | null>(null);
   const latestSchedule = manualSchedule ?? schedule;
   useEffect(() => setManualSchedule(null), [schedule]);
@@ -281,6 +283,12 @@ export function SettingsPage({
             label="SkillManagerVault 目录"
           >
             <ReadOnlyValue mono>{vault.root}</ReadOnlyValue>
+          </SettingRow>
+
+          <SettingRow label="技能归档">
+            <Button compact onClick={() => setArchiveOpen(true)}>
+              查看归档
+            </Button>
           </SettingRow>
 
           <SettingRow
@@ -441,6 +449,16 @@ export function SettingsPage({
       </Panel>
 
       {notice && <Notice>{notice}</Notice>}
+
+      {archiveOpen && (
+        <ArchiveDialog
+          onClose={() => setArchiveOpen(false)}
+          onChanged={(message) => {
+            setNotice(message);
+            setError(null);
+          }}
+        />
+      )}
     </div>
   );
 }

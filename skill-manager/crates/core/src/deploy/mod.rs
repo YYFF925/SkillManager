@@ -11,13 +11,14 @@ pub mod targets;
 
 pub use agent_config::{AgentConfigService, AgentView, DirKind};
 pub use apply::{
-    DeployItemView, DeployReport, DeploymentService, DeploymentStatusView, SkillDeleteOutcome,
+    DeployItemView, DeployReport, DeploymentService, DeploymentStatusView,
+    SkillArchiveDeleteOutcome, SkillArchiveOutcome, SkillDeleteOutcome, SkillRestoreOutcome,
 };
 pub use compose::{compose_skill, ComposedArtifact, ComposedFile};
 pub use local_skills::{LocalDeleteOutcome, LocalSkillRead, LocalSkillService, LocalSkillView};
-pub use policy::{Admission, HERMES_AGENT_KEY, agent_dimension};
+pub use policy::{agent_dimension, Admission, HERMES_AGENT_KEY};
 pub use targets::{
-    AgentCatalog, AgentEntry, TargetResolution, TargetResolver, SHARED_TARGET, parse_target_arg,
+    parse_target_arg, AgentCatalog, AgentEntry, TargetResolution, TargetResolver, SHARED_TARGET,
 };
 
 /// 当前操作系统标识，取值与 `.manager/meta.yaml` 的 `oses` 一致。

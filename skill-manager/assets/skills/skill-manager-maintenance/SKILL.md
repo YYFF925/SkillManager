@@ -24,6 +24,7 @@ description: 维护 Skill Manager 的 SkillManagerVault：.manager 格式、目�
 - **技能身份** = 管理域 + 技能名，技能名即目录名。有上游来源的技能保留上游原名。
 - **分类** = 目录层级，最多一级（`code/<分类>/<技能名>/`）；未分类直接在域根下（`code/<技能名>/`）。
   改分类 = 移动目录，技能名不变。分类路径不是技能身份。
+- **归档** = 把技能移到 `archive/<domain>/[<分类>/]<技能名>/`，完整保留 `.manager`。归档前须卸载全部受管部署；还原不自动重新部署。
 - **本机状态**只在 SQLite（`skill-manager.db`，位于本机状态目录，与库分离）：部署记录、档案启用、
   Agent 配置、设置、工具本机安装记录、检查事实。共享内容真值不写 SQLite。
 - GLOSSARY 与数据模型见本项目仓库 `specs/002-skill-management/data-model.md`；命令契约见
@@ -240,6 +241,10 @@ skill-manager skill set <ref> [--comment <text>] [--tags <csv>] [--agents all|no
 skill-manager skill tag add|detach <ref>… --tags <csv>
 skill-manager skill tag rename <old> <new> | skill-manager skill tag remove <tag>
 skill-manager skill move <ref> (--category <c> | --uncategorized)
+skill-manager skill archive add <ref>…
+skill-manager skill archive list [--domain code|lobster]
+skill-manager skill archive restore <ref>…
+skill-manager skill archive delete <ref>…
 skill-manager skill translation set <ref> (--file <path> | --stdin)
 skill-manager skill overlay set <ref> --path <relative-path> (--file <path> | --stdin) [--agent <key>] [--os <os>]
 
