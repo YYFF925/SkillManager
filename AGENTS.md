@@ -19,6 +19,7 @@
 | `specs/<编号-功能名>/` | 按功能组织的 Spec（规格说明）、设计、计划、开发任务与验收资料 | 开展该功能工作时，只读对应目录中与任务有关的文件 |
 
 `.specify/templates/` 与 `.agents/skills/` 是流程模板和技能说明，不是产品需求。
+Cursor 聊天框用 `/` 列出的是 `.cursor/skills/` 里与 `.agents/skills/` 对应的副本（Codex 仍读 `.agents/skills/`）。
 使用对应流程时再读取，不为了了解产品而批量加载。
 
 ## 构建产物与提交
