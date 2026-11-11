@@ -242,9 +242,14 @@ fn tool_input_schema(name: &str) -> Value {
         "skill_delete" => (
             &["references"],
             json!({
-                "references": str_array("要删除的技能引用"),
-                "reference": str_prop("单个引用，与 references 二选一"),
-                "ref": str_prop("单个引用别名"),
+                "references": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "minItems": 1,
+                    "description": "要删除的技能引用列表 references[]"
+                },
+                "reference": str_prop("单个引用，与 references[] 二选一"),
+                "ref": str_prop("单个引用别名，映射为 references[]"),
             }),
         ),
         "deploy_to" | "deploy_sync" => (
@@ -399,6 +404,14 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|v| v == "references")
+        );
+        assert_eq!(
+            delete["inputSchema"]["properties"]["references"]["type"],
+            "array"
+        );
+        assert_eq!(
+            delete["inputSchema"]["properties"]["references"]["items"]["type"],
+            "string"
         );
     }
 

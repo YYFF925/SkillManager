@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button, Notice } from "../components/ui";
 
@@ -22,6 +22,32 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
   const [busy, setBusy] = useState(false);
   const [rebind, setRebind] = useState<RebindPayload | null>(null);
   const [rebindOtp, setRebindOtp] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/auth/session", { credentials: "include" })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const body = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!(body && typeof body === "object" && (body as { mustRebindTotp?: boolean }).mustRebindTotp)) {
+          return;
+        }
+        const payload = body as Record<string, unknown>;
+        setRebind({
+          totpSecret: String(payload.totpSecret ?? ""),
+          otpauth: String(payload.otpauth ?? ""),
+          qr: String(payload.qr ?? ""),
+          recoveryCodes: Array.isArray(payload.recoveryCodes)
+            ? payload.recoveryCodes.map((item) => String(item))
+            : [],
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submit() {
     setBusy(true);
@@ -98,7 +124,7 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
         <div className="login-card w-[420px] rounded-xl border border-line-soft bg-panel p-7">
           <h1 className="text-[17px] font-semibold">重新绑定一次性密码</h1>
           <p className="mt-1 text-[12px] text-muted">
-            恢复码已使用。请把新密钥加入验证器，并用新的一次性密码完成绑定。
+            恢复码已验证。请把新密钥加入验证器，并用新的一次性密码完成绑定。完成前旧验证器仍然有效，本会话不能进入管理站。
           </p>
           {rebind.qr && (
             <pre className="mt-3 overflow-auto text-[10px] leading-none text-ink-2" aria-label="TOTP 二维码">

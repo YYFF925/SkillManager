@@ -230,6 +230,9 @@ export function App() {
         if (!res.ok) return;
         const body = await res.json().catch(() => ({}));
         if (cancelled) return;
+        if (body && typeof body === "object" && (body as { mustRebindTotp?: boolean }).mustRebindTotp) {
+          return;
+        }
         setDeviceId(typeof body.deviceId === "string" ? body.deviceId : null);
         setStationReady(true);
       })

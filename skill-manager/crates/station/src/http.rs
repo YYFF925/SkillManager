@@ -268,7 +268,22 @@ async fn auth_session(
             let device = with_db(&state, |db| auth::session_device(db, &id))
                 .ok()
                 .flatten();
-            Json(json!({ "ok": true, "sessionId": id, "deviceId": device })).into_response()
+            let pending =
+                with_db(&state, |db| auth::session_pending_rebind(db, &id)).unwrap_or(false);
+            let mut body = json!({
+                "ok": true,
+                "sessionId": id,
+                "deviceId": device,
+                "mustRebindTotp": pending,
+            });
+            if pending {
+                if let Ok(Some(shown)) = with_db(&state, |db| auth::pending_rebind_shown(db, &id)) {
+                    body["totpSecret"] = json!(shown.totp_secret);
+                    body["otpauth"] = json!(shown.otpauth);
+                    body["qr"] = json!(shown.qr_unicode);
+                }
+            }
+            Json(body).into_response()
         }
         Err(err) => err.into_response(),
     }
@@ -314,11 +329,12 @@ async fn auth_totp_rebind(
     headers: HeaderMap,
     Json(body): Json<OtpBody>,
 ) -> impl IntoResponse {
-    if let Err(err) = require_session(&state, &jar, &headers) {
-        return err.into_response();
-    }
+    let id = match require_session(&state, &jar, &headers) {
+        Ok(id) => id,
+        Err(err) => return err.into_response(),
+    };
     let otp = body.otp.or(body.code).unwrap_or_default();
-    match with_db(&state, |db| auth::confirm_totp_rebind(db, &otp)) {
+    match with_db(&state, |db| auth::confirm_totp_rebind(db, &id, &otp)) {
         Ok(value) => Json(value).into_response(),
         Err(err) => err_status(err).into_response(),
     }

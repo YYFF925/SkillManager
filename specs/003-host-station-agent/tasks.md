@@ -231,3 +231,4 @@ T011 实现 vault clone（core/cli）
 - [X] T065 按 ACP 声明 Host 工具：`session/new.mcpServers` stdio（`host mcp`）带 `inputSchema`；initialize 不再塞 `tool_descriptors`；`fs/write*` 不得空成功。D9 任意 CLI 登记不在本任务。 per FR-015, C1
 - [X] T066 同一 Host 对话复用 ACP session；新 session 把 `agent_messages` 回灌 prompt；不要每条消息 initialize+session/new 后 kill。 per US3, C2
 - [X] T067 `session/request_permission` 不得一律放行；CLI 自带 bash/edit 拒绝，Host 工具（skill_set 等）才允许。确认等待不堵死 ACP 读循环（工具经 Host HTTP / 后台线程）。 per FR-001, FR-019, C3, H3
+- [X] T068 恢复码登录把新 TOTP/恢复码哈希挂在该会话（`pending_rebind` / `pending_totp_secret` / `pending_recovery_hashes`），不得立刻改写 `admin.totp_secret`；`POST /auth/totp/rebind` 用本会话待定密钥校验后才写入 admin，该会话才成为完整管理员会话。已用恢复码作废，其余恢复码与旧验证器在确认前仍有效。`skill_delete` 工具 schema 声明 `references[]`。D9/#7 不在本任务。 per US2/AC3, FR-007, H4

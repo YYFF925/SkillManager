@@ -8,7 +8,7 @@ Host 检测 `agent_runtime.binary_path`；没有则按已锁定的默认 CLI 执
 
 ## 工具（主动查询与写入）
 
-快照是推送；不够时 Agent **主动**查。查询/写入通道 = Host 经 ACP **向子进程声明的工具**（`session/new.mcpServers` stdio，带 JSON Schema 的 `skill_list` / `skill_get` / `skill_read` / `skill_set` 等），映射到现有 `skill-manager` JSON CLI，**经 Host 执行**（与 GUI 同一把锁、同一套确认）。不得直打 `skill-manager-core`。不得把工具清单只塞进 `initialize`。stdio MCP 只是 ACP 声明工具的协议通道，不是给用户用的平行 MCP 产品。CLI 自带 bash/edit 不得绕过 Host 锁与确认计划。同一 Host 对话复用 ACP session，并把 `agent_messages` 回灌新 session。
+快照是推送；不够时 Agent **主动**查。查询/写入通道 = Host 经 ACP **向子进程声明的工具**（`session/new.mcpServers` stdio，带 JSON Schema 的 `skill_list` / `skill_get` / `skill_read` / `skill_set` / `skill_delete`（`references[]`）等），映射到现有 `skill-manager` JSON CLI，**经 Host 执行**（与 GUI 同一把锁、同一套确认）。不得直打 `skill-manager-core`。不得把工具清单只塞进 `initialize`。stdio MCP 只是 ACP 声明工具的协议通道，不是给用户用的平行 MCP 产品。CLI 自带 bash/edit 不得绕过 Host 锁与确认计划。同一 Host 对话复用 ACP session，并把 `agent_messages` 回灌新 session。
 
 Host 启动该 CLI 时，把 `skill-manager/assets/skills/skill-manager-builtin-agent/`（内置管理说明）注入到 **该 CLI 会搜索的 skills 目录**（路径由 D9 探测记录；若无此目录，改为 ACP 初始化文本）。说明两层上下文已在消息里、细节用工具、003 确认与上传规则。该资产**不入库**到用户 SkillManagerVault，不得出现在 `skill list`，不得当作可部署技能。不得注入或改写配套维护 Skill（那条路仍是每次询问上传）。
 

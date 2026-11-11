@@ -75,6 +75,9 @@
 | session_id | 发给浏览器 |
 | created_at / expires_at | 按 session_ttl |
 | last_device_id | 当前切换到的设备，可空 |
+| pending_rebind | 恢复码登录后为 1；完成 TOTP 重绑前不是完整管理员会话，不得转发/管设备 |
+| pending_totp_secret | 待写入的新 TOTP；`POST /auth/totp/rebind` 确认前不进 `admin` |
+| pending_recovery_hashes | 待写入的新恢复码哈希；确认前不进 `admin`。明文恢复码不落库 |
 
 ### 2.3 `devices` — 已对接 Host
 

@@ -10,12 +10,12 @@
 POST /auth/setup          # 仅当尚无管理员：用户名、密码、开始绑定 TOTP
 GET  /auth/totp/setup     # 二维码与密钥、一次性恢复码（只展示一次）
 POST /auth/totp/verify
-POST /auth/login          # 用户名、密码、TOTP 或恢复码；恢复码成功时须带 mustRebindTotp 与新密钥/恢复码
+POST /auth/login          # 用户名、密码、TOTP 或恢复码；恢复码成功时须带 mustRebindTotp 与新密钥/恢复码。此时不得改写 admin.totp_secret，新密钥只挂在该会话
 POST /auth/logout
-GET  /auth/session
+GET  /auth/session        # 待重绑会话返回 mustRebindTotp 与密钥/二维码（明文恢复码仍只在登录响应展示一次）
 GET  /auth/session-ttl    # 当前保持登录秒数
 PUT  /auth/session-ttl    # 保持登录秒数（最小 60）
-POST /auth/totp/rebind    # 恢复码登录后用新 TOTP 完成绑定
+POST /auth/totp/rebind    # 用本会话待定密钥校验 OTP 后才写入 admin.totp_secret 与新恢复码哈希；此前该会话不是完整管理员会话
 ```
 
 无管理员时除 `setup` 外一律拒绝。不得公网注册第二人。

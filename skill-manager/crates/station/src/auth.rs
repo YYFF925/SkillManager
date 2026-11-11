@@ -180,18 +180,65 @@ fn expiry(ttl: i64) -> String {
 }
 
 pub fn create_session(db: &StationDb, ttl: i64) -> Result<String, String> {
-    create_session_with(db, ttl, false)
+    create_session_with(db, ttl, None)
 }
 
-fn create_session_with(db: &StationDb, ttl: i64, pending_rebind: bool) -> Result<String, String> {
+fn create_session_with(
+    db: &StationDb,
+    ttl: i64,
+    pending: Option<&SetupShown>,
+) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
+    let pending_hashes = pending.map(|shown| {
+        let hashes: Vec<String> = shown.recovery_codes.iter().map(|c| hash_code(c)).collect();
+        serde_json::to_string(&hashes).unwrap_or_else(|_| "[]".into())
+    });
     db.conn()
         .execute(
-            "INSERT INTO sessions (session_id, created_at, expires_at, last_device_id, pending_rebind) VALUES (?1, ?2, ?3, NULL, ?4)",
-            rusqlite::params![id, now_rfc3339(), expiry(ttl), if pending_rebind { 1 } else { 0 }],
+            "INSERT INTO sessions (session_id, created_at, expires_at, last_device_id, pending_rebind, pending_totp_secret, pending_recovery_hashes) VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6)",
+            rusqlite::params![
+                id,
+                now_rfc3339(),
+                expiry(ttl),
+                if pending.is_some() { 1 } else { 0 },
+                pending.map(|shown| shown.totp_secret.as_str()),
+                pending_hashes.as_deref(),
+            ],
         )
         .map_err(|err| err.to_string())?;
     Ok(id)
+}
+
+/// 待重绑会话上的新密钥/二维码。明文恢复码只在登录响应里给一次。
+pub fn pending_rebind_shown(
+    db: &StationDb,
+    session_id: &str,
+) -> Result<Option<SetupShown>, String> {
+    let row: Option<(i64, Option<String>)> = db
+        .conn()
+        .query_row(
+            "SELECT pending_rebind, pending_totp_secret FROM sessions WHERE session_id = ?1",
+            [session_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|err| err.to_string())?;
+    let Some((flag, Some(secret))) = row else {
+        return Ok(None);
+    };
+    if flag == 0 {
+        return Ok(None);
+    }
+    let admin = load_admin(db)?.ok_or_else(|| "尚未创建管理员".to_string())?;
+    let totp = totp_from_secret(&secret, &admin.username)?;
+    let otpauth = totp.get_url();
+    Ok(Some(SetupShown {
+        username: admin.username,
+        totp_secret: secret,
+        otpauth: otpauth.clone(),
+        qr_unicode: qr_unicode(&otpauth),
+        recovery_codes: Vec::new(),
+    }))
 }
 
 pub fn session_pending_rebind(db: &StationDb, session_id: &str) -> Result<bool, String> {
@@ -314,21 +361,22 @@ pub fn login(
     }
     let mut rebind = None;
     if recovery_ok {
-        let shown = mint_totp(&admin.username)?;
-        let recovery_hashes: Vec<String> =
-            shown.recovery_codes.iter().map(|c| hash_code(c)).collect();
+        // 只作废这一条恢复码；已绑定的 TOTP 与其余恢复码保持到重绑确认。
+        let remaining: Vec<String> = admin
+            .recovery_code_hashes
+            .iter()
+            .filter(|h| *h != &recovery_hash)
+            .cloned()
+            .collect();
         db.conn()
             .execute(
-                "UPDATE admin SET totp_secret = ?1, recovery_code_hashes = ?2",
-                rusqlite::params![
-                    shown.totp_secret,
-                    serde_json::to_string(&recovery_hashes).unwrap_or_else(|_| "[]".into()),
-                ],
+                "UPDATE admin SET recovery_code_hashes = ?1",
+                [serde_json::to_string(&remaining).unwrap_or_else(|_| "[]".into())],
             )
             .map_err(|err| err.to_string())?;
-        rebind = Some(shown);
+        rebind = Some(mint_totp(&admin.username)?);
     }
-    let session_id = create_session_with(db, admin.session_ttl_seconds, rebind.is_some())?;
+    let session_id = create_session_with(db, admin.session_ttl_seconds, rebind.as_ref())?;
     Ok(LoginResult {
         session_id,
         must_rebind_totp: rebind.is_some(),
@@ -336,21 +384,52 @@ pub fn login(
     })
 }
 
-/// 恢复码登录后确认新的 TOTP 已写入验证器。
-pub fn confirm_totp_rebind(db: &StationDb, otp: &str) -> Result<serde_json::Value, String> {
-    let admin = load_admin(db)?.ok_or_else(|| "尚未创建管理员".to_string())?;
-    let secret = admin
-        .totp_secret
-        .ok_or_else(|| "尚未生成新的一次性密码，请重新用恢复码登录".to_string())?;
-    let totp = totp_from_secret(&secret, &admin.username)?;
-    if totp.check_current(otp).unwrap_or(false) {
-        db.conn()
-            .execute("UPDATE sessions SET pending_rebind = 0", [])
-            .map_err(|err| err.to_string())?;
-        Ok(json!({ "ok": true, "bound": true }))
-    } else {
-        Err("一次性密码不正确，请确认验证器已添加新密钥".to_string())
+/// 用本会话上的待定密钥校验 OTP，确认后才写入 admin 的 TOTP 与新恢复码。
+pub fn confirm_totp_rebind(
+    db: &StationDb,
+    session_id: &str,
+    otp: &str,
+) -> Result<serde_json::Value, String> {
+    let row: Option<(i64, Option<String>, Option<String>)> = db
+        .conn()
+        .query_row(
+            "SELECT pending_rebind, pending_totp_secret, pending_recovery_hashes FROM sessions WHERE session_id = ?1",
+            [session_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(|err| err.to_string())?;
+    let Some((flag, Some(secret), hashes)) = row else {
+        return Err("当前会话不是待重绑状态，请重新用恢复码登录".to_string());
+    };
+    if flag == 0 {
+        return Err("当前会话不是待重绑状态，请重新用恢复码登录".to_string());
     }
+    let admin = load_admin(db)?.ok_or_else(|| "尚未创建管理员".to_string())?;
+    let totp = totp_from_secret(&secret, &admin.username)?;
+    if !totp.check_current(otp).unwrap_or(false) {
+        return Err("一次性密码不正确，请确认验证器已添加新密钥".to_string());
+    }
+    let hashes = hashes.unwrap_or_else(|| "[]".into());
+    db.conn()
+        .execute(
+            "UPDATE admin SET totp_secret = ?1, recovery_code_hashes = ?2",
+            rusqlite::params![secret, hashes],
+        )
+        .map_err(|err| err.to_string())?;
+    db.conn()
+        .execute(
+            "UPDATE sessions SET pending_rebind = 0, pending_totp_secret = NULL, pending_recovery_hashes = NULL WHERE session_id = ?1",
+            [session_id],
+        )
+        .map_err(|err| err.to_string())?;
+    db.conn()
+        .execute(
+            "DELETE FROM sessions WHERE pending_rebind = 1 AND session_id != ?1",
+            [session_id],
+        )
+        .map_err(|err| err.to_string())?;
+    Ok(json!({ "ok": true, "bound": true }))
 }
 
 pub fn ttl(db: &StationDb) -> Result<i64, String> {
@@ -403,21 +482,23 @@ mod tests {
     use crate::db::StationDb;
 
     #[test]
-    fn recovery_login_issues_new_totp_instead_of_only_a_session() {
+    fn recovery_login_holds_pending_totp_until_rebind() {
         let dir = tempfile::tempdir().unwrap();
         let db = StationDb::open(dir.path()).unwrap();
         let shown = create_admin(&db, "admin", "password1").unwrap();
+        let original_secret = shown.totp_secret.clone();
         let code = shown.recovery_codes[0].clone();
         let result = login(&db, "admin", "password1", &code).unwrap();
         assert!(result.must_rebind_totp);
         let rebind = result.rebind.expect("recovery login must return new TOTP");
         assert!(!rebind.totp_secret.is_empty());
         assert!(!rebind.recovery_codes.is_empty());
-        assert_ne!(rebind.totp_secret, shown.totp_secret);
+        assert_ne!(rebind.totp_secret, original_secret);
         let admin = load_admin(&db).unwrap().unwrap();
         assert_eq!(
             admin.totp_secret.as_deref(),
-            Some(rebind.totp_secret.as_str())
+            Some(original_secret.as_str()),
+            "recovery login must not replace bound TOTP before rebind"
         );
         let reused = login(&db, "admin", "password1", &code);
         assert!(
@@ -425,9 +506,29 @@ mod tests {
             "consumed recovery code must not work again"
         );
         assert!(session_pending_rebind(&db, &result.session_id).unwrap());
+        let pending = pending_rebind_shown(&db, &result.session_id)
+            .unwrap()
+            .expect("pending session must expose new secret");
+        assert_eq!(pending.totp_secret, rebind.totp_secret);
+
+        let old_totp = totp_from_secret(&original_secret, "admin").unwrap();
+        let old_otp = old_totp.generate_current().unwrap();
+        let old_login = login(&db, "admin", "password1", &old_otp).unwrap();
+        assert!(
+            !old_login.must_rebind_totp,
+            "old authenticator must still work until rebind confirms"
+        );
+
         let totp = totp_from_secret(&rebind.totp_secret, "admin").unwrap();
         let otp = totp.generate_current().unwrap();
-        confirm_totp_rebind(&db, &otp).unwrap();
+        confirm_totp_rebind(&db, &result.session_id, &otp).unwrap();
         assert!(!session_pending_rebind(&db, &result.session_id).unwrap());
+        let admin = load_admin(&db).unwrap().unwrap();
+        assert_eq!(
+            admin.totp_secret.as_deref(),
+            Some(rebind.totp_secret.as_str())
+        );
+        let stale = login(&db, "admin", "password1", &old_otp);
+        assert!(stale.is_err(), "old TOTP must fail after rebind");
     }
 }

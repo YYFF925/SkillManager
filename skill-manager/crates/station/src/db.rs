@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   last_device_id TEXT,
-  pending_rebind INTEGER NOT NULL DEFAULT 0
+  pending_rebind INTEGER NOT NULL DEFAULT 0,
+  pending_totp_secret TEXT,
+  pending_recovery_hashes TEXT
 );
 CREATE TABLE IF NOT EXISTS devices (
   device_id TEXT PRIMARY KEY,
@@ -52,6 +54,14 @@ impl StationDb {
         conn.execute_batch(SCHEMA).map_err(|err| err.to_string())?;
         let _ = conn.execute(
             "ALTER TABLE sessions ADD COLUMN pending_rebind INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN pending_totp_secret TEXT",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN pending_recovery_hashes TEXT",
             [],
         );
         Ok(Self { conn, dir })
