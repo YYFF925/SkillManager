@@ -1,6 +1,7 @@
 //! 用户级开机启动：macOS launchd、Linux systemd --user、Windows 登录项。
 //! 不唤醒休眠，不加看门狗。
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::fs;
 use std::path::{Path, PathBuf};
 

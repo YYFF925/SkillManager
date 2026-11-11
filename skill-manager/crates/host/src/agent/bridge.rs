@@ -194,6 +194,10 @@ fn ensure_executable(path: &Path) -> Result<(), String> {
             ));
         }
     }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
     Ok(())
 }
 

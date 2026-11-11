@@ -219,7 +219,7 @@ fn process_is_alive(pid: u32) -> bool {
 
 #[cfg(all(unix, not(target_os = "linux")))]
 fn unix_pid_alive(pid: u32) -> bool {
-    extern "C" {
+    unsafe extern "C" {
         fn kill(pid: i32, sig: i32) -> i32;
     }
     const ESRCH: i32 = 3;
@@ -233,7 +233,7 @@ fn unix_pid_alive(pid: u32) -> bool {
 
 #[cfg(windows)]
 fn windows_pid_alive(pid: u32) -> bool {
-    extern "system" {
+    unsafe extern "system" {
         fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut std::ffi::c_void;
         fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
         fn GetExitCodeProcess(handle: *mut std::ffi::c_void, code: *mut u32) -> i32;
