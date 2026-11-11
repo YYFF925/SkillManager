@@ -6,7 +6,7 @@
 
 ## 一、Host 本机（`state-dir/skill-manager.db` 增表）
 
-与 002 同一数据库，不加技能镜像。`state-dir` 另有咨询性锁文件 `host.lock`（D5）。
+与 002 同一数据库，不加技能镜像。`state-dir` 另有咨询性锁文件 `host.lock`（D5）；运行时 pid / 监听地址另写 `host.lock.meta`，供 `host status` 与第二实例在 Windows 独占 flock 挡住读 `host.lock` 时 peek。
 
 ### 1.1 `host_identity` — 本机作为设备
 
@@ -113,7 +113,7 @@
 
 ## 四、校验与状态
 
-- Host：同一 `state-dir` 只能有一个进程持有 `host.lock`。
+- Host：同一 `state-dir` 只能有一个进程持有 `host.lock`。争用时不得删锁；`fs4::try_lock_exclusive` 的 `Ok(false)` 视为占用。Windows 上 status / 第二实例读 PID 走 `host.lock.meta`，不因 `ERROR_LOCK_VIOLATION` 误判未运行。
 - 设备在线 = 管理站上该 `device_id` 的长连接仍在。
 - 操作计划：未确认 / 已确认 / 已过期 / 会话不匹配（拒绝）。
 - 对话任务：进行中 / 成功 / 部分失败 / 失败 / 已取消；「任务已生成」≠ 已写库；已取消 ≠ 成功。

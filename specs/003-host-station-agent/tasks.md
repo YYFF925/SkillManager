@@ -37,7 +37,7 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 **⚠️ CRITICAL**: 未完成本阶段不得开始 US1–US3。
 
 - [X] T005 将 `skill-manager/src-tauri/src/commands/mod.rs` 的 `AppState`（上下文、`background_jobs`、`VaultWatcher`、`fetch_jobs`、`schedule_report`）迁到 `skill-manager/crates/host/src/runtime.rs`，Tauri 改为持有 Host runtime；core 仍无 HTTP、无 Agent 运行时。
-- [X] T006 在 `skill-manager/crates/host/src/lock.rs` 实现 `state-dir/host.lock` 咨询锁：同一 `state-dir` 只允许一个 Host；第二实例失败并说明。在 `skill-manager/crates/host/tests/lock.rs` 断言双开失败。逐字落实 data-model「同一 `state-dir` 只能有一个进程持有 `host.lock`」。
+- [X] T006 在 `skill-manager/crates/host/src/lock.rs` 实现 `state-dir/host.lock` 咨询锁：同一 `state-dir` 只允许一个 Host；第二实例失败并说明。Windows 独占 flock 挡住读 `host.lock` 时走 `host.lock.meta` peek，争用（含 `try_lock_exclusive` 的 `Ok(false)`）不得删锁。`skill-manager/crates/host/tests/lock.rs` 断言双开失败、持锁时可 peek、独占 flock 时 sidecar 仍可读。逐字落实 data-model「同一 `state-dir` 只能有一个进程持有 `host.lock`」。
 - [X] T007 在 `skill-manager/crates/host/src/serve.rs`、`skill-manager/crates/cli/src/commands/host.rs` 实现 `host serve` / `host status`：前台运行、占锁、能报告是否接入 Vault。已有实例占锁则失败。
 - [X] T008 在 `skill-manager/crates/cli/src/main.rs` 落实 Host 在场时写入类命令转发到本机 Host、不在场时直连 core 且占同一把锁（research D5、FR-006）。
 - [X] T009 在 `skill-manager/src-tauri/src/lib.rs` 让桌面启动即内嵌 Host runtime（占锁、调度仍按 002）；关窗收托盘时 Host 继续跑，仅托盘退出才释放锁。

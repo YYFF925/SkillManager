@@ -1,7 +1,9 @@
 //! `state-dir/host.lock` 咨询锁：同一 state-dir 只允许一个 Host。
 //!
-//! 先用 `create_new` 占文件，再尽量加 flock。部分文件系统（overlay/NFS）上
-//! flock 会对第二进程也成功，因此以锁文件中存活 PID 为最终占用依据。
+//! 先用 `create_new` 占文件，再尽量加 flock。`fs4::try_lock_exclusive` 在争用时
+//! 返回 `Ok(false)`（不是 Err）。Windows 上 `LockFileEx` 锁整文件后，其它进程
+//! `ReadFile` 会 ERROR_LOCK_VIOLATION，所以元数据另写 `host.lock.meta` 供 peek。
+//! 只有拿到独占 flock 且 PID 已死才回收；争用中途不得删锁文件。
 
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
@@ -12,6 +14,9 @@ use serde::{Deserialize, Serialize};
 
 /// 锁文件名（相对 state-dir）。
 pub const LOCK_FILE: &str = "host.lock";
+
+/// 不被 flock 挡住的元数据旁路，Windows peek / 第二实例读 PID 用。
+pub const LOCK_META_FILE: &str = "host.lock.meta";
 
 /// 锁文件中的运行时元数据，供 CLI 发现本机 Host HTTP。
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -43,9 +48,18 @@ pub enum LockError {
     },
 }
 
+enum TryLock {
+    Acquired,
+    Contended,
+}
+
 impl HostLock {
     pub fn path(state_dir: impl AsRef<Path>) -> PathBuf {
         state_dir.as_ref().join(LOCK_FILE)
+    }
+
+    pub fn meta_path(state_dir: impl AsRef<Path>) -> PathBuf {
+        state_dir.as_ref().join(LOCK_META_FILE)
     }
 
     /// 尝试占用锁。已被其它存活进程占用则失败并说明。
@@ -65,13 +79,14 @@ impl HostLock {
                 .open(&path)
             {
                 Ok(mut file) => {
-                    let _ = file.try_lock_exclusive();
+                    // overlay 上 flock 可能对第二进程也成功；PID 仍是占用依据。
+                    let _ = try_exclusive(&file);
                     let meta = LockMeta {
                         pid: std::process::id(),
                         listen: None,
                         vault: None,
                     };
-                    write_meta(&mut file, &meta).map_err(|source| LockError::Io {
+                    write_meta(&mut file, &path, &meta).map_err(|source| LockError::Io {
                         path: path.clone(),
                         source,
                     })?;
@@ -99,7 +114,7 @@ impl HostLock {
 
         Err(LockError::Busy {
             state_dir: state_dir.to_path_buf(),
-            pid: 0,
+            pid: busy_pid(state_dir),
         })
     }
 
@@ -112,18 +127,23 @@ impl HostLock {
     }
 
     /// 更新锁文件中的监听地址 / Vault 路径，供 CLI 发现。
-    pub fn update_meta(&mut self, listen: Option<String>, vault: Option<String>) -> std::io::Result<()> {
+    pub fn update_meta(
+        &mut self,
+        listen: Option<String>,
+        vault: Option<String>,
+    ) -> std::io::Result<()> {
         self.meta.listen = listen;
         if vault.is_some() {
             self.meta.vault = vault;
         }
-        write_meta(&mut self.file, &self.meta)
+        write_meta(&mut self.file, &self.path, &self.meta)
     }
 }
 
 impl Drop for HostLock {
     fn drop(&mut self) {
-        let _ = self.file.unlock();
+        let _ = FileExt::unlock(&self.file);
+        let _ = std::fs::remove_file(meta_path(&self.path));
         let _ = std::fs::remove_file(&self.path);
     }
 }
@@ -133,10 +153,24 @@ enum Reclaim {
     Retry,
 }
 
+fn try_exclusive(file: &File) -> Result<TryLock, std::io::Error> {
+    match file.try_lock_exclusive() {
+        Ok(true) => Ok(TryLock::Acquired),
+        Ok(false) => Ok(TryLock::Contended),
+        Err(err) if is_lock_busy(&err) => Ok(TryLock::Contended),
+        Err(err) => Err(err),
+    }
+}
+
+fn busy_pid(state_dir: &Path) -> u32 {
+    recorded_meta(state_dir).map(|m| m.pid).unwrap_or(0)
+}
+
 fn try_reclaim_or_busy(state_dir: &Path, path: &Path) -> Result<Reclaim, LockError> {
     let mut file = match OpenOptions::new().read(true).write(true).open(path) {
         Ok(file) => file,
         Err(err) if err.kind() == ErrorKind::NotFound => return Ok(Reclaim::Retry),
+        Err(err) if is_lock_busy(&err) => return Ok(Reclaim::Busy(busy_pid(state_dir))),
         Err(source) => {
             return Err(LockError::Io {
                 path: path.to_path_buf(),
@@ -145,22 +179,34 @@ fn try_reclaim_or_busy(state_dir: &Path, path: &Path) -> Result<Reclaim, LockErr
         }
     };
 
-    if let Err(err) = file.try_lock_exclusive() {
-        if is_lock_busy(&err) {
-            let existing = read_meta_from(&mut file).unwrap_or_default();
-            return Ok(Reclaim::Busy(existing.pid));
+    match try_exclusive(&file) {
+        Ok(TryLock::Contended) => return Ok(Reclaim::Busy(busy_pid(state_dir))),
+        Err(err) if is_lock_busy(&err) => return Ok(Reclaim::Busy(busy_pid(state_dir))),
+        Err(source) => {
+            return Err(LockError::Io {
+                path: path.to_path_buf(),
+                source,
+            });
         }
+        Ok(TryLock::Acquired) => {}
     }
 
-    let existing = read_meta_from(&mut file).unwrap_or_default();
+    // 只有拿到独占 flock 才允许回收。同进程二次占用会 flock 成功，
+    // 但 PID 仍存活，必须 Busy，不能删锁（否则会变成两把锁）。
+    let existing = read_sidecar(path)
+        .or_else(|| read_meta_from(&mut file))
+        .unwrap_or_default();
     if existing.pid != 0 && process_is_alive(existing.pid) {
+        let _ = FileExt::unlock(&file);
         return Ok(Reclaim::Busy(existing.pid));
     }
 
     drop(file);
+    let _ = std::fs::remove_file(meta_path(path));
     match std::fs::remove_file(path) {
         Ok(()) => Ok(Reclaim::Retry),
         Err(err) if err.kind() == ErrorKind::NotFound => Ok(Reclaim::Retry),
+        Err(err) if is_lock_busy(&err) => Ok(Reclaim::Busy(busy_pid(state_dir))),
         Err(source) => Err(LockError::Io {
             path: state_dir.to_path_buf(),
             source,
@@ -169,32 +215,62 @@ fn try_reclaim_or_busy(state_dir: &Path, path: &Path) -> Result<Reclaim, LockErr
 }
 
 /// 在不占用锁的情况下读取当前 Host 元数据。
+/// Windows 整文件独占锁会挡住 `host.lock` 的 ReadFile，故优先读 sidecar。
 pub fn peek_meta(state_dir: impl AsRef<Path>) -> Option<LockMeta> {
-    let path = HostLock::path(state_dir);
-    let mut file = File::open(path).ok()?;
-    read_meta_from(&mut file)
+    let meta = recorded_meta(state_dir.as_ref())?;
+    if meta.pid != 0 && process_is_alive(meta.pid) {
+        Some(meta)
+    } else {
+        None
+    }
+}
+
+fn recorded_meta(state_dir: &Path) -> Option<LockMeta> {
+    let lock_path = HostLock::path(state_dir);
+    read_sidecar(&lock_path).or_else(|| {
+        let mut file = File::open(&lock_path).ok()?;
+        read_meta_from(&mut file)
+    })
+}
+
+fn meta_path(lock_path: &Path) -> PathBuf {
+    lock_path.with_file_name(LOCK_META_FILE)
+}
+
+fn read_sidecar(lock_path: &Path) -> Option<LockMeta> {
+    let raw = std::fs::read_to_string(meta_path(lock_path)).ok()?;
+    parse_meta(&raw)
 }
 
 fn read_meta_from(file: &mut File) -> Option<LockMeta> {
     file.seek(SeekFrom::Start(0)).ok()?;
     let mut buf = String::new();
     file.read_to_string(&mut buf).ok()?;
-    let trimmed = buf.trim();
+    parse_meta(&buf)
+}
+
+fn parse_meta(raw: &str) -> Option<LockMeta> {
+    let trimmed = raw.trim();
     if trimmed.is_empty() {
         return None;
     }
     serde_json::from_str(trimmed).ok()
 }
 
-fn write_meta(file: &mut File, meta: &LockMeta) -> std::io::Result<()> {
+fn write_meta(file: &mut File, lock_path: &Path, meta: &LockMeta) -> std::io::Result<()> {
+    let payload = serde_json::to_string(meta).unwrap_or_else(|_| "{}".to_string());
     file.set_len(0)?;
     file.seek(SeekFrom::Start(0))?;
-    file.write_all(serde_json::to_string(meta).unwrap_or_else(|_| "{}".to_string()).as_bytes())?;
-    file.flush()
+    file.write_all(payload.as_bytes())?;
+    file.flush()?;
+    std::fs::write(meta_path(lock_path), payload)
 }
 
 fn is_lock_busy(err: &std::io::Error) -> bool {
-    err.kind() == ErrorKind::WouldBlock || err.raw_os_error() == Some(libc_wouldblock())
+    matches!(
+        err.kind(),
+        ErrorKind::WouldBlock | ErrorKind::ResourceBusy | ErrorKind::PermissionDenied
+    ) || matches!(err.raw_os_error(), Some(11 | 32 | 33 | 35))
 }
 
 fn process_is_alive(pid: u32) -> bool {
@@ -239,25 +315,20 @@ fn windows_pid_alive(pid: u32) -> bool {
         fn GetExitCodeProcess(handle: *mut std::ffi::c_void, code: *mut u32) -> i32;
     }
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
     const STILL_ACTIVE: u32 = 259;
     unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        let mut handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if handle.is_null() {
-            return false;
+            handle = OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid);
+        }
+        if handle.is_null() {
+            // 5 = ERROR_ACCESS_DENIED：进程在，只是无权查询。当作存活，避免误回收。
+            return std::io::Error::last_os_error().raw_os_error() == Some(5);
         }
         let mut code = 0u32;
         let ok = GetExitCodeProcess(handle, &mut code);
         CloseHandle(handle);
         ok != 0 && code == STILL_ACTIVE
     }
-}
-
-#[cfg(windows)]
-fn libc_wouldblock() -> i32 {
-    33 // ERROR_LOCK_VIOLATION
-}
-
-#[cfg(not(windows))]
-fn libc_wouldblock() -> i32 {
-    11 // EAGAIN / EWOULDBLOCK on Linux
 }

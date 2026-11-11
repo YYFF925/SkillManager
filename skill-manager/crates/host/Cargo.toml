@@ -34,5 +34,6 @@ bytes.workspace = true
 http-body-util.workspace = true
 
 [dev-dependencies]
+fs4.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
