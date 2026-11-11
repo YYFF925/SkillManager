@@ -60,6 +60,8 @@ skill-manager --state-dir <state-a> host pair --station <url> --code <code> --na
 
 管理 CLI 未登录模型：对话说明不能执行，库文件不变。
 
+制造一次库拉取冲突或 `paused_local_change` 后打开对话（只说「处理这个」）：Agent 侧已有涉及的技能/路径与原文错误；用户消息里没有粘贴报错或技能名。不验收专用合并界面。
+
 ## 4. 管理站不可用（SC-005）
 
 停掉 `station serve`。本机桌面仍能改一条注释。CLI 在 Host 仍在时经 Host 执行；Host 也不在时直连 core 仍能读库。

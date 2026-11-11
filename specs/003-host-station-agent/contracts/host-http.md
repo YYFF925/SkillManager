@@ -45,7 +45,7 @@ GET  /agent/sessions
 GET  /agent/sessions/:id/messages
 ```
 
-`snapshot` 含管理域、页面、选中技能/分类/预设等标识。`POST /agent/messages` 把**当时**快照钉死到该条任务。后续 `PUT /agent/context` 只影响之后的新消息。
+`snapshot` 含管理域、页面、选中技能/分类/预设等标识，以及 Host 当时已知的失败/暂停（冲突路径、paused 部署、原文错误）。由 Host 填写，客户端不必让用户粘贴。`POST /agent/messages` 把**当时**快照钉死到该条任务。后续 `PUT /agent/context` 只影响之后的新消息。
 
 ## 本机状态
 
