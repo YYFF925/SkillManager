@@ -72,7 +72,11 @@ const frames = [
   ['43-tool-maintenance-guide', 'view=tools&tool=browser-use'],
   ['44-tool-update-task', 'view=tools&tool=browser-use'],
   ['45-tool-skill-intake', 'view=tools&tool=browser-use'],
-  ['46-tool-registration', 'view=tools']
+  ['46-tool-registration', 'view=tools'],
+  ['47-station-first-connect', 'view=code&firstConnect=1'],
+  ['48-station-pairing-code', 'view=code&firstConnect=1&pair=1'],
+  ['49-station-device-selected', 'view=code&firstConnect=1&device=1&selected=1'],
+  ['50-station-vault-attached', 'view=code&firstConnect=1&vault=1']
 ];
 const requestedFrames = process.argv.slice(2);
 const selectedFrames = requestedFrames.length ? frames.filter(([name]) => requestedFrames.includes(name)) : frames;

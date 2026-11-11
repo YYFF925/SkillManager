@@ -36,7 +36,7 @@ skill-manager --state-dir <state-a> host install-service
 skill-manager station serve --listen 127.0.0.1:8787
 ```
 
-首次：本机创建唯一管理员并绑定 TOTP。浏览器登录后生成对接码。
+首次：本机创建唯一管理员并绑定 TOTP。浏览器登录后，尚无设备时在首次接入页生成对接码（先对接 Host 并选择当前设备，再接入该机上已有的库路径）。
 
 ```text
 skill-manager --state-dir <state-a> host pair --station <url> --code <code> --name machine-a

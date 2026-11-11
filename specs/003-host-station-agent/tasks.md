@@ -205,7 +205,7 @@ T011 实现 vault clone（core/cli）
 - [X] T046 启动该 CLI 时把 `skill-manager/assets/skills/skill-manager-builtin-agent/` 注入其 skills 搜索目录；无该目录则写入 ACP 初始化文本，且不入库、不进 `skill list` per FR-015, T032, agent-bridge (missing)
 - [X] T047 补全 `assemble_snapshot` 的全局层：上游待更新、可入库新增、失败与暂停、预设/Hermes/工具/本机 Agent 目录的摘要+计数+引用，仍不含正文 per FR-015, agent-bridge, T031 (partial)
 - [X] T048 Host 在场时 CLI 把 preset / hermes / agent / instruction / tool 等写入转发到 Host invoke，不得只提示「请通过管理界面执行」 per FR-006, plan D5 (partial)
-- [X] T049 管理站界面提供生成一次性对接码、改设备名、解除对接，列表立即反映；不要只留 HTTP API per US2/AC4, US2/AC5, FR-009 (missing)
+- [X] T049 管理站界面提供生成一次性对接码、改设备名、解除对接，列表立即反映；不要只留 HTTP API。远程首次接入（无设备、无 Vault）也须在正常界面显示 DeviceBar／生成对接码，先对接再接入库 per US2/AC4, US2/AC5, US2/AC11, FR-009
 - [X] T050 用恢复码登录后必须能重新绑定 TOTP（二维码/密钥/新恢复码），不得只发会话并消耗恢复码 per US2/AC3, FR-007 (partial)
 - [X] T051 管理站把 Host invoke 的 409 / `needsConfirmation` 原样交给远程前端；不得把待确认计划当成 200 成功体 per FR-019, US2/AC9, host-http (contradicts)
 - [X] T052 桌面删除技能与覆盖部署走 Host 确认计划并绑定桌面会话，不得经 `src-tauri` 直打 core 绕过 `planId` per FR-013, FR-019 (partial)
@@ -232,3 +232,4 @@ T011 实现 vault clone（core/cli）
 - [X] T066 同一 Host 对话复用 ACP session；新 session 把 `agent_messages` 回灌 prompt；不要每条消息 initialize+session/new 后 kill。 per US3, C2
 - [X] T067 `session/request_permission` 不得一律放行；CLI 自带 bash/edit 拒绝，Host 工具（skill_set 等）才允许。确认等待不堵死 ACP 读循环（工具经 Host HTTP / 后台线程）。 per FR-001, FR-019, C3, H3
 - [X] T068 恢复码登录把新 TOTP/恢复码哈希挂在该会话（`pending_rebind` / `pending_totp_secret` / `pending_recovery_hashes`），不得立刻改写 `admin.totp_secret`；`POST /auth/totp/rebind` 用本会话待定密钥校验后才写入 admin，该会话才成为完整管理员会话。已用恢复码作废，其余恢复码与旧验证器在确认前仍有效。`skill_delete` 工具 schema 声明 `references[]`。D9/#7 不在本任务。 per US2/AC3, FR-007, H4
+- [X] T069 远程网页登录后、尚无设备且 Vault 未接入时，首次接入页显示 DeviceBar 与「生成对接码」；未选当前设备时禁用「接入该路径」，不调用 Host invoke，从而消除「尚未选择当前设备」死锁 per US2/AC11, T049

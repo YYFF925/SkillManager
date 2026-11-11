@@ -12,6 +12,8 @@ export interface StationDevice {
 export interface DeviceBarProps {
   currentId: string | null;
   onChange: (deviceId: string) => void;
+  /** 欢迎页内嵌时去掉侧栏外边距。 */
+  placement?: "sidebar" | "welcome";
 }
 
 interface PairingCode {
@@ -24,7 +26,7 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
 }
 
 /** 仅管理站远程壳显示。桌面不得渲染。 */
-export function DeviceBar({ currentId, onChange }: DeviceBarProps) {
+export function DeviceBar({ currentId, onChange, placement = "sidebar" }: DeviceBarProps) {
   const [devices, setDevices] = useState<StationDevice[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pairing, setPairing] = useState<PairingCode | null>(null);
@@ -48,11 +50,16 @@ export function DeviceBar({ currentId, onChange }: DeviceBarProps) {
 
   useEffect(() => {
     let cancelled = false;
-    void reload().catch((err) => {
-      if (!cancelled) setError(String(err));
-    });
+    const load = () => {
+      void reload().catch((err) => {
+        if (!cancelled) setError(String(err));
+      });
+    };
+    load();
+    const timer = window.setInterval(load, 2000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, [currentId, reload]);
 
@@ -121,7 +128,13 @@ export function DeviceBar({ currentId, onChange }: DeviceBarProps) {
   }
 
   return (
-    <div className="device-bar mx-2 mb-2 rounded-md border border-line-soft bg-panel px-2 py-1.5">
+    <div
+      className={
+        placement === "welcome"
+          ? "device-bar mt-4 rounded-md border border-line-soft bg-panel px-2 py-1.5"
+          : "device-bar mx-2 mb-2 rounded-md border border-line-soft bg-panel px-2 py-1.5"
+      }
+    >
       <div className="device-bar-row flex items-center gap-2">
         <span className="text-[11px] text-muted">当前设备</span>
         <select

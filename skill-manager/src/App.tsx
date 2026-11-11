@@ -69,56 +69,100 @@ const settingsItem: NavItem = { key: "settings", label: "设置", icon: Settings
 /** 共享目录是编码 Agent 的部署目标，入口与单个 Agent 同级并始终显示（未设置路径也不隐藏）。 */
 const SHARED_VIEW_KEY = "agent:shared";
 
-/** 首次接入：只选择已存在的本地 SkillManagerVault，不提供克隆或创建向导（FR-002）。 */
+/** 首次接入：远程须先对接并选择当前设备，再接入已存在的 SkillManagerVault（FR-002）。 */
 function VaultWelcome({
   error,
   busy,
   remote,
   path,
+  deviceId,
   onPathChange,
+  onDeviceChange,
   onChoose,
 }: {
   error: string | null;
   busy: boolean;
   remote: boolean;
   path: string;
+  deviceId: string | null;
   onPathChange: (path: string) => void;
+  onDeviceChange: (deviceId: string) => void;
   onChoose: () => void;
 }) {
+  const canAttach = !remote || Boolean(deviceId);
   return (
-    <div className="grid h-full place-items-center bg-app px-6">
-      <div className="w-[520px] rounded-xl border border-line-soft bg-panel p-7">
+    <div
+      className={
+        remote
+          ? "login-screen grid h-full place-items-center bg-app px-6"
+          : "grid h-full place-items-center bg-app px-6"
+      }
+    >
+      <div
+        className={`login-card ${remote ? "first-connect-card" : ""} w-[520px] rounded-xl border border-line-soft bg-panel p-7`}
+      >
         <div className="mb-4 flex items-center gap-2.5">
           <img src="/assets/app-logo.png" alt="" className="size-7" />
           <span className="text-[17px] font-semibold">Skill Manager</span>
         </div>
-        <h1 className="text-[15px] font-semibold">接入你的 SkillManagerVault</h1>
-        <p className="mt-2 text-[13px] leading-[21px] text-muted">
-          {remote
-            ? "填写当前 Host 上已存在的技能库目录；由 Host 校验路径，不使用浏览器文件选择器。"
-            : "选择一个已存在的本地技能库目录；它需要是 Git 仓库并已配置远端。"}
-          编码技能库（code/）与龙虾技能库（lobster/）在同一个库内分别管理，
-          技能内容与管理资料都留在这个目录里。
-        </p>
+        <h1 className={remote ? "text-[17px] font-semibold" : "text-[15px] font-semibold"}>
+          接入你的 SkillManagerVault
+        </h1>
+        {remote ? (
+          <>
+            <p className="muted mt-1.5 text-[13px] leading-[21px] text-muted">
+              先对接一台 Host，再接入该机上已存在的技能库。没有设备时无法打开库路径。
+            </p>
+            <ol className="first-connect-steps">
+              <li>生成一次性对接码。</li>
+              <li>
+                在该机执行{" "}
+                <code>host pair --station &lt;管理站地址&gt; --code &lt;对接码&gt;</code>。
+              </li>
+              <li>选择当前设备后，填写该 Host 上已存在的技能库路径。</li>
+            </ol>
+            <DeviceBar placement="welcome" currentId={deviceId} onChange={onDeviceChange} />
+            {!deviceId ? (
+              <p className="first-connect-hint">请先对接并选择当前设备，再接入技能库。</p>
+            ) : null}
+          </>
+        ) : (
+          <p className="mt-2 text-[13px] leading-[21px] text-muted">
+            选择一个已存在的本地技能库目录；它需要是 Git 仓库并已配置远端。
+            编码技能库（code/）与龙虾技能库（lobster/）在同一个库内分别管理，
+            技能内容与管理资料都留在这个目录里。
+          </p>
+        )}
         {remote ? (
           <label className="mt-5 block text-[12px] text-muted">
             Host 上的技能库路径
             <input
               className="mt-1.5 h-10 w-full rounded-lg border border-line bg-panel px-3 text-[13px]"
               value={path}
+              disabled={!canAttach}
               onChange={(event) => onPathChange(event.target.value)}
               placeholder="/home/user/SkillManagerVault"
             />
           </label>
         ) : null}
-        <div className="mt-5 flex items-center gap-2.5">
-          <Button kind="primary" disabled={busy || (remote && !path.trim())} onClick={onChoose}>
-            {busy ? "正在接入…" : remote ? "接入该路径" : "选择技能库目录"}
+        <div className="first-connect-actions">
+          <Button
+            kind="primary"
+            disabled={busy || !canAttach || (remote && !path.trim())}
+            onClick={onChoose}
+          >
+            {busy
+              ? "正在接入…"
+              : remote
+                ? canAttach
+                  ? "接入该路径"
+                  : "请先选择当前设备"
+                : "选择技能库目录"}
           </Button>
-          <span className="text-[12px] text-faint">
-            不提供克隆或创建向导；库的创建与远端配置请在 Git 中完成。
-          </span>
         </div>
+        <p className="muted mt-1.5 text-[12px] text-muted">
+          不提供克隆或创建向导；库的创建与远端配置请在 Git 中完成。
+        </p>
         {error && (
           <div className="mt-4">
             <Notice tone="danger">{error}</Notice>
@@ -173,6 +217,9 @@ export function App() {
   const [vaultPathDraft, setVaultPathDraft] = useState("");
 
   useEffect(() => {
+    if (remote && (!stationReady || !deviceId)) {
+      return;
+    }
     let cancelled = false;
     let off: (() => void) | undefined;
     const accept = (report: ScheduleReportView) => {
@@ -187,7 +234,7 @@ export function App() {
       if (report) accept(report);
     }).catch((err) => { if (!cancelled) setError(String(err)); });
     return () => { cancelled = true; off?.(); };
-  }, []);
+  }, [remote, stationReady, deviceId]);
 
   // 主题与字号是本项目新增能力：默认跟随系统，不继承旧版 dark 默认。
   useAppearance(settings?.theme ?? null, settings?.font_scale ?? null);
@@ -243,6 +290,9 @@ export function App() {
   }, [remote]);
 
   useEffect(() => {
+    if (remote && !deviceId) {
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -257,11 +307,16 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [remote, deviceId]);
 
   useEffect(() => {
     if (remote && !stationReady) {
       setLoading(false);
+      return;
+    }
+    if (remote && !deviceId) {
+      setLoading(false);
+      setVault(null);
       return;
     }
     let cancelled = false;
@@ -282,7 +337,12 @@ export function App() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(String(err));
+          const message = String(err);
+          if (remote && message.includes("尚未选择当前设备")) {
+            setVault(null);
+          } else {
+            setError(message);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -316,6 +376,10 @@ export function App() {
   }, [vault]);
 
   const chooseVault = useCallback(async () => {
+    if (remote && !deviceId) {
+      setError("请先对接并选择当前设备，再接入技能库。");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -341,13 +405,17 @@ export function App() {
     } finally {
       setBusy(false);
     }
-  }, [remote, vaultPathDraft]);
+  }, [remote, vaultPathDraft, deviceId]);
 
   const switchDevice = useCallback(async (nextId: string) => {
     setError(null);
     setVault(null);
     setAgents([]);
     setDeviceOnline(true);
+    if (!nextId) {
+      setDeviceId(null);
+      return;
+    }
     try {
       const response = await fetch("/current", {
         method: "PUT",
@@ -443,7 +511,9 @@ export function App() {
         busy={busy}
         remote={remote}
         path={vaultPathDraft}
+        deviceId={deviceId}
         onPathChange={setVaultPathDraft}
+        onDeviceChange={(id) => void switchDevice(id)}
         onChoose={() => void chooseVault()}
       />
     );

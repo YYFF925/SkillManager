@@ -220,10 +220,17 @@ body.is-sorting .preset-row-actions{opacity:1;pointer-events:auto}
 .login-screen{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:var(--bg);padding:24px}
 .login-screen[hidden]{display:none}
 .login-card{width:420px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;box-shadow:0 1px 2px #18181b0a}
+.login-card.first-connect-card{width:520px}
 .login-card h1{margin:0;font-size:17px;font-weight:600}
 .login-card .muted{margin:6px 0 0;font-size:12px}
 .login-card label{display:block;margin:14px 0 0;font-size:12px;color:var(--muted)}
 .login-card .field-input{margin-top:6px}
+.first-connect-steps{margin:14px 0 0;padding-left:18px;font-size:12px;color:var(--muted);line-height:1.7;list-style:decimal}
+.first-connect-steps code{background:var(--bg);padding:0 4px;border-radius:4px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.first-connect-card .device-bar{margin:16px 0 0}
+.first-connect-hint{margin:8px 0 0;font-size:12px;color:var(--muted);line-height:18px}
+.first-connect-actions{margin-top:18px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.device-select-hint{margin:8px 0 0;font-size:11px;color:var(--muted)}
 .device-bar{margin:0 2px 8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 .device-bar-row{display:flex;align-items:center;gap:8px}
 .device-bar-row span{font-size:11px;color:var(--muted);flex-shrink:0}

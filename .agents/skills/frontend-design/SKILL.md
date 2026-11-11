@@ -65,6 +65,7 @@ description: 前端设计层｜在 design/ 看与改可操作原型，再把正�
 | 归档管理 | `archiveDialog` | `components/ArchiveDialog.tsx` |
 | 软件更新 | — | `components/AppUpdateDialog.tsx` |
 | 管理站登录 | `login-screen` `login-card` | `pages/LoginPage.tsx` |
+| 管理站首次接入 | `first-connect-card` `first-connect-steps` | `App.tsx` VaultWelcome |
 | 设备条（仅远程壳） | `device-bar` | `components/DeviceBar.tsx` |
 | 管理对话 | `chat-panel` | `components/ChatPanel.tsx` |
 
