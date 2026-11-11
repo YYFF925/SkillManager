@@ -38,10 +38,11 @@ skill-manager/
 ```bash
 npm install                # 前端依赖（首次）
 npm run prepare:cli        # 准备本机 Tauri externalBin（cargo workspace 构建／测试前运行）
+npm run check:desktop      # 先准备 sidecar，再 `cargo check -p skill-manager-desktop`
 
 # 测试与检查（全部在 skill-manager/ 下运行）
 cargo test --workspace     # Rust：core 单元测试 + CLI/核心集成测试
-cargo build --workspace    # 构建 core / cli / desktop
+cargo build --workspace    # 构建 core / cli / desktop（须已有 sidecar）
 npx tsc --noEmit           # 前端类型检查
 npm test                   # 前端 vitest
 npm run build              # 前端生产构建（tsc + vite build）
@@ -60,7 +61,7 @@ WebView2 用官方下载引导）。
 CLI 通过 Tauri 原生 `bundle.externalBin` 随安装包交付。开发与打包钩子会先执行
 `scripts/prepare-cli.mjs`，从同一 workspace 构建对应目标的 CLI；发布构建使用 release，
 通过 Tauri 的 `TAURI_ENV_TARGET_TRIPLE` 指定目标，生成文件在忽略的 `src-tauri/binaries/`。
-直接执行 `cargo build/test --workspace` 前先运行 `npm run prepare:cli`；只运行 CLI 或 core 不需要此步骤。
+直接执行 `cargo build/test --workspace` 或 `cargo check -p skill-manager-desktop` 前先运行 `npm run prepare:cli`；只运行 CLI 或 core 不需要此步骤。桌面 crate 的 `build.rs` 会把已编好的 CLI 复制到 `src-tauri/binaries/skill-manager-<triple>`，找不到 sidecar 就失败并提示上述命令，不嵌套 cargo、不假装桌面编过。一条命令：`npm run check:desktop`。
 macOS 本机打包使用 ad hoc（临时签名，`bundle.macOS.signingIdentity = "-"`），
 使签名标识与应用标识 `com.fei.skillmanager` 一致。实际验证中，未绑定应用信息的链接器签名下，
 系统本地网络开关虽已开启，GUI 的 Git SSH 仍报 `No route to host`；应用包签名并重启后连接成功。

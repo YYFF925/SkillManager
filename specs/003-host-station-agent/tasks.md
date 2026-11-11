@@ -227,3 +227,4 @@ T011 实现 vault clone（core/cli）
 - [X] T061 对话任务完成后清除进行中状态，取消不得显示成功 per FR-022, FR-023 (partial)
 - [X] T062 确认计划识别须带 `needsConfirmation`；无 ConfirmDialog 时拒绝而不是 `window.confirm` per FR-019, T054 (partial)
 - [X] T063 对照 core JSON CLI / GUI 页面补 `assemble_snapshot`：可入库新增、冲突路径与 git 原文、`paused_local_change`、最近命令失败原文；无 skill ref 时 view 按当前页补齐对象。对照表见 `snapshot-inventory.md`。不声称齐全。D9 默认 CLI 锁定不在本任务。 per FR-015, T047 (partial)
+- [X] T064 Linux 云上 `cargo check -p skill-manager-desktop`：`prepare-cli` 为本机 triple 准备 sidecar（本机不传 `--target`）；desktop `build.rs` 缺失时从已构建 CLI 复制，找不到则失败并提示 `npm run prepare:cli` / `npm run check:desktop`，不嵌套 cargo、不提交 `binaries/`、不假装成功。D9 不在本任务。

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "prepare:cli": "node scripts/prepare-cli.mjs",
+    "check:desktop": "node scripts/prepare-cli.mjs && cargo check -p skill-manager-desktop",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",

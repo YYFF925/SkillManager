@@ -115,7 +115,7 @@ skill-manager/
 对应 FR-050/051、US10 场景 5。现有安装包未携带 CLI，导致新电脑只有维护技能而无法执行管理动作；该后果阻断 Agent 维护，必须在打包层补齐。
 
 - 使用 Tauri 原生 `bundle.externalBin`（外部二进制打包）携带 `skill-manager`，不新增运行时桥接、安装器或全局 PATH 修改。macOS 位于应用包 `Contents/MacOS/skill-manager`；Windows 位于桌面主程序同目录的 `skill-manager.exe`。
-- `scripts/prepare-cli.mjs` 在 Tauri 开发／打包前编译同一 workspace 中的 CLI，按目标平台准备带 target triple（目标平台三元组）后缀的二进制；编译失败直接阻止后续流程，避免再交付缺 CLI 的安装包。生成文件留在忽略的 `src-tauri/binaries/`，不提交构建中间件。
+- `scripts/prepare-cli.mjs` 在 Tauri 开发／打包前编译同一 workspace 中的 CLI，按目标平台准备带 target triple（目标平台三元组）后缀的二进制；本机 triple 不传 `--target`。编译失败直接阻止后续流程，避免再交付缺 CLI 的安装包。桌面 `build.rs` 只复制已有 CLI，不嵌套 cargo。生成文件留在忽略的 `src-tauri/binaries/`，不提交构建中间件。
 - 维护技能说明以应用安装位置定位 CLI，先验证 `--version`／`--help`，再通过绝对路径执行管理命令；不依赖 GUI 进程或个人 shell 初始化。Windows 自定义安装位置以实际快捷方式目标为准。仅安装技能时明确缺少应用，不退回开发目录。
 - 发布验收从真实安装包取出应用，在无源码、无命令搜索路径的外部进程验证版本、帮助、隔离库查询与资料修改；结果记入 `checklists/m6-report.md` 第二十节。未运行的平台保留未验证。
 

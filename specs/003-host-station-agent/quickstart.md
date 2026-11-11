@@ -86,7 +86,7 @@ skill-manager --state-dir <state-a> host pair --station <url> --code <code> --na
 | `cargo test -p skill-manager-cli --bin skill-manager coord` | **通过**（preset/agent/tag/archive 写入映射到 Host invoke） |
 | `cargo check -p skill-manager-host -p skill-manager-station -p skill-manager-cli -p skill-manager-core` | **通过** |
 | 前端 `npm test`（vitest） | **23 files / 88 tests 通过**，无未处理异常。含 DeviceBar、LoginPage 恢复码重绑、planConfirm 须 `needsConfirmation`、HttpTransport 在无 `EventSource` 时不抛 |
-| `cargo check -p skill-manager-desktop` | **未通过**。`gdk-3.0`（3.24.41）与 `webkit2gtk-4.1` 已能 `pkg-config`；失败原因是 Tauri build script：`resource path binaries/skill-manager-x86_64-unknown-linux-gnu doesn't exist`（sidecar 不在本环境）。不是缺 GTK |
+| `cargo check -p skill-manager-desktop` | **通过**。本机 `gdk-3.0` 3.24.41 / `webkit2gtk-4.1` 可用；先 `npm run prepare:cli -- --offline` 写出 `src-tauri/binaries/skill-manager-x86_64-unknown-linux-gnu`（gitignore，不提交），再 `cargo check -p skill-manager-desktop --offline` 于 2026-11-11 通过。一条命令：`npm run check:desktop`。desktop `build.rs` 会从已构建 CLI 复制 sidecar；两者都缺时退出 101 并提示上述命令，不假装成功。不是缺 GTK |
 | 快照对照表 | 已写入 [snapshot-inventory.md](snapshot-inventory.md)。只读事实有快照字段或工具命令；**不声称齐全**（部分写入对内置 Agent 未开放） |
 | `vault clone` + 真机 `host serve` 互斥与开机项 | **未取证**：Cloud Agent 环境无用户级 launchd/systemd 登录项、无第二台真机 |
 | 管理站双 state-dir 浏览器登录/切换/3 分钟改注释（SC-001） | **未取证**：无图形浏览器连到已配对 Host |
