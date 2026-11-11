@@ -49,7 +49,7 @@ Host 不承载第二套业务规则。一次性 CLI 在没有 Host 时仍可直�
 
 它跑在**被管理那台机器的 Host 上**（成熟 Agent CLI 作为 Host 拉起的子进程，经 ACP 接入）。浏览器不跑模型。管理站切到哪台，就用哪台 Host 上的 Agent 改那台的库与本机目录。
 
-不把 Agent 运行时编进 `skill-manager-core`。不把第三方 Agent CLI 打进 Skill Manager 安装包，也不要求用户必须先自行装好：先检测本机已装，没有则在软件内安装/启用（类似 ACP Registry）。云电脑由该机 Host 在首次使用时装到自己的目录。认证与模型仍归那家 CLI，SkillManager 不代管、不把密钥存进管理站。具体默认安装哪一家，等 ACP 能力探测后再锁；锁定后由安装 Skill 指导那台机器上的管理 Agent 完成该 CLI 登录。ACP 是优先接入层，不是唯一协议；工具如何接到 Host（MCP 或连上 Host 的 CLI）实现时再选，但不得绕过 Host 直打 Core。
+不把 Agent 运行时编进 `skill-manager-core`。不把第三方 Agent CLI 打进 Skill Manager 安装包，也不要求用户必须先自行装好：先检测本机已装，没有则在软件内安装/启用（类似 ACP Registry）。云电脑由该机 Host 在首次使用时装到自己的目录。认证与模型仍归那家 CLI，SkillManager 不代管、不把密钥存进管理站。具体默认安装哪一家，等 ACP 能力探测后再锁；锁定后由安装 Skill 指导那台机器上的管理 Agent 完成该 CLI 登录。ACP 是优先接入层。工具接到 Host 的第一路径是现有 JSON CLI（经 Host 转发）；第一版不另做 MCP。快照不够时 Agent 用这些工具主动查询。Host 向该 CLI 注入与配套维护 Skill、安装 Skill 分开的内置管理说明。不得绕过 Host 直打 Core。
 
 内置管理 Agent **只响应用户在对话中发起的任务**。不做人无人指令时的「主动维护」（定期巡检、自动采用上游、自动入库、自动安装升级、无人值守 push 等）。既有调度器（上游检查、库拉取、工具版本检查、刷新已有部署）继续由 Host 后台跑，与 Agent 无关。以后若要主动维护，另开专题，不在本决定范围内实现。
 

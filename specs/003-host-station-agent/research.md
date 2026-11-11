@@ -84,6 +84,12 @@
 - **Rationale**: FR-015/021 Clarifications 2026-11-11。
 - **Alternatives**: 只给当前页（被拒：不够，用户仍要点名「待更新的那些」）；只给冲突事故（被拒：冲突只是全局事实的一类）；每条消息贴全文（被拒：体积与重复，细节走 CLI）。
 
+### D14 主动查询走 ACP 工具接现有 CLI；短说明 Skill 只讲规则；第一版不做 MCP
+
+- **Decision**: 快照推送不够时，Agent 用 ACP 工具拉取（读正文、列待更新、查部署等），工具 = 经 Host 转发的 002 JSON CLI。Host 注入与安装 Skill、配套维护 Skill 分开的 `skill-manager-builtin-agent` 短说明，不把维护 Skill 的「每次询问上传」套进来。第一版不实现 MCP 网关（与 D9 一致）。
+- **Rationale**: 查询能力要有；MCP 会与已有 CLI 双协议。配套维护 Skill 面向外部编码 Agent，规则与内置路径冲突。
+- **Alternatives**: 只靠快照、不准再查（被拒：不可能把全部正文放进每条消息）；MCP 平行实现（被拒：D9）；把维护 Skill 原文塞给内置 Agent（被拒：FR-020 与 FR-038 不同）。
+
 ## 探测清单（D9，实施「可对话切片」前执行）
 
 对每个候选 CLI 记录：能否 stdio ACP 握手、流式输出、取消、声明并调用外部工具、在 macOS 与 Windows 无交互安装。通过者锁定；全部失败则停在「对话不可用」并说明，不得用假回复冒充。

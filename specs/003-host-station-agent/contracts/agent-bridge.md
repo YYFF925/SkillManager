@@ -6,9 +6,13 @@
 
 Host 检测 `agent_runtime.binary_path`；没有则按已锁定的默认 CLI 执行软件内安装（不打进 Skill Manager 安装包）。用 ACP stdio 拉起。该 CLI 自己的登录失败时，对话只能报告无法执行，不得生成「已改库」结果。
 
-## 工具
+## 工具（主动查询与写入）
 
-Agent 可调用的管理工具 = 现有 `skill-manager` JSON CLI 的能力，**经 Host 执行**（与 GUI 同一把锁、同一套确认）。不得发工具直打 `skill-manager-core`。
+快照是推送；不够时 Agent **主动**查。查询/写入通道 = Host 经 ACP 向子进程声明的工具，映射到现有 `skill-manager` JSON CLI，**经 Host 执行**（与 GUI 同一把锁、同一套确认）。不得直打 `skill-manager-core`。第一版**不**另做 MCP 服务。
+
+Host 启动该 CLI 时注入 `skill-manager/assets/skills/skill-manager-builtin-agent/`（内置管理说明）到子进程的 skills 目录：说明两层上下文已在消息里、细节用工具、003 确认与上传规则。不得注入或改写配套维护 Skill（那条路仍是每次询问上传）。
+
+Agent 可调用的管理工具 = 现有 JSON CLI 的能力。
 
 破坏性工具（`skill delete`、覆盖部署/overwrite-local）的执行路径：
 

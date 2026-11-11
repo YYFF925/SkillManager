@@ -108,14 +108,14 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 
 - [ ] T030 [US3] 按 `research.md` D9 探测清单测 OpenCode → Codex CLI → Gemini CLI（会话、流式、取消、工具调用、stdio）；将通过者写入 `agent_runtime.cli_id` 约定与实施记录。全部失败则对话入口如实不可用，不得假回复。
 - [ ] T031 [US3] 在 `skill-manager/crates/core/src/state/` 增加 `agent_sessions`（界面会话、钉死快照 JSON：`global` 库级摘要——技能/分类/标签、待更新、译文待更新、部署摘要、失败与暂停；`view` 当前页与打开对象详情/上游/部署）、`agent_messages`（角色、正文、task_id）、`agent_runtime`（cli_id、binary_path、detected_at / installed_by_app）。不进 Vault、不存整库正文。模型密钥不得出现在这些表。
-- [ ] T032 [US3] 在 `skill-manager/crates/host/src/agent/` 用 ACP stdio 拉起已锁定 CLI；检测已装，没有则软件内安装到本机目录，不打进 Skill Manager 安装包。未登录模型时只说明无法执行，不写库。
-- [ ] T033 [US3] 在 `skill-manager/crates/host/src/agent/tools.rs` 把管理工具接到现有 `skill-manager` JSON CLI **经 Host** 执行，不得直打 core。删除/覆盖必须走 T024 计划；Agent 文本「已同意」无效。
+- [ ] T032 [US3] 在 `skill-manager/crates/host/src/agent/` 用 ACP stdio 拉起已锁定 CLI；检测已装，没有则软件内安装到本机目录，不打进 Skill Manager 安装包。启动时把 `skill-manager/assets/skills/skill-manager-builtin-agent/` 注入该 CLI 的 skills 目录（不注入配套维护 Skill）。未登录模型时只说明无法执行，不写库。第一版不实现 MCP 服务。
+- [ ] T033 [US3] 在 `skill-manager/crates/host/src/agent/tools.rs` 经 ACP 声明工具，映射现有 `skill-manager` JSON CLI **经 Host** 执行，供快照不够时主动查询（读正文、列待更新、查部署等）与写入。不得直打 core。删除/覆盖必须走 T024 计划；Agent 文本「已同意」无效。在 `skill-manager/assets/skills/skill-manager-builtin-agent/` 编写短说明（两层上下文已注入、细节用工具、003 确认与上传），不得抄 002「每次询问上传」。
 - [ ] T034 [US3] 在 `skill-manager/crates/host/src/http.rs` 实现 `PUT /agent/context`（只收 `view`）、`POST /agent/messages`、会话与消息读取（`contracts/host-http.md`）。收消息时 Host 从 core 组装 `global`，与 `view` 一并钉死到该条任务；之后的 `view` 只影响新消息。不得要求用户粘贴报错、清单或技能名。不把整库正文写入快照。
 - [ ] T035 [US3] 在 `skill-manager/crates/host/src/agent/tools.rs` 落实 FR-020：有 `git_auto_push` 则内置管理 Agent 可 push 且不逐步确认；无授权则失败并说明去设置开启，Agent 不得写该设置。外部编码 Agent 路径不改 002。
 - [ ] T036 [US3] 在 `skill-manager/crates/host/src/agent/` 只实现对话响应；不实现巡检/自动采用上游/自动入库/无人值守 push。002 调度器保持与对话无关。
 - [ ] T037 [US3] 在 `skill-manager/src/` 接通对话 UI：只上报当前界面 `view`；全局由 Host 组装。用户能说「待更新的那些」「这个技能的上游」而无须点名或粘贴。进行中任务切页不改对象；局部失败分项说明；历史从 Host 本机状态读取。
 - [ ] T038 [P] [US3] 在 `skill-manager/assets/skills/skill-manager-install/` 补「配置已锁定管理 CLI 登录」章节，不与配套维护 Skill 合并。
-- [ ] T039 [US3] 按 `quickstart.md` §3 验收：注释写入、切页不串、删除确认、未授权上传、空闲不改库、未登录不冒充成功；未打开详情时「译文待更新的那些」能对上全局清单；详情页问上游不必粘贴；冲突/暂停打开对话不必粘贴报错。
+- [ ] T039 [US3] 按 `quickstart.md` §3 验收：注释写入、切页不串、删除确认、未授权上传、空闲不改库、未登录不冒充成功；未打开详情时「译文待更新的那些」能对上全局清单；详情页问上游不必粘贴；冲突/暂停不必粘贴报错；快照无全文时 Agent 能用工具读出片段且用户未粘贴。
 
 **Checkpoint**: 对话在当前 Host 上可用；管理站切到哪台即用哪台的 Agent。
 
