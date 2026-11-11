@@ -44,6 +44,8 @@ POST /agent/messages   { sessionId, text }
 POST /agent/tasks/:id/cancel   { sessionId }
 GET  /agent/sessions
 GET  /agent/sessions/:id/messages
+GET  /agent/runtime
+PUT  /agent/runtime   { binaryPath, acpArgs?, cliId? } | { clear: true }
 ```
 
 `view` 只含页面身份与选中引用，例如 `{ page, domain, selection: { refs, category, presetId, profile, toolId, agentKey } }`，**不含**技能正文、注释全文、文件树或报错原文。
@@ -54,6 +56,8 @@ Host 在 `POST /agent/messages` 时从 core 组装两层并钉死到该条任务
 - `view`：按刚上报的引用补齐详情。引用已失效则如实标空，不得沿用过期正文。
 
 后续 `PUT /agent/context` 只更新界面层引用，只影响之后的新消息。`POST /agent/tasks/:id/cancel` 停止该任务继续写库，已取消不得标成成功。不得要求用户粘贴报错、清单或技能正文。
+
+`GET/PUT /agent/runtime` 登记当前 ACP 宿主：任意兼容 CLI，不是三家许可名单。`binaryPath` 为可执行文件；`acpArgs` 为启动参数数组。清单外 CLI 用这条接入。环境变量 `SKILL_MANAGER_AGENT_CLI` 优先于库内登记。
 
 ## 本机状态
 

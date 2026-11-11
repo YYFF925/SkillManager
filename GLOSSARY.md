@@ -76,7 +76,7 @@ Hermes 中独立的配置与数据目录，各 Agent 可使用各自档案运行
 Skill Manager 产品内的对话式管理能力，跑在当前设备的 Host 上，经 GUI 或管理站网页使用。不是设置页里的「内置 Agent 名单」（那些是部署目标），也不是把任务复制到软件外的编码 Agent。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
 
 **安装 Skill（SkillManager 安装 Skill）**:
-给新机器上已有的编码 Agent 使用的技能，指导 clone SkillManagerVault、配置并启动 Host、对接管理站；内置管理 Agent 所用 CLI 选型锁定后，再指导该 CLI 的登录。与配套维护 Skill 分开：后者管库内技能与工具，前者把 SkillManager 接到一台电脑上。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
+给新机器上已有的编码 Agent 使用的技能，指导 clone SkillManagerVault、配置并启动 Host、对接管理站，并登录所用的 ACP 兼容 CLI（任意第三方模型由该 CLI 决定；清单外 CLI 用 `host agent-cli` 登记）。与配套维护 Skill 分开：后者管库内技能与工具，前者把 SkillManager 接到一台电脑上。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
 
 **内置管理说明**:
 Host 注入到内置管理 Agent 所用 CLI 的短说明（仓库源 `skill-manager/assets/skills/skill-manager-builtin-agent/`）：上下文已在消息里、细节用 ACP 工具查、003 的确认与上传规则。由 Host 写入该 CLI 的 skills 搜索目录（或 ACP 初始化文本）。**不是**用户 SkillManagerVault 里的技能，不入库、不出现在技能列表、不可部署。不是查询 API（查询走 JSON CLI 工具），也不是配套维护 Skill 或安装 Skill。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md) 与 specs/003 `research.md` D14–D15。

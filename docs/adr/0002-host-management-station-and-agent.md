@@ -49,7 +49,7 @@ Host 不承载第二套业务规则。一次性 CLI 在没有 Host 时仍可直�
 
 它跑在**被管理那台机器的 Host 上**（成熟 Agent CLI 作为 Host 拉起的子进程，经 ACP 接入）。浏览器不跑模型。管理站切到哪台，就用哪台 Host 上的 Agent 改那台的库与本机目录。
 
-不把 Agent 运行时编进 `skill-manager-core`。不把第三方 Agent CLI 打进 Skill Manager 安装包，也不要求用户必须先自行装好：先检测本机已装，没有则在软件内安装/启用（类似 ACP Registry）。云电脑由该机 Host 在首次使用时装到自己的目录。认证与模型仍归那家 CLI，SkillManager 不代管、不把密钥存进管理站。具体默认安装哪一家，等 ACP 能力探测后再锁；锁定后由安装 Skill 指导那台机器上的管理 Agent 完成该 CLI 登录。ACP 是优先接入层。工具接到 Host 的第一路径是现有 JSON CLI（经 Host 转发）；第一版不另做 MCP。快照不够时 Agent 用这些工具主动查询。Host 向该 CLI 注入与配套维护 Skill、安装 Skill 分开的内置管理说明（应用资产，不入库到用户库）。不得绕过 Host 直打 Core。
+不把 Agent 运行时编进 `skill-manager-core`。不把第三方 Agent CLI 打进 Skill Manager 安装包，也不要求用户必须先自行装好：先检测本机已装或用户指定的 **ACP 兼容 CLI**，没有则在软件内安装一份引导宿主（D9 探测清单的第一家通过者，当前为 OpenCode），类似 ACP Registry。云电脑由该机 Host 在首次使用时装到自己的目录。认证与模型仍归那家 CLI，SkillManager 不代管、不把密钥存进管理站，**也不把 OpenCode / Codex / Gemini 写成唯一选项**。用户可随时登记清单外的兼容 CLI。安装 Skill 指导登录所用 CLI，以及如何登记其它 CLI。ACP 是优先接入层。工具接到 Host 的第一路径是现有 JSON CLI（经 Host 转发）；第一版不另做 MCP。快照不够时 Agent 用这些工具主动查询。Host 向该 CLI 注入与配套维护 Skill、安装 Skill 分开的内置管理说明（应用资产，不入库到用户库）。不得绕过 Host 直打 Core。
 
 内置管理 Agent **只响应用户在对话中发起的任务**。不做人无人指令时的「主动维护」（定期巡检、自动采用上游、自动入库、自动安装升级、无人值守 push 等）。既有调度器（上游检查、库拉取、工具版本检查、刷新已有部署）继续由 Host 后台跑，与 Agent 无关。以后若要主动维护，另开专题，不在本决定范围内实现。
 
@@ -61,7 +61,7 @@ Host 不承载第二套业务规则。一次性 CLI 在没有 Host 时仍可直�
 
 无窗口 Host 按本机服务运行：随系统开机启动，关机即停。第一版不做唤醒休眠电脑或额外保活。软件必须提供可复制的启动命令，用户或那台机器上的 Agent 都能把已关闭的 Host 拉起来。
 
-新机器上的 Vault 仍是 **git clone**，不做图形克隆向导。软件提供一键命令（clone 已有远端并接入本机 Host）。云电脑上通常已有编码 Agent：另提供**安装 Skill**（与配套维护 Skill 分开），指导该 Agent clone Vault、配置并启动 Host、对接管理站；CLI 选型锁定后再补「配置该 CLI 登录」等步骤。
+新机器上的 Vault 仍是 **git clone**，不做图形克隆向导。软件提供一键命令（clone 已有远端并接入本机 Host）。云电脑上通常已有编码 Agent：另提供**安装 Skill**（与配套维护 Skill 分开），指导该 Agent clone Vault、配置并启动 Host、对接管理站，并登录所用的 ACP CLI（任意兼容命令行，模型由该 CLI 决定）。
 
 远程网页覆盖当前桌面的技能管理能力；托盘、关窗收起、桌面应用更新在网页上不出现。路径类配置填 Host 所在机器上的路径，不用浏览器本机文件选择器。
 

@@ -58,7 +58,7 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 - [X] T011 [US1] 在 `skill-manager/crates/core/src/sync/git.rs`、`skill-manager/crates/cli/src/commands/vault.rs` 实现 `vault clone <remote-url> --path <dir>`：调用本机 git；目标已存在且非空则失败不覆盖；成功后把该路径记为本机 Vault。不提供图形向导，不 init 新中央库。
 - [X] T012 [US1] 第一版**不做** `vault clone --pair`。对接只用 US2 的 `host pair`。若日后加 `--pair`：语义等于 clone 成功后立刻 `host pair`；对接失败须分段报告，不得把「未对接」说成「库没 clone」（`contracts/cli.md`）。
 - [X] T013 [US1] 在 `skill-manager/crates/host/src/service.rs`、`skill-manager/crates/cli/src/commands/host.rs` 实现 `host install-service` / `uninstall-service`：当前用户级开机启动（macOS launchd、Linux systemd --user、Windows 登录项或等价）；不唤醒休眠、不加看门狗。`host serve` 即启动命令。
-- [X] T014 [P] [US1] 在 `skill-manager/assets/skills/skill-manager-install/` 编写安装 Skill 源（与 `skill-manager-maintenance` 分开）：clone、配置并启动 Host、对接管理站；**不含**管理 CLI 登录（D9 锁定后 US3 再补）。
+- [X] T014 [P] [US1] 在 `skill-manager/assets/skills/skill-manager-install/` 编写安装 Skill 源（与 `skill-manager-maintenance` 分开）：clone、配置并启动 Host、对接管理站；登录任意 ACP CLI 的步骤由 T038 补。
 - [X] T015 [US1] 按 `specs/003-host-station-agent/quickstart.md` §1 在无窗口环境下验收 clone、serve、锁、再启动，并执行 `host install-service` 确认已写入当前用户开机项（不必真重启机器）；写入本目录或实施记录，不把浏览器预览当 Host 真结果。
 
 **Checkpoint**: 无窗口机器可接入 Vault 并跑 Host。对接管理站可等到 US2。
@@ -106,15 +106,15 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 
 ### Implementation
 
-- [X] T030 [US3] 按 `research.md` D9 探测清单测 OpenCode → Codex CLI → Gemini CLI（会话、流式、取消、工具调用、stdio、**内置说明注入路径或「无目录则初始化文本」**）；将通过者写入 `agent_runtime.cli_id` 约定与实施记录。全部失败则对话入口如实不可用，不得假回复。
+- [X] T030 [US3] 按 `research.md` D9 探测清单测 OpenCode → Codex CLI → Gemini CLI（会话、流式、取消、工具调用、stdio、**内置说明注入路径或「无目录则初始化文本」**）；第一家通过者仅作引导宿主，**不得**把三家写成唯一选项。用户已登录的任意 ACP 兼容 CLI 都可拉起；清单外用 `host agent-cli` / `PUT /agent/runtime` / `SKILL_MANAGER_AGENT_CLI`。全部失败且用户未登记则对话入口如实不可用，不得假回复。实施记录：2026-11-11 探测 OpenCode 1.19.5 通过（注入 `$OPENCODE_CONFIG_DIR/skills/`）；原生 Codex 非 ACP；Gemini initialize 过、未登录则 `session/new` 失败。
 - [X] T031 [US3] 在 `skill-manager/crates/core/src/state/` 增加 `agent_sessions`（界面会话、钉死快照 JSON：`global` 为摘要+计数+引用——技能/分类/标签、待更新、译文待更新、部署摘要、失败与暂停、预设/Hermes/工具/本机 Agent 目录摘要；`view` 为 Host 按引用补齐的当前页详情）、`agent_messages`（角色、正文、task_id）、`agent_runtime`（cli_id、binary_path、detected_at / installed_by_app）。不进 Vault、不存整库正文。模型密钥不得出现在这些表。任务状态含已取消。
-- [X] T032 [US3] 在 `skill-manager/crates/host/src/agent/` 用 ACP stdio 拉起已锁定 CLI；检测已装，没有则软件内安装到本机目录，不打进 Skill Manager 安装包。启动时把 `skill-manager/assets/skills/skill-manager-builtin-agent/` 注入 **该 CLI 的 skills 搜索路径**（探测记录的路径；无目录则 ACP 初始化文本）。该资产不入库、不进用户 `skill list`。不注入配套维护 Skill。未登录模型时只说明无法执行，不写库。第一版不实现 MCP 服务。
+- [X] T032 [US3] 在 `skill-manager/crates/host/src/agent/` 用 ACP stdio 拉起**当前** CLI（用户指定 / PATH 示例 / 引导宿主 OpenCode），模型由该 CLI 决定。没有兼容 CLI 才软件内安装引导宿主到本机目录，不打进 Skill Manager 安装包。启动时把 `skill-manager/assets/skills/skill-manager-builtin-agent/` 注入 OpenCode 的 `$OPENCODE_CONFIG_DIR/skills/`（无目录则 ACP 初始化文本 + prompt 前缀）。该资产不入库、不进用户 `skill list`。不注入配套维护 Skill。未登录模型时只说明无法执行，不写库。第一版不实现 MCP 服务。
 - [X] T033 [US3] 在 `skill-manager/crates/host/src/agent/tools.rs` 经 ACP 声明工具，映射现有 `skill-manager` JSON CLI **经 Host** 执行，供快照不够时主动查询（读正文、按现有 JSON 字段列待更新、查部署等）与写入。不得直打 core。不得为对话新增 002 筛选开关。删除/覆盖必须走 T024 计划；Agent 文本「已同意」无效。工具失败须交回错误，不得编造正文。在 `skill-manager/assets/skills/skill-manager-builtin-agent/` 编写短说明（两层上下文已注入、细节用工具、003 确认与上传），不得抄 002「每次询问上传」。
 - [X] T034 [US3] 在 `skill-manager/crates/host/src/http.rs` 实现 `PUT /agent/context`（只收页面与选中引用，不含正文/注释/报错）、`POST /agent/messages`、`POST /agent/tasks/:id/cancel`、会话与消息读取（`contracts/host-http.md`）。收消息时 Host 从 core 组装 `global`，并按引用补齐 `view` 详情，一并钉死到该条任务；之后的 `view` 只影响新消息。引用失效则如实标空。不得要求用户粘贴报错、清单或技能名。不把整库正文写入快照。
 - [X] T035 [US3] 在 `skill-manager/crates/host/src/agent/tools.rs` 落实 FR-020：有 `git_auto_push` 则内置管理 Agent 可 push 且不逐步确认；无授权则失败并说明去设置开启，Agent 不得写该设置。外部编码 Agent 路径不改 002。
 - [X] T036 [US3] 在 `skill-manager/crates/host/src/agent/` 只实现对话响应；不实现巡检/自动采用上游/自动入库/无人值守 push。002 调度器保持与对话无关。
 - [X] T037 [US3] 在 `skill-manager/src/` 接通对话 UI：只上报当前界面引用（页面、选中 `ref` 等），不得把详情 JSON 当快照源；全局与详情由 Host 组装。提供取消进行中任务。用户能说「待更新的那些」「这个技能的上游」而无须点名或粘贴。进行中任务切页不改对象；局部失败分项说明；历史从 Host 本机状态读取。第一版不要求多会话工作区。
-- [X] T038 [P] [US3] 在 `skill-manager/assets/skills/skill-manager-install/` 补「配置已锁定管理 CLI 登录」章节，不与配套维护 Skill 合并。
+- [X] T038 [P] [US3] 在 `skill-manager/assets/skills/skill-manager-install/` 补登录任意 ACP 兼容 CLI、以及清单外 CLI 登记步骤，不与配套维护 Skill 合并。
 - [X] T039 [US3] 按 `quickstart.md` §3 验收：注释写入、切页不串、删除确认、未授权上传、空闲不改库、未登录不冒充成功；未打开详情时「译文待更新的那些」能对上全局清单；详情页问上游不必粘贴；冲突/暂停不必粘贴报错；快照无全文时 Agent 能用工具读出片段且用户未粘贴；取消进行中任务不得显示成功；内置说明不出现在用户技能列表。
 
 **Checkpoint**: 对话在当前 Host 上可用；管理站切到哪台即用哪台的 Agent。
@@ -200,8 +200,8 @@ T011 实现 vault clone（core/cli）
 
 对照 `spec.md` / `plan.md` / 契约与当前代码（勾选不算证据）于 2026-11-11 追加。完成后再跑 `/speckit-implement`。
 
-- [X] T044 在 `skill-manager/crates/host/src/agent/bridge.rs` 用 ACP stdio 真正拉起已锁定 CLI（流式、工具、取消）；「完善中文注释」须写库；未登录模型不得把任务标成 `running` 或成功 per FR-014, FR-015, US3/AC2, plan D6, agent-bridge (missing)
-- [X] T045 本机 PATH 没有锁定 CLI 时，按 OpenCode→Codex→Gemini 在软件内安装到本机目录并写入 `agent_runtime`，不打进 Skill Manager 安装包 per FR-017, agent-bridge (missing)
+- [X] T044 在 `skill-manager/crates/host/src/agent/bridge.rs` 用 ACP stdio 真正拉起当前 CLI（流式、工具、取消）；「完善中文注释」须写库；未登录模型不得把任务标成 `running` 或成功 per FR-014, FR-015, US3/AC2, plan D6, agent-bridge (missing)
+- [X] T045 本机没有用户指定或已装的 ACP CLI 时，安装 D9 引导宿主 OpenCode 到本机目录并写入 `agent_runtime`，不打进 Skill Manager 安装包；不得把三家写成唯一安装回退 per FR-017, agent-bridge
 - [X] T046 启动该 CLI 时把 `skill-manager/assets/skills/skill-manager-builtin-agent/` 注入其 skills 搜索目录；无该目录则写入 ACP 初始化文本，且不入库、不进 `skill list` per FR-015, T032, agent-bridge (missing)
 - [X] T047 补全 `assemble_snapshot` 的全局层：上游待更新、可入库新增、失败与暂停、预设/Hermes/工具/本机 Agent 目录的摘要+计数+引用，仍不含正文 per FR-015, agent-bridge, T031 (partial)
 - [X] T048 Host 在场时 CLI 把 preset / hermes / agent / instruction / tool 等写入转发到 Host invoke，不得只提示「请通过管理界面执行」 per FR-006, plan D5 (partial)
@@ -226,7 +226,7 @@ T011 实现 vault clone（core/cli）
 - [X] T060 Host 在场时 CLI 转发 skill tag/move/archive/import/create 等写入；409 不得当成功 per FR-006, T048 (partial)
 - [X] T061 对话任务完成后清除进行中状态，取消不得显示成功 per FR-022, FR-023 (partial)
 - [X] T062 确认计划识别须带 `needsConfirmation`；无 ConfirmDialog 时拒绝而不是 `window.confirm` per FR-019, T054 (partial)
-- [X] T063 对照 core JSON CLI / GUI 页面补 `assemble_snapshot`：可入库新增、冲突路径与 git 原文、`paused_local_change`、最近命令失败原文；无 skill ref 时 view 按当前页补齐对象。对照表见 `snapshot-inventory.md`。不声称齐全。D9 默认 CLI 锁定不在本任务。 per FR-015, T047 (partial)
+- [X] T063 对照 core JSON CLI / GUI 页面补 `assemble_snapshot`：可入库新增、冲突路径与 git 原文、`paused_local_change`、最近命令失败原文；无 skill ref 时 view 按当前页补齐对象。对照表见 `snapshot-inventory.md`。不声称齐全。D9 任意 ACP CLI 见 T030。 per FR-015, T047 (partial)
 - [X] T064 Linux 云上 `cargo check -p skill-manager-desktop`：`prepare-cli` 为本机 triple 准备 sidecar（本机不传 `--target`）；desktop `build.rs` 缺失时从已构建 CLI 复制，找不到则失败并提示 `npm run prepare:cli` / `npm run check:desktop`，不嵌套 cargo、不提交 `binaries/`、不假装成功。D9 不在本任务。
 - [X] T065 按 ACP 声明 Host 工具：`session/new.mcpServers` stdio（`host mcp`）带 `inputSchema`；initialize 不再塞 `tool_descriptors`；`fs/write*` 不得空成功。D9 任意 CLI 登记不在本任务。 per FR-015, C1
 - [X] T066 同一 Host 对话复用 ACP session；新 session 把 `agent_messages` 回灌 prompt；不要每条消息 initialize+session/new 后 kill。 per US3, C2

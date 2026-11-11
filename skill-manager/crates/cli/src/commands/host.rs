@@ -29,6 +29,24 @@ pub enum HostAction {
     Unpair,
     /// ACP 子进程用的 Host 工具通道（stdio）。不占 host.lock，不单独作为用户 MCP 产品。
     Mcp,
+    /// 查看或登记内置管理 Agent 所用的 ACP CLI（任意兼容命令行，不限三家）。
+    AgentCli(AgentCliArgs),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct AgentCliArgs {
+    /// 可执行文件路径或 PATH 中的名字。
+    #[arg(long)]
+    pub bin: Option<String>,
+    /// ACP 启动参数，空格分隔，例如 `acp` 或 `--acp`。省略则按常见约定尝试。
+    #[arg(long)]
+    pub args: Option<String>,
+    /// 写入 agent_runtime 的标识，默认取文件名。
+    #[arg(long)]
+    pub id: Option<String>,
+    /// 清除用户指定，下次按环境变量 / PATH / 引导宿主解析。
+    #[arg(long)]
+    pub clear: bool,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -75,6 +93,7 @@ pub fn run(command: HostCommand, options: &GlobalOptions) -> (CliResult, String)
             ),
             Err(err) => (CliResult::failed_message(err.clone()), err),
         },
+        HostAction::AgentCli(args) => agent_cli_cmd(options, args),
     }
 }
 
@@ -177,6 +196,68 @@ fn status_human(value: &serde_json::Value) -> String {
             "未对接"
         }
     )
+}
+
+fn agent_cli_cmd(options: &GlobalOptions, args: AgentCliArgs) -> (CliResult, String) {
+    let runtime = match HostRuntime::open(options.state_dir.clone()) {
+        Ok(rt) => rt,
+        Err(err) => return (CliResult::failed_message(err.clone()), err),
+    };
+    if args.clear {
+        return match skill_manager_host::agent::clear_user_cli(&runtime) {
+            Ok(()) => {
+                let view = skill_manager_host::agent::runtime_view(&runtime);
+                (
+                    CliResult::success(view.clone()),
+                    "已清除指定的管理 CLI；下次按环境变量、PATH 或引导宿主解析。".to_string(),
+                )
+            }
+            Err(err) => (CliResult::failed_message(err.clone()), err),
+        };
+    }
+    if let Some(bin) = args.bin.as_deref() {
+        let acp_args = args
+            .args
+            .as_deref()
+            .unwrap_or("")
+            .split_whitespace()
+            .filter(|p| !p.is_empty())
+            .map(str::to_string)
+            .collect();
+        return match skill_manager_host::agent::set_user_cli(
+            &runtime,
+            bin,
+            acp_args,
+            args.id.as_deref(),
+        ) {
+            Ok(cli) => {
+                let msg = format!(
+                    "已登记管理 CLI {}（{}）。模型由该 CLI 决定，不限于 OpenCode / Codex / Gemini。",
+                    cli.cli_id,
+                    cli.binary_path.display()
+                );
+                (
+                    CliResult::success(skill_manager_host::agent::runtime_view(&runtime)),
+                    msg,
+                )
+            }
+            Err(err) => (CliResult::failed_message(err.clone()), err),
+        };
+    }
+    let view = skill_manager_host::agent::runtime_view(&runtime);
+    let human = if let Some(id) = view.get("cliId").and_then(|v| v.as_str()) {
+        format!(
+            "当前管理 CLI {}（{}）。可改：host agent-cli --bin <路径> [--args acp]。",
+            id,
+            view.get("binaryPath").and_then(|v| v.as_str()).unwrap_or("")
+        )
+    } else {
+        view.get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("尚未登记管理 CLI")
+            .to_string()
+    };
+    (CliResult::success(view), human)
 }
 
 fn pair_cmd(options: &GlobalOptions, args: PairArgs) -> (CliResult, String) {

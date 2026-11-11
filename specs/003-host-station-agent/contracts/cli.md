@@ -15,12 +15,16 @@ host uninstall-service
 host pair --station <url> --code <pairing-code> [--name <display>]
 host unpair
 host status
+host agent-cli
+host agent-cli --bin <path-or-name> [--args acp] [--id <cli-id>]
+host agent-cli --clear
 ```
 
 - `serve`：前台运行 Host（启动命令）。已有实例占锁则失败并说明。
 - `install-service`：登记开机自启，不唤醒休眠。
 - `pair`：出站对接管理站；码错误/过期/已用则失败，不影响其它设备。
 - `status`：是否在跑、Vault 路径、是否已对接、锁是否被占。
+- `agent-cli`：查看或登记内置管理 Agent 所用的 ACP CLI。任意兼容命令行，模型由该 CLI 决定，不限 OpenCode / Codex / Gemini。`--bin` 为绝对路径或 PATH 名；`--args` 为 ACP 启动参数（省略则按常见约定尝试）。`--clear` 取消用户指定。与 002 的 `agent` 子命令（部署目标名单）不是一回事。
 
 ## station — 统一管理站
 

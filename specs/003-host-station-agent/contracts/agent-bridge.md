@@ -4,13 +4,15 @@
 
 ## 进程
 
-Host 检测 `agent_runtime.binary_path`；没有则按已锁定的默认 CLI 执行软件内安装（不打进 Skill Manager 安装包）。用 ACP stdio 拉起。该 CLI 自己的登录失败时，对话只能报告无法执行，不得生成「已改库」结果。
+Host 按顺序解析当前 ACP CLI：**环境变量 `SKILL_MANAGER_AGENT_CLI`** → **用户登记的 `agent_runtime`（`user_selected`）** → PATH 上已知示例宿主 → 仍没有则安装引导宿主 OpenCode（D9 第一家通过者，不打进 Skill Manager 安装包）。**不是** OpenCode / Codex / Gemini 许可名单。模型由该 CLI 决定。用 ACP stdio 拉起。该 CLI 自己的登录失败时，对话只能报告无法执行，不得生成「已改库」结果。
+
+清单外 CLI：用户执行 `host agent-cli --bin <路径> [--args …]` 或 `PUT /agent/runtime`。启动参数缺省时依次试 `acp` / `--acp` / 无参数；**进程能 spawn 不算成功**，须 ACP `initialize` 握手通过才采用该组参数，失败再试下一组。登记不只看文件存在，握手失败不得写入 `agent_runtime`。原生 Codex 不是 ACP，须登记适配器。
 
 ## 工具（主动查询与写入）
 
 快照是推送；不够时 Agent **主动**查。查询/写入通道 = Host 经 ACP **向子进程声明的工具**（`session/new.mcpServers` stdio，带 JSON Schema 的 `skill_list` / `skill_get` / `skill_read` / `skill_set` / `skill_delete`（`references[]`）等），映射到现有 `skill-manager` JSON CLI，**经 Host 执行**（与 GUI 同一把锁、同一套确认）。不得直打 `skill-manager-core`。不得把工具清单只塞进 `initialize`。stdio MCP 只是 ACP 声明工具的协议通道，不是给用户用的平行 MCP 产品。CLI 自带 bash/edit 不得绕过 Host 锁与确认计划。同一 Host 对话复用 ACP session，并把 `agent_messages` 回灌新 session。
 
-Host 启动该 CLI 时，把 `skill-manager/assets/skills/skill-manager-builtin-agent/`（内置管理说明）注入到 **该 CLI 会搜索的 skills 目录**（路径由 D9 探测记录；若无此目录，改为 ACP 初始化文本）。说明两层上下文已在消息里、细节用工具、003 确认与上传规则。该资产**不入库**到用户 SkillManagerVault，不得出现在 `skill list`，不得当作可部署技能。不得注入或改写配套维护 Skill（那条路仍是每次询问上传）。
+Host 启动该 CLI 时，把 `skill-manager/assets/skills/skill-manager-builtin-agent/`（内置管理说明）注入到 **该 CLI 会搜索的 skills 目录**。OpenCode：`$OPENCODE_CONFIG_DIR/skills/`（Host 写入 `state-dir/agent-runtime/opencode-config/`；实测 `OPENCODE_SKILLS_PATH` 无效）。若无此目录，改为 ACP 初始化文本并作为每条 prompt 前缀。说明两层上下文已在消息里、细节用工具、003 确认与上传规则。该资产**不入库**到用户 SkillManagerVault，不得出现在 `skill list`，不得当作可部署技能。不得注入或改写配套维护 Skill（那条路仍是每次询问上传）。
 
 Agent 可调用的管理工具 = 现有 JSON CLI 的能力（含 `skill list` 已有的 `translation_stale` 等字段）。不为对话新增 002 筛选开关。工具经 Host，与 GUI 串行于同一把锁。调用失败必须把错误交回对话，不得编造正文。
 

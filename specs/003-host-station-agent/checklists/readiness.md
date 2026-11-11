@@ -57,8 +57,8 @@
   - **评审结论（2026-11-11）**：满足。对话与设备密钥不进 Vault；管理站无技能镜像。
 - [x] CHK019 契约把破坏性操作放在 Host 发票，规格把确认绑在界面会话，是否同一套 session 语义？[Consistency, Spec §FR-013/019, Host-http, Data-model §1.2]
   - **评审结论（2026-11-11）**：满足。`planId` + 签发时的 `sessionId`，过期或会话不匹配拒绝。
-- [x] CHK020 ACP 默认命令行「规划阶段锁定」与 research D9「探测后锁定」是否被读成同一门控，而不是规格未决？[Consistency, Spec §Assumptions, Research D9]
-  - **评审结论（2026-11-11）**：修订后满足。规格 Clarifications 与 Assumptions 指向 D9 探测清单，并写明不阻塞 Host/管理站。
+- [x] CHK020 ACP 默认命令行是否仍被读成「必须锁死 OpenCode / Codex / Gemini 三家之一」？[Consistency, Spec §Assumptions, Research D9]
+  - **评审结论（2026-11-11）**：修订后满足。Clarifications 与 D9 写明探测只找引导宿主，产品是任意已登录的 ACP 兼容 CLI；不阻塞 Host/管理站。
 
 ## Acceptance Criteria Quality
 
@@ -119,8 +119,8 @@
 
 - [x] CHK041 「覆盖」是否穷尽了必须走确认计划的动作（部署覆盖副本、丢弃副本独有改动），避免实现把普通部署也做成确认？[Ambiguity, Spec §FR-019]
   - **评审结论（2026-11-11）**：满足。FR-019 点名两类覆盖，并写明普通部署不逐步确认。
-- [x] CHK042 默认 Agent CLI「未锁定」与安装 Skill「选型锁定后再写登录步骤」是否允许第一版先交付 Host/管理站、对话稍后，或必须同一版本一起交付？[Ambiguity, Spec §FR-005/017, Research D9]
-  - **评审结论（2026-11-11）**：修订后满足。Clarifications：允许 US1→US2→US3 分里程碑；登录章节后补不阻塞 Host/管理站。
+- [x] CHK042 安装 Skill「登录所用 ACP CLI」与对话能力是否允许第一版先交付 Host/管理站、对话稍后，或必须同一版本一起交付？[Ambiguity, Spec §FR-005/017, Research D9]
+  - **评审结论（2026-11-11）**：修订后满足。Clarifications：允许 US1→US2→US3 分里程碑；登录任意兼容 CLI 的章节随对话能力交付，不阻塞 Host/管理站。不把三家锁成唯一选项。
 - [x] CHK043 远程路径「填 Host 上的路径」是否允许 Host 侧浏览目录，或仅文本输入？规格与规划是否一致？[Ambiguity, Spec §US2-8, Research D11]
   - **评审结论（2026-11-11）**：修订后满足。规格与 D11 均为文本输入 + Host 校验，第一版无目录树。
 - [x] CHK044 002 US5「Agent 修改后必须询问上传」在本规格下是否仅指外部编码 Agent，避免实施者继续拦内置管理 Agent 的每次 push？[Conflict, Spec §FR-020, 002 §US5-2]

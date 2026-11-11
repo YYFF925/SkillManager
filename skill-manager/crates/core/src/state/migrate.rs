@@ -59,12 +59,46 @@ CREATE TABLE IF NOT EXISTS agent_runtime (
 );
 "#,
     ),
+    (
+        "agent_runtime_any_acp",
+        r#"
+-- 占位：列在 apply() 里按 PRAGMA 补，避免重复 ADD COLUMN 失败。
+SELECT 1;
+"#,
+    ),
 ];
 
 /// 在基础 schema 之后执行附加 SQL。
 pub fn apply(conn: &Connection) -> Result<()> {
     for (_name, sql) in MIGRATIONS {
         conn.execute_batch(sql)?;
+    }
+    ensure_column(
+        conn,
+        "agent_runtime",
+        "acp_args",
+        "TEXT NOT NULL DEFAULT '[]'",
+    )?;
+    ensure_column(
+        conn,
+        "agent_runtime",
+        "user_selected",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    Ok(())
+}
+
+fn ensure_column(conn: &Connection, table: &str, column: &str, decl: &str) -> Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let exists = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(|row| row.ok())
+        .any(|name| name == column);
+    if !exists {
+        conn.execute(
+            &format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"),
+            [],
+        )?;
     }
     Ok(())
 }

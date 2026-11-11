@@ -98,6 +98,18 @@ fn basename(name: &str) -> Option<String> {
         .map(|item| (*item).to_string())
 }
 
+/// OpenCode 会搜索 `$OPENCODE_CONFIG_DIR/skills/<id>/SKILL.md`。把内置说明拷进 Host 本机目录，不入库。
+pub fn prepare_opencode_config(state_dir: &Path) -> Result<PathBuf, String> {
+    let config = state_dir.join("agent-runtime").join("opencode-config");
+    let dest = config.join("skills").join("skill-manager-builtin-agent");
+    std::fs::create_dir_all(&dest).map_err(|err| err.to_string())?;
+    let src = builtin_skill_dir().join("SKILL.md");
+    if src.is_file() {
+        std::fs::copy(&src, dest.join("SKILL.md")).map_err(|err| err.to_string())?;
+    }
+    Ok(config)
+}
+
 /// 把工具调用转到 Host invoke / 现有 JSON CLI。
 pub fn run_tool(
     runtime: &HostRuntime,

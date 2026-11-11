@@ -1,6 +1,6 @@
 # Research: 本机 Host、管理站与内置管理 Agent
 
-**Date**: 2026-11-11 | **Status**: 规划决策已确认；ACP 默认命令行的最终锁定以实施第一个可运行切片前的探测清单为准（D9），不阻塞本文件其余决策。
+**Date**: 2026-11-11 | **Status**: 规划决策已确认；D9 探测清单用于找第一家可跑的 ACP 引导宿主，**不是**把 OpenCode / Codex / Gemini 写成唯一选项。模型由用户已登录的那家兼容 CLI 决定。
 
 依据：[spec.md](spec.md)、[ADR 0002](../../docs/adr/0002-host-management-station-and-agent.md)、宪章 2.1.0、002 的 `data-model.md` / `contracts/cli.md`、当前 `AppState` 与 `client.ts`。
 
@@ -54,11 +54,11 @@
 - **Rationale**: FR-004。
 - **Alternatives**: GUI 克隆向导（被拒）；应用内建库（被拒：第二座中央库）。
 
-### D9 ACP 优先；默认命令行用探测清单锁定
+### D9 ACP 优先；任意已登录的兼容 CLI；探测清单只找引导宿主
 
-- **Decision**: Host 以 ACP（stdio JSON-RPC）拉起成熟 Agent CLI。工具接到 Host 的第一路径是现有 `skill-manager` JSON CLI（经 Host 转发），不先做 MCP 平行实现。默认安装哪一家：实施「可对话切片」前用同一探测清单测 **OpenCode → Codex CLI → Gemini CLI**（会话、流式、取消、工具调用、stdio 稳定性）。第一家通过者成为检测/安装默认，写入安装 Skill 的登录步骤。探测不是产品功能，失败如实换下一家，不静默降级成「已能管理」。
-- **Rationale**: ADR 要求探测后锁；本环境未实测 ACP，宪章要求不足时说明。OpenCode 的 ACP 路径在既有讨论中最明确，故排第一，**不是**已经验证的结论。
-- **Alternatives**: 把运行时编进 core（被拒）；打包第三方 CLI（被拒）；先做 MCP 网关（被拒：002 CLI 已覆盖业务，双协议第一版过重）。
+- **Decision**: Host 以 ACP（stdio JSON-RPC）拉起**用户已登录的任意兼容 Agent CLI**。工具接到 Host 的第一路径是现有 `skill-manager` JSON CLI（经 Host 转发），不先做 MCP 平行实现。**模型由该 CLI 决定**，Skill Manager 不自建模型层，也不把 OpenCode / Codex / Gemini 写成唯一选项。D9 探测清单（OpenCode → Codex CLI → Gemini CLI：会话、流式、取消、工具调用、stdio、注入路径）只用来找**第一家可跑的 ACP 引导宿主**：本机没有任何兼容 CLI 时，才可按需安装该引导宿主（探测记录：OpenCode `opencode-ai` 1.19.5）。用户随时可改指向其它已登录 CLI。探测不是产品功能，失败如实说明，不静默降级成「已能管理」。
+- **Rationale**: 用户纠正（2026-11-11）：内置管理 Agent 必须能接任意第三方模型。三家只是当时便于实测 ACP 的候选，不是许可名单。认证与模型密钥仍归那家 CLI。
+- **Alternatives**: 把运行时编进 core（被拒）；打包第三方 CLI（被拒）；先做 MCP 网关（被拒：002 CLI 已覆盖业务，双协议第一版过重）；把默认锁死为三家之一且不可改（被拒：2026-11-11 用户纠正）。
 
 ### D10 对话与对接状态留本机 SQLite，管理站另库
 
@@ -74,7 +74,7 @@
 
 ### D12 安装 Skill 与配套维护 Skill 分源
 
-- **Decision**: 新技能源放 `skill-manager/assets/skills/skill-manager-install/`，入库方式与配套维护 Skill 相同（本仓库为普通上游）。内容：clone/Host/服务/对接；CLI 选型锁定后追加登录。不把维护规范抄进安装 Skill。
+- **Decision**: 新技能源放 `skill-manager/assets/skills/skill-manager-install/`，入库方式与配套维护 Skill 相同（本仓库为普通上游）。内容：clone/Host/服务/对接；以及登录任意 ACP 兼容 CLI、登记清单外 CLI。不把维护规范抄进安装 Skill。
 - **Rationale**: FR-005。
 - **Alternatives**: 扩写现有维护 Skill（被拒：职责混在「管库」与「把软件装到新机器」）。
 
@@ -93,15 +93,42 @@
 ### D15 注入路径、快照边界、取消与模型外发（查漏补缺）
 
 - **Decision**:
-  1. `skill-manager-builtin-agent` 是应用资产，由 Host 注入到 **D9 锁定的那家 CLI 会搜索的 skills 目录**；若该 CLI 无此目录，改为 ACP 初始化/系统文本。**不入库**、不出现在用户技能列表、不可部署。与安装 Skill（按普通上游入库）不同。
-  2. 探测清单须记录该 CLI 的注入路径（或「无目录、走初始化文本」）。
-  3. 快照与工具结果会进入该 CLI 所连接的模型；第一版不脱敏。Agent 只看见**当前 Host**，看不见其它设备的库。
+  1. `skill-manager-builtin-agent` 是应用资产，由 Host 注入到 **当前所用 CLI 会搜索的 skills 目录**（OpenCode：`$OPENCODE_CONFIG_DIR/skills/`，目录由 Host 本机 `state-dir/agent-runtime/opencode-config` 提供）；若该 CLI 无此目录，改为 ACP 初始化文本并写入每条 `session/prompt` 前缀。**不入库**、不出现在用户技能列表、不可部署。与安装 Skill（按普通上游入库）不同。
+  2. 探测清单须记录引导宿主的注入路径（或「无目录、走初始化文本」）；清单外 CLI 默认走初始化文本，除非用户另指定。
+  3. 快照与工具结果会进入**当前所用 CLI 所连接的模型**（任意第三方，由该 CLI 决定）；第一版不脱敏。Agent 只看见**当前 Host**，看不见其它设备的库。
   4. 用户可取消进行中的对话任务；取消后不得写成成功，也不得继续写库。
   5. 第一版对话是该机上可继续的时间线，不要求多会话工作区（分叉/文件夹）。
   6. 工具失败必须如实说明，不得假装读到正文。
 - **Rationale**: 2026-11-11 上下文讨论查漏补缺。安装 Skill 入库是给外部编码 Agent 用的；内置说明若入库会污染用户库并与「不是查询 API」冲突。
 - **Alternatives**: 把内置说明当库内技能（被拒：用户会看到/误部署，且与维护 Skill 混淆）；为每家 CLI 写不同正文的查询 Skill（被拒：查询走工具）；产品内做脱敏网关（被拒：第一版过重，与「选用即接受」不符）；多会话工作区（被拒：超出本功能）。
 
-## 探测清单（D9，实施「可对话切片」前执行）
+## 探测清单（D9，找引导宿主，不是许可名单）
 
-对每个候选 CLI 记录：能否 stdio ACP 握手、流式输出、取消、声明并调用外部工具、在 macOS 与 Windows 无交互安装、**内置管理说明应写入的 skills 目录路径**（没有则记「初始化文本」）。通过者锁定；全部失败则停在「对话不可用」并说明，不得用假回复冒充。
+对候选 CLI 记录：能否 stdio ACP 握手、流式输出、取消、声明并调用外部工具、无交互安装、**内置管理说明应写入的 skills 目录路径**（没有则记「初始化文本」）。第一家通过者仅作为「本机没有任何兼容 CLI 时」的引导安装；**不得**把三家写成产品唯一选项。全部失败则引导安装不可用，对话仍可通过用户登记的其它 ACP CLI 使用；不得用假回复冒充。
+
+### 探测记录（2026-11-11，Linux Cloud Agent，npm `--prefix` 安装）
+
+| 项 | OpenCode `opencode-ai` 1.19.5 | OpenCode `@opencode/cli` 2.2.7 | Codex CLI `@openai/codex` 0.167.1 | Gemini CLI `@google/gemini-cli` 0.68.0 |
+|---|---|---|---|---|
+| stdio ACP 握手 | 通过：`opencode acp`，`protocolVersion` 1 | 通过：`opencode acp` | **失败**：无 `acp`/`--acp`（exit 2/1）。`codex app-server` 是另一套 JSON-RPC（`userAgent`/`codexHome`），不是 ACP | 通过：`gemini --acp` initialize |
+| 会话 `session/new` | 通过 | 通过 | 未测（非 ACP） | **失败**：`Gemini API key is missing or not configured` |
+| 流式 `session/update` | 通过（`agent_message_chunk`） | 通过 | — | 未测（无会话） |
+| 取消 `session/cancel` | 通过（`stopReason: cancelled`） | 通过 | — | 未测 |
+| 工具调用 | 通过（`tool_call` 读 `hello.txt`） | 通过 | — | 未测 |
+| stdio 稳定（stdout 仅 JSON-RPC） | 通过 | 通过 | app-server 有非 ACP 通知 | initialize 为 JSON-RPC |
+| 内置说明注入 | **`$OPENCODE_CONFIG_DIR/skills/<id>/SKILL.md`**（出现在 `available_commands_update`）。`OPENCODE_SKILLS_PATH` **无效** | 同 env 本轮未注入命令；走初始化/prompt 文本 | 原生无 ACP。适配器 `codex-acp` 另计。技能目录文档为 `~/.agents/skills`（旧 `~/.codex/skills`） | 文档：`~/.gemini/skills/` 与 `~/.agents/skills/`。无会话故未实测 |
+| 无交互安装 | 本环境 `npm install --omit=dev --prefix` 成功。macOS/Windows 同一 Host 路径；本 VM 未跑那两套官方安装器 | 同左，包名为 `@opencode/cli` | npm 安装成功，但不能当 ACP 宿主 | npm 安装成功；未登录则不能开会话 |
+
+**引导宿主**：OpenCode 1.x（`opencode-ai`，命令 `opencode acp`）。不是锁死默认、不是唯一允许的 CLI。
+
+### 清单外 CLI 如何接入
+
+1. 该 CLI 必须能以 **ACP stdio JSON-RPC** 子进程运行（常见：`binary acp`、`binary --acp`，或二进制本身就是 ACP 宿主）。Host 会按这个顺序试，**握手失败再试下一组**；登记不只看文件存在。
+2. 在所用 CLI 里完成模型登录（API key / 订阅 / `login`）。密钥不进 Host / Vault / 管理站。
+3. 登记到本机 Host（任选）：
+   - `skill-manager --state-dir <dir> host agent-cli --bin <绝对路径或 PATH 名> [--args acp] [--id <标识>]`
+   - `PUT /agent/runtime` `{ "binaryPath": "...", "acpArgs": ["acp"], "cliId": "..." }`
+   - 环境变量 `SKILL_MANAGER_AGENT_CLI`（可选 `SKILL_MANAGER_AGENT_ACP_ARGS`）
+4. 内置说明：有已知 skills 目录则注入；**否则走 ACP `initialize.skillText` + 每条 prompt 前缀**（清单外 CLI 的默认路径）。
+5. 查看/清除：`host agent-cli`、`GET /agent/runtime`、`host agent-cli --clear`。
+6. 原生 Codex CLI 不是 ACP；若要用 Codex 模型，登记 ACP 适配器（如 `codex-acp`），不要把 `codex app-server` 当成 ACP。

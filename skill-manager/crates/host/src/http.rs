@@ -52,6 +52,7 @@ pub fn router(runtime: HostRuntime) -> Router {
         .route("/agent/tasks/{id}/cancel", post(agent_cancel))
         .route("/agent/sessions", get(agent_sessions))
         .route("/agent/sessions/{id}/messages", get(agent_messages))
+        .route("/agent/runtime", get(agent_runtime_get).put(agent_runtime_put))
         .with_state(App { runtime })
 }
 
@@ -178,6 +179,48 @@ async fn agent_cancel(
 ) -> impl IntoResponse {
     match crate::agent::cancel_task(&app.runtime, &id, body) {
         Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response(),
+    }
+}
+
+async fn agent_runtime_get(State(app): State<App>) -> Json<Value> {
+    Json(crate::agent::runtime_view(&app.runtime))
+}
+
+async fn agent_runtime_put(
+    State(app): State<App>,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    if body.get("clear").and_then(Value::as_bool) == Some(true) {
+        return match crate::agent::clear_user_cli(&app.runtime) {
+            Ok(()) => (StatusCode::OK, Json(crate::agent::runtime_view(&app.runtime))).into_response(),
+            Err(err) => (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response(),
+        };
+    }
+    let bin = body
+        .get("binaryPath")
+        .or_else(|| body.get("bin"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if bin.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "缺少 binaryPath。清单外 CLI 用 PUT /agent/runtime { binaryPath, acpArgs } 登记。" })),
+        )
+            .into_response();
+    }
+    let args = body
+        .get("acpArgs")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let id = body.get("cliId").and_then(Value::as_str);
+    match crate::agent::set_user_cli(&app.runtime, bin, args, id) {
+        Ok(_) => (StatusCode::OK, Json(crate::agent::runtime_view(&app.runtime))).into_response(),
         Err(err) => (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response(),
     }
 }
