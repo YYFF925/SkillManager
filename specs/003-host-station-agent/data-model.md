@@ -88,7 +88,7 @@
 | device_id | 与 Host `host_identity.device_id` 相同 |
 | display_name | 可在管理站改 |
 | device_key_hash | 只存哈希 |
-| last_seen_at | 长连接心跳；超时视为离线 |
+| last_seen_at | 最近一次长连接心跳（建立连接或 Ping/Pong）。在线以仍打开的出站 WebSocket 为准，不得仅因无业务流量判离线。套接字关闭或心跳发送失败后从在线表移除。 |
 | revoked | 解除后为真，原密钥失效 |
 
 离线可见不可操作。不存 Vault 路径、不存技能列表。

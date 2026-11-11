@@ -14,7 +14,8 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use crate::db::StationDb;
 
 const PAIR_TTL: Duration = Duration::from_secs(10 * 60);
-const ONLINE_TTL: Duration = Duration::from_secs(45);
+/// 长连接 Ping 间隔。须短于任何曾用过的空闲 TTL，避免无业务流量被判离线。
+pub const HEARTBEAT: Duration = Duration::from_secs(15);
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,10 +77,9 @@ impl LiveMap {
     }
 
     pub fn is_online(&self, device_id: &str) -> bool {
-        self.inner.lock().ok().is_some_and(|g| {
-            g.get(device_id)
-                .is_some_and(|l| l.last_seen.elapsed() < ONLINE_TTL)
-        })
+        // 在线 = 出站 WebSocket 仍挂在表里。连接循环退出时 remove。
+        // 不得用空闲 TTL：无 invoke/SSE 时 TCP 仍 ESTABLISHED 也必须显示在线。
+        self.inner.lock().ok().is_some_and(|g| g.contains_key(device_id))
     }
 
     pub fn get(&self, device_id: &str) -> Option<LiveLink> {
@@ -283,5 +283,39 @@ mod tests {
         let devices = list_devices(&db, &LiveMap::default()).unwrap();
         assert_eq!(devices.len(), 1);
         assert_eq!(devices[0].device_id, "dev-1");
+        assert!(!devices[0].online);
+    }
+
+    fn dummy_link(last_seen: Instant) -> LiveLink {
+        let (invoke_tx, _) = mpsc::unbounded_channel();
+        let (events, _) = broadcast::channel(1);
+        LiveLink {
+            last_seen,
+            invoke_tx,
+            events,
+        }
+    }
+
+    #[test]
+    fn open_socket_stays_online_without_business_traffic() {
+        let live = LiveMap::default();
+        assert!(!live.is_online("dev-1"));
+        live.insert(
+            "dev-1".into(),
+            dummy_link(Instant::now() - Duration::from_secs(120)),
+        );
+        assert!(
+            live.is_online("dev-1"),
+            "still-open LiveLink must stay online after idle longer than the old 45s TTL"
+        );
+        live.touch("dev-1");
+        assert!(live.is_online("dev-1"));
+        live.remove("dev-1");
+        assert!(!live.is_online("dev-1"));
+    }
+
+    #[test]
+    fn heartbeat_is_shorter_than_former_idle_ttl() {
+        assert!(HEARTBEAT < Duration::from_secs(45));
     }
 }

@@ -10,6 +10,9 @@ use uuid::Uuid;
 use crate::HostRuntime;
 use crate::identity::{self, HostIdentity};
 
+/// 出站 WebSocket Ping 间隔。须短于管理站曾用的 45s 空闲 TTL。
+const WS_HEARTBEAT: Duration = Duration::from_secs(15);
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PairRequest {
@@ -207,6 +210,8 @@ async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> 
         .map_err(|err| err.to_string())?;
     let (mut sink, mut stream) = ws.split();
     let mut events = runtime.sse().subscribe();
+    let mut heartbeat = tokio::time::interval(WS_HEARTBEAT);
+    heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         tokio::select! {
             incoming = stream.next() => {
@@ -230,6 +235,11 @@ async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> 
                         "data": event.payload,
                     });
                     let _ = sink.send(Message::Text(payload.to_string().into())).await;
+                }
+            }
+            _ = heartbeat.tick() => {
+                if sink.send(Message::Ping(Default::default())).await.is_err() {
+                    return Err("管理站心跳发送失败".to_string());
                 }
             }
         }
@@ -293,4 +303,15 @@ where
         "body": payload,
     });
     let _ = sink.send(Message::Text(reply.to_string().into())).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_ws_heartbeat_is_shorter_than_former_idle_ttl() {
+        assert!(WS_HEARTBEAT < Duration::from_secs(45));
+        assert_eq!(WS_HEARTBEAT, Duration::from_secs(15));
+    }
 }

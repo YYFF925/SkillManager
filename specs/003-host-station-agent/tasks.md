@@ -233,3 +233,4 @@ T011 实现 vault clone（core/cli）
 - [X] T067 `session/request_permission` 不得一律放行；CLI 自带 bash/edit 拒绝，Host 工具（skill_set 等）才允许。确认等待不堵死 ACP 读循环（工具经 Host HTTP / 后台线程）。 per FR-001, FR-019, C3, H3
 - [X] T068 恢复码登录把新 TOTP/恢复码哈希挂在该会话（`pending_rebind` / `pending_totp_secret` / `pending_recovery_hashes`），不得立刻改写 `admin.totp_secret`；`POST /auth/totp/rebind` 用本会话待定密钥校验后才写入 admin，该会话才成为完整管理员会话。已用恢复码作废，其余恢复码与旧验证器在确认前仍有效。`skill_delete` 工具 schema 声明 `references[]`。D9/#7 不在本任务。 per US2/AC3, FR-007, H4
 - [X] T069 远程网页登录后、尚无设备且 Vault 未接入时，首次接入页显示 DeviceBar 与「生成对接码」；未选当前设备时禁用「接入该路径」，不调用 Host invoke，从而消除「尚未选择当前设备」死锁 per US2/AC11, T049
+- [X] T070 Host 与管理站长连接每 15s WebSocket Ping；在线以仍打开的 LiveLink 为准，不得因无业务流量超过 45s 判离线。套接字关闭或心跳发送失败才移除。 per US2/AC6, FR-010, T021

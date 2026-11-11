@@ -457,13 +457,15 @@ async fn handle_host_socket(state: AppState, device_id: String, socket: WebSocke
         String,
         tokio::sync::oneshot::Sender<crate::devices::InvokeReply>,
     > = std::collections::HashMap::new();
+    let mut heartbeat = tokio::time::interval(devices::HEARTBEAT);
+    heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
         tokio::select! {
             incoming = stream.next() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
-                        state.live.touch(&device_id);
+                        mark_seen(&state, &device_id);
                         if let Ok(value) = serde_json::from_str::<Value>(&text) {
                             match value.get("type").and_then(Value::as_str) {
                                 Some("invoke_result") => {
@@ -481,7 +483,7 @@ async fn handle_host_socket(state: AppState, device_id: String, socket: WebSocke
                         }
                     }
                     Some(Ok(Message::Ping(_))) | Some(Ok(Message::Pong(_))) => {
-                        state.live.touch(&device_id);
+                        mark_seen(&state, &device_id);
                     }
                     Some(Ok(Message::Close(_))) | None => break,
                     Some(Err(_)) => break,
@@ -502,9 +504,23 @@ async fn handle_host_socket(state: AppState, device_id: String, socket: WebSocke
                     break;
                 }
             }
+            _ = heartbeat.tick() => {
+                mark_seen(&state, &device_id);
+                if sink.send(Message::Ping(Default::default())).await.is_err() {
+                    break;
+                }
+            }
         }
     }
     state.live.remove(&device_id);
+}
+
+fn mark_seen(state: &AppState, device_id: &str) {
+    state.live.touch(device_id);
+    let _ = with_db(state, |db| {
+        devices::touch_seen(db, device_id);
+        Ok(())
+    });
 }
 
 #[derive(Deserialize)]
