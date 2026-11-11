@@ -75,5 +75,8 @@ Hermes 中独立的配置与数据目录，各 Agent 可使用各自档案运行
 **内置管理 Agent（管理 Agent）**:
 Skill Manager 产品内的对话式管理能力，跑在当前设备的 Host 上，经 GUI 或管理站网页使用。不是设置页里的「内置 Agent 名单」（那些是部署目标），也不是把任务复制到软件外的编码 Agent。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
 
+**安装 Skill（SkillManager 安装 Skill）**:
+给新机器上已有的编码 Agent 使用的技能，指导 clone SkillManagerVault、配置并启动 Host、对接管理站；内置管理 Agent 所用 CLI 选型锁定后，再指导该 CLI 的登录。与配套维护 Skill 分开：后者管库内技能与工具，前者把 SkillManager 接到一台电脑上。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
+
 **Maintenance skill（配套维护 Skill）**:
 随 Skill Manager 开发维护的单一技能，内容涵盖库维护规范、CLI（命令行）使用参考与工具安装登记流程；从本项目仓库作为普通上游技能入库与更新，软件生成的维护任务说明引用该技能路径而非内联规范全文。
