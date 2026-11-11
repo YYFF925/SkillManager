@@ -2,10 +2,15 @@
   "version": "1.4.1.dev0",
   "integration_state_schema": 1,
   "installed_integrations": [
-    "codex"
+    "codex",
+    "cursor-agent"
   ],
   "integration_settings": {
     "codex": {
+      "script": "sh",
+      "invoke_separator": "-"
+    },
+    "cursor-agent": {
       "script": "sh",
       "invoke_separator": "-"
     }
