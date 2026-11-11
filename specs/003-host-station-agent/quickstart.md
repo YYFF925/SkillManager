@@ -22,6 +22,12 @@ skill-manager --vault <empty-dir> --state-dir <state-a> host serve
 
 关掉后再执行同一条 `host serve`（启动命令），应能再起来。不验收唤醒休眠。
 
+```text
+skill-manager --state-dir <state-a> host install-service
+```
+
+期望：当前用户开机项已写入（macOS launchd / Linux systemd --user / Windows 登录项或等价）。不必真重启机器。`host uninstall-service` 能清掉该项。
+
 安装 Skill：把 `skill-manager-install` 交给该机已有编码 Agent，按其步骤 clone、serve、pair。期望与手工命令结果相同，且不改写配套维护 Skill。
 
 ## 2. 管理站切换设备（US2）
@@ -36,9 +42,9 @@ skill-manager station serve --listen 127.0.0.1:8787
 skill-manager --state-dir <state-a> host pair --station <url> --code <code> --name machine-a
 ```
 
-第二份 `--state-dir <state-b>` 再对接一台。登录一次，切换 A 改一条中文注释，切换 B 看该注释不在 B。A 离线（停掉 serve）时列表显示离线，转发失败说清，不得显示成功。
+第二份 `--state-dir <state-b>` 再对接一台。对一台**已经在线且 Vault 已接入**的设备，从打开登录页起计时（含登录与切换，不含该设备首次 clone 或 install-service），须在 3 分钟内切换并改一条中文注释（SC-001）。切换 B 看该注释不在 B。A 离线（停掉 serve）时列表显示离线，转发失败说清，不得显示成功。
 
-远程打开设置：没有托盘/关窗/应用更新；路径填的是 Host 那台的路径。
+远程打开设置：没有托盘/关窗/应用更新；路径填的是 Host 那台的路径。本机桌面打开同一前端时不得出现设备切换条，也不得切换其它设备。
 
 两个浏览器同时改 A 的非破坏性字段：都成功。删除技能必须各自确认，用另一会话的 planId 确认必须拒绝。
 

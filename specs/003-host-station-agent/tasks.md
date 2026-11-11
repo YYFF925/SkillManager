@@ -41,7 +41,7 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 - [ ] T007 在 `skill-manager/crates/host/src/serve.rs`、`skill-manager/crates/cli/src/commands/host.rs` 实现 `host serve` / `host status`：前台运行、占锁、能报告是否接入 Vault。已有实例占锁则失败。
 - [ ] T008 在 `skill-manager/crates/cli/src/main.rs` 落实 Host 在场时写入类命令转发到本机 Host、不在场时直连 core 且占同一把锁（research D5、FR-006）。
 - [ ] T009 在 `skill-manager/src-tauri/src/lib.rs` 让桌面启动即内嵌 Host runtime（占锁、调度仍按 002）；关窗收托盘时 Host 继续跑，仅托盘退出才释放锁。
-- [ ] T010 在 `skill-manager/crates/core/src/state/` 为后续表预留迁移入口（不在本任务创建对话表）；保持「共享资产零入库」。
+- [ ] T010 在 `skill-manager/crates/core/src/state/` 只加后续表可用的 migration 钩子，本任务不创建 `agent_sessions` / `agent_messages` / `host_identity`（对话表归 T031，设备表归 T020）；保持「共享资产零入库」。
 
 **Checkpoint**: 桌面与 `host serve` 互斥于同一 state-dir；CLI 写入有协调；尚无 clone、管理站、对话。
 
@@ -56,10 +56,10 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 ### Implementation
 
 - [ ] T011 [US1] 在 `skill-manager/crates/core/src/sync/git.rs`、`skill-manager/crates/cli/src/commands/vault.rs` 实现 `vault clone <remote-url> --path <dir>`：调用本机 git；目标已存在且非空则失败不覆盖；成功后把该路径记为本机 Vault。不提供图形向导，不 init 新中央库。
-- [ ] T012 [US1] 若实现 `vault clone --pair`：clone 成功后立刻 `host pair`；对接失败须分段报告，不得把「未对接」说成「库没 clone」（`contracts/cli.md`）。本任务可先不做 `--pair`，则 US2 的 `host pair` 单独使用。
+- [ ] T012 [US1] 第一版**不做** `vault clone --pair`。对接只用 US2 的 `host pair`。若日后加 `--pair`：语义等于 clone 成功后立刻 `host pair`；对接失败须分段报告，不得把「未对接」说成「库没 clone」（`contracts/cli.md`）。
 - [ ] T013 [US1] 在 `skill-manager/crates/host/src/service.rs`、`skill-manager/crates/cli/src/commands/host.rs` 实现 `host install-service` / `uninstall-service`：当前用户级开机启动（macOS launchd、Linux systemd --user、Windows 登录项或等价）；不唤醒休眠、不加看门狗。`host serve` 即启动命令。
 - [ ] T014 [P] [US1] 在 `skill-manager/assets/skills/skill-manager-install/` 编写安装 Skill 源（与 `skill-manager-maintenance` 分开）：clone、配置并启动 Host、对接管理站；**不含**管理 CLI 登录（D9 锁定后 US3 再补）。
-- [ ] T015 [US1] 按 `specs/003-host-station-agent/quickstart.md` §1 在无窗口环境下验收 clone、serve、锁、再启动；写入本目录或实施记录，不把浏览器预览当 Host 真结果。
+- [ ] T015 [US1] 按 `specs/003-host-station-agent/quickstart.md` §1 在无窗口环境下验收 clone、serve、锁、再启动，并执行 `host install-service` 确认已写入当前用户开机项（不必真重启机器）；写入本目录或实施记录，不把浏览器预览当 Host 真结果。
 
 **Checkpoint**: 无窗口机器可接入 Vault 并跑 Host。对接管理站可等到 US2。
 
@@ -73,7 +73,7 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 
 ### 设计前置
 
-- [ ] T016 [US2] 在 `specs/001-skill-management-prototype/ui-prototype/index.html`、`prototype.css` 与 `design/DESIGN.md` 增加登录页、设备列表/切换条、离线不可用态；同一轮按对照表改 React 骨架（尚未接 API）。
+- [ ] T016 [US2] 在 `specs/001-skill-management-prototype/ui-prototype/index.html`、`prototype.css` 与 `design/DESIGN.md` 增加登录页、设备列表/切换条、离线不可用态；设备条只出现在管理站/远程壳，桌面原型不得出现「切换其它设备」；同一轮按对照表改 React 骨架（尚未接 API）。
 
 ### Implementation
 
@@ -81,14 +81,14 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 - [ ] T018 [US2] 在 `skill-manager/crates/station/src/auth.rs`、`skill-manager/crates/cli/src/commands/station.rs` 实现首次 `station serve` 创建唯一管理员（密码 + TOTP 二维码/密钥/一次性恢复码只展示一次）、可配置 session_ttl、`station reset-admin` 仅本机；无公网注册。
 - [ ] T019 [US2] 在 `skill-manager/crates/station/src/http.rs` 实现 `contracts/station-http.md` 的 `/auth/*` 与静态前端托管；未登录不加载技能数据。
 - [ ] T020 [US2] 在 `skill-manager/crates/core/src/state/` 与 `skill-manager/crates/host/` 增加 `host_identity` 表：device_id「对接时生成，解除后可重新生成」；display_name 默认主机名可改；station_url 空=未对接；device_key 只存本机与管理站、不进 Vault；同一 state-dir 一行；解除清除 station_url 与 device_key。
-- [ ] T021 [US2] 在 `skill-manager/crates/host/src/pair.rs`、`skill-manager/crates/station/src/devices.rs` 实现出站对接：`host pair --station <url> --code`；码过期/已用/填错失败且不影响已对接设备；`devices` 区分 online（长连接心跳）；`PATCH` 改名、`revoke` 后原密钥失效。
-- [ ] T022 [US2] 在 `skill-manager/crates/host/src/http.rs` 实现 `POST /invoke/<command>`（体与现有 Tauri invoke 参数一致）与 `GET /events` SSE（至少 `vault-changed`、`schedule-finished`）；默认只接受本机回环与已认证管理站长连接，不对公网提供登录页。
+- [ ] T021 [US2] 在 `skill-manager/crates/host/src/pair.rs`、`skill-manager/crates/cli/src/commands/host.rs`、`skill-manager/crates/station/src/devices.rs` 实现出站对接：`host pair --station <url> --code` 与 `host unpair`（解除后清本机 `station_url` / `device_key`）；码过期/已用/填错失败且不影响已对接设备；`devices` 区分 online（长连接心跳）；`PATCH` 改名、`revoke` 后原密钥失效。
+- [ ] T022 [US2] 在 `skill-manager/crates/host/src/http.rs` 实现 `contracts/host-http.md`：`POST /invoke/<command>`（体与现有 Tauri invoke 参数一致）、`GET /events` SSE（至少 `vault-changed`、`schedule-finished`）、`POST /session` → `{ sessionId }`、`GET /host/status`（与 CLI `host status` 同一事实）。删除技能、覆盖类 command 未带有效 `planId` 时不得执行，只返回待确认计划（闸门与 T024 同一套）。默认只接受本机回环与已认证管理站长连接，不对公网提供登录页。
 - [ ] T023 [US2] 在 `skill-manager/crates/station/src/proxy.rs` 实现 `PUT /current`、`POST /current/invoke/<command>`、`GET /current/events` 转到当前 Host；设备离线或未选不得用缓存技能正文顶上，失败须说清。
-- [ ] T024 [US2] 在 `skill-manager/crates/host/src/plans.rs` 实现 `operation_plans`：action 仅 `skill.delete` 或 `deploy.overwrite`；绑定签发时 session_id；过期或 session 不匹配拒绝；确认后才执行 core。普通部署、注释、push 不建计划。
+- [ ] T024 [US2] 在 `skill-manager/crates/host/src/plans.rs` 与 `skill-manager/crates/host/src/http.rs` 实现 `operation_plans` 及 `POST /plans`、`POST /plans/:id/confirm`：action 仅 `skill.delete` 或 `deploy.overwrite`；绑定签发时 session_id；过期或 session 不匹配拒绝；确认后才执行 core。普通部署、注释、push 不建计划。
 - [ ] T025 [US2] 在 `skill-manager/src/services/client.ts`、`skill-manager/src/services/transport.ts` 把业务函数改为走 Transport；`isDesktop()` 为真用 Tauri，为假用 HttpTransport。`git_auto_push` 仅图形界面会话可写（远程网页算 GUI）。
-- [ ] T026 [US2] 在 `skill-manager/src/pages/` 接入登录、设备条、当前设备界面；远程隐藏托盘/关窗收起/应用更新；路径类配置为文本输入，Host 校验存在性，不用浏览器文件选择器，第一版无 Host 目录树。
+- [ ] T026 [US2] 在 `skill-manager/src/pages/` 接入登录、设备条、当前设备界面。`isDesktop()` 为真：不渲染设备条、不调用 `PUT /current`，只管理本机 Host。为假：显示设备条；远程隐藏托盘/关窗收起/应用更新；路径类配置为文本输入，Host 校验存在性，不用浏览器文件选择器，第一版无 Host 目录树。
 - [ ] T027 [US2] 在 `skill-manager/src/pages/` 与 `skill-manager/crates/host/src/plans.rs` 把删除技能、覆盖部署接到确认计划（绑定当前 sessionId）；两浏览器非破坏性修改均允许；用另一会话 planId 确认必须拒绝。
-- [ ] T028 [US2] 按 `quickstart.md` §2 验收双 state-dir 切换改注释、离线、双浏览器与确认绑会话。
+- [ ] T028 [US2] 按 `quickstart.md` §2 验收双 state-dir 切换改注释、离线、双浏览器与确认绑会话。对一台**已经在线且 Vault 已接入**的设备，从打开登录页起计时，含登录与切换、不含首次 clone，须在 3 分钟内完成一次非破坏性改注释（SC-001）。
 
 **Checkpoint**: 管理站可登录并只管理当前在线 Host 的完整 002 能力。
 
@@ -126,7 +126,7 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 **Purpose**: 文档、002 指向、回归。
 
 - [ ] T040 在 `docs/requirements.md`、`specs/002-skill-management/spec.md` US8 场景 6 增加指向 003 的一句，不重写 002 全文。
-- [ ] T041 [P] 同步 `GLOSSARY.md` 若实现名与 ADR 有出入；确认安装 Skill 路径已写入仓库。
+- [ ] T041 [P] 核对 `GLOSSARY.md` 与实现名、ADR 0002；确认安装 Skill 路径已写入仓库。无新名则勾掉并注明无差异，不改术语。
 - [ ] T042 按 `quickstart.md` §4–5 跑管理站不可用时桌面仍能改库、Host 在场/不在场 CLI 与 002 核心命令回归。
 - [ ] T043 [P] 在 `specs/003-host-station-agent/quickstart.md` 记录实际验收证据与未取证项。
 
@@ -190,4 +190,5 @@ T011 实现 vault clone（core/cli）
 - 新界面必须走设计层同一轮落地，不要只改 React
 - `crates/station` 任何时候都不得依赖 core
 - 不要把 002 的「外部 Agent 每次问上传」套到内置管理 Agent
+- 规格「一键命令」= `vault clone` 再 `host serve`（契约允许日后加 `--pair`），不另发明第三条入口
 - 提交按任务或逻辑组进行；本文件生成不代替实现
