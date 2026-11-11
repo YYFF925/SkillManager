@@ -57,6 +57,8 @@ path = "../../tests/cli_archive.rs"
 
 [dependencies]
 skill-manager-core.workspace = true
+skill-manager-host.workspace = true
+skill-manager-station.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true

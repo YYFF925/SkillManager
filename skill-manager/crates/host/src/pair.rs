@@ -1,0 +1,256 @@
+//! Host 出站对接管理站：一次性码、长连接、解除。
+
+use std::time::Duration;
+
+use rand::RngCore;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use uuid::Uuid;
+
+use crate::identity::{self, HostIdentity};
+use crate::HostRuntime;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PairRequest {
+    code: String,
+    device_id: String,
+    display_name: String,
+    device_key: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PairResponse {
+    #[serde(default)]
+    ok: bool,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+fn random_key() -> String {
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    hex::encode(bytes)
+}
+
+/// `host pair --station --code`。
+pub fn pair(
+    runtime: &HostRuntime,
+    station_url: &str,
+    code: &str,
+    display_name: Option<&str>,
+) -> Result<HostIdentity, String> {
+    let name = display_name
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(identity::default_display_name);
+    let device_id = Uuid::new_v4().to_string();
+    let device_key = random_key();
+    let url = format!("{}/pair", station_url.trim_end_matches('/'));
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|err| err.to_string())?;
+    let response = client
+        .post(&url)
+        .json(&PairRequest {
+            code: code.to_string(),
+            device_id: device_id.clone(),
+            display_name: name.clone(),
+            device_key: device_key.clone(),
+        })
+        .send()
+        .map_err(|err| format!("无法连接管理站：{err}"))?;
+    if !response.status().is_success() {
+        let text = response.text().unwrap_or_default();
+        return Err(format!("对接失败：{text}"));
+    }
+    let body: PairResponse = response.json().unwrap_or(PairResponse {
+        ok: true,
+        error: None,
+    });
+    if let Some(error) = body.error {
+        return Err(error);
+    }
+    persist(
+        runtime,
+        HostIdentity {
+            device_id: device_id.clone(),
+            display_name: name,
+            station_url: station_url.trim_end_matches('/').to_string(),
+            device_key: device_key.clone(),
+            paired_at: Some(chrono::Utc::now().to_rfc3339()),
+        },
+    )?;
+    spawn_link(runtime.clone(), station_url.trim_end_matches('/').to_string(), device_id, device_key);
+    identity::read(runtime.get()?.state()).map_err(|err| err.to_string())?.ok_or_else(|| "对接已完成但本机身份未写入".to_string())
+}
+
+/// `host unpair`：清本机 station_url / device_key。
+pub fn unpair(runtime: &HostRuntime) -> Result<(), String> {
+    let ctx = runtime.get()?;
+    let store = ctx.state();
+    let conn = store.connection();
+    let exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='host_identity'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    if exists == 0 {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE host_identity SET station_url = '', device_key = '', paired_at = NULL",
+        [],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn persist(runtime: &HostRuntime, identity: HostIdentity) -> Result<(), String> {
+    let ctx = runtime.get()?;
+    crate::identity_store::upsert(ctx.state(), &identity)
+}
+
+fn spawn_link(runtime: HostRuntime, station_url: String, device_id: String, device_key: String) {
+    std::thread::spawn(move || {
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(_) => return,
+        };
+        rt.block_on(link_loop(runtime, station_url, device_id, device_key));
+    });
+}
+
+async fn link_loop(runtime: HostRuntime, station_url: String, device_id: String, device_key: String) {
+    let ws_url = station_ws_url(&station_url, &device_id);
+    loop {
+        match connect_once(&runtime, &ws_url, &device_key).await {
+            Ok(()) => {}
+            Err(err) => {
+                eprintln!("管理站长连接中断：{err}");
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        // 解除对接后 identity.station_url 为空，停止。
+        let still_paired = runtime.get().ok().and_then(|ctx| {
+            identity::read(ctx.state()).ok().flatten().map(|id| {
+                !id.station_url.is_empty() && id.device_id == device_id
+            })
+        });
+        if still_paired != Some(true) {
+            break;
+        }
+    }
+}
+
+/// Host 启动时若已对接，恢复出站长连接。
+pub fn resume_if_paired(runtime: &HostRuntime) {
+    let Some((station_url, device_id, device_key)) = runtime.get().ok().and_then(|ctx| {
+        identity::read(ctx.state()).ok().flatten().and_then(|id| {
+            if id.station_url.is_empty() || id.device_key.is_empty() {
+                None
+            } else {
+                Some((id.station_url, id.device_id, id.device_key))
+            }
+        })
+    }) else {
+        return;
+    };
+    spawn_link(runtime.clone(), station_url, device_id, device_key);
+}
+
+fn station_ws_url(station_url: &str, device_id: &str) -> String {
+    let http = station_url.trim_end_matches('/');
+    let ws = if let Some(rest) = http.strip_prefix("https://") {
+        format!("wss://{rest}")
+    } else if let Some(rest) = http.strip_prefix("http://") {
+        format!("ws://{rest}")
+    } else {
+        format!("ws://{http}")
+    };
+    format!("{ws}/host/ws/{device_id}")
+}
+
+async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> Result<(), String> {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    use tokio_tungstenite::tungstenite::Message;
+
+    let mut request = ws_url.into_client_request().map_err(|err| err.to_string())?;
+    request.headers_mut().insert(
+        "authorization",
+        format!("Bearer {device_key}").parse().map_err(|err: axum::http::header::InvalidHeaderValue| err.to_string())?,
+    );
+    let (ws, _) = tokio_tungstenite::connect_async(request)
+        .await
+        .map_err(|err| err.to_string())?;
+    let (mut sink, mut stream) = ws.split();
+    let mut events = runtime.sse().subscribe();
+    loop {
+        tokio::select! {
+            incoming = stream.next() => {
+                match incoming {
+                    Some(Ok(Message::Text(text))) => {
+                        handle_station_message(runtime, &mut sink, &text).await;
+                    }
+                    Some(Ok(Message::Ping(data))) => {
+                        let _ = sink.send(Message::Pong(data)).await;
+                    }
+                    Some(Ok(Message::Close(_))) | None => return Ok(()),
+                    Some(Err(err)) => return Err(err.to_string()),
+                    _ => {}
+                }
+            }
+            event = events.recv() => {
+                if let Ok(event) = event {
+                    let payload = json!({
+                        "type": "sse",
+                        "event": event.name,
+                        "data": event.payload,
+                    });
+                    let _ = sink.send(Message::Text(payload.to_string().into())).await;
+                }
+            }
+        }
+    }
+}
+
+async fn handle_station_message<S>(runtime: &HostRuntime, sink: &mut S, text: &str)
+where
+    S: futures_util::Sink<tokio_tungstenite::tungstenite::Message> + Unpin,
+{
+    use crate::invoke::{self, InvokeSource};
+    use futures_util::SinkExt;
+    use tokio_tungstenite::tungstenite::Message;
+
+    let value: serde_json::Value = match serde_json::from_str(text) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    if value.get("type").and_then(|v| v.as_str()) != Some("invoke") {
+        return;
+    }
+    let id = value.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let command = value.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let body = value.get("body").cloned().unwrap_or(json!({}));
+    let session = value.get("sessionId").and_then(|v| v.as_str()).map(str::to_string);
+    let runtime = runtime.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        invoke::invoke(&runtime, &command, body, InvokeSource::Gui, session.as_deref())
+    })
+    .await;
+    let (ok, payload) = match result {
+        Ok(Ok(v)) => (true, v),
+        Ok(Err(err)) => {
+            let (_, body) = err.status_and_body();
+            (false, body)
+        }
+        Err(err) => (false, json!({ "error": err.to_string() })),
+    };
+    let reply = json!({ "type": "invoke_result", "id": id, "ok": ok, "body": payload });
+    let _ = sink.send(Message::Text(reply.to_string().into())).await;
+}

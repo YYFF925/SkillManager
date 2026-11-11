@@ -121,6 +121,8 @@ export interface LibraryPageProps {
   focusReference?: string | null;
   /** 已消费跳转目标。 */
   onFocusConsumed?: () => void;
+  /** 上报当前打开/选中的技能引用，供内置管理 Agent 只收引用。 */
+  onSelectionChange?: (refs: string[]) => void;
 }
 
 export function LibraryPage({
@@ -133,6 +135,7 @@ export function LibraryPage({
   onLibrarySaved,
   focusReference,
   onFocusConsumed,
+  onSelectionChange,
 }: LibraryPageProps) {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -253,6 +256,11 @@ export function LibraryPage({
   useEffect(() => {
     void refreshRecords();
   }, [refreshRecords, reloadToken, version, domain]);
+
+  useEffect(() => {
+    const refs = detail ? [detail] : selected;
+    onSelectionChange?.(refs);
+  }, [detail, selected, onSelectionChange]);
 
 
   /**

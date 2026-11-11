@@ -225,6 +225,33 @@ describe("SettingsPage · 只读展示行", () => {
   });
 });
 
+describe("SettingsPage · 远程壳", () => {
+  it("远程模式隐藏托盘、关窗收起和检查更新", async () => {
+    render(
+      <SettingsPage
+        schedule={null}
+        vault={vault}
+        uploadFailure={null}
+        onRetryUpload={async () => {}}
+        settings={settingsFixture}
+        onSettingsChange={() => {}}
+        agents={[codex, hermes]}
+        onAgentsChanged={() => {}}
+        onOpenTarget={() => {}}
+        onAppUpdateFound={() => {}}
+        reloadToken={0}
+        remote
+      />,
+    );
+    const global = await screen.findByRole("heading", { name: "全局配置" });
+    const panel = global.closest("section")!;
+    expect(within(panel).queryByText("托盘模式")).toBeNull();
+    expect(within(panel).queryByText("托盘／菜单栏图标")).toBeNull();
+    expect(within(panel).queryByRole("button", { name: "检查更新" })).toBeNull();
+    await waitFor(() => expect(within(panel).getByText("0.1.1")).toBeTruthy());
+  });
+});
+
 describe("SettingsPage · 软件版本", () => {
   it("全局配置展示当前版本，并提供检查更新", async () => {
     renderSettings();

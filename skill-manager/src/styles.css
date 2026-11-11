@@ -454,3 +454,7 @@ textarea:focus-visible {
   }
   .file-tree .file-link:hover { background: var(--c-surface-hover); color: var(--c-accent); }
 }
+
+.login-screen { background: var(--c-bg); }
+.device-bar select { color: inherit; }
+.chat-panel { background: var(--c-surface); }

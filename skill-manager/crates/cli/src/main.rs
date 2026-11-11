@@ -10,6 +10,9 @@ use clap::Parser;
 use skill_manager_core::{AppContext, GlobalOptions};
 
 mod commands;
+mod coord;
+
+use coord::Coordination;
 
 /// Skill Manager 命令行接口。
 #[derive(Parser, Debug)]
@@ -37,7 +40,7 @@ struct Cli {
 }
 
 #[derive(clap::Subcommand, Debug)]
-enum Command {
+pub enum Command {
     /// 技能与库管理。
     Skill(commands::skill::SkillCommand),
     /// 部署技能到本机 Agent、共享目录或 Hermes default 档案。
@@ -56,6 +59,12 @@ enum Command {
     Tool(commands::tool::ToolCommand),
     /// 本机运行配置与只读报告（设置读取、检查频率、诊断与容量）。
     Settings(commands::settings::SettingsCommand),
+    /// 本机 Host：无窗口常驻、开机项与对接管理站。
+    Host(commands::host::HostCommand),
+    /// 统一管理站。
+    Station(commands::station::StationCommand),
+    /// 接入已有 SkillManagerVault。
+    Vault(commands::vault::VaultCommand),
 }
 
 fn main() -> ExitCode {
@@ -65,6 +74,57 @@ fn main() -> ExitCode {
         vault: cli.vault,
         state_dir: cli.state_dir,
     };
+
+    if matches!(cli.command, Command::Host(_) | Command::Station(_) | Command::Vault(_)) {
+        let (result, human) = match &cli.command {
+            Command::Host(command) => commands::host::run(command.clone(), &options),
+            Command::Station(command) => commands::station::run(command.clone(), &options),
+            Command::Vault(command) => commands::vault::run(command.clone(), &options),
+            _ => unreachable!(),
+        };
+        return ExitCode::from(result.emit(options.json, &human) as u8);
+    }
+
+    let coordination = match coord::coordinate(&options, &cli.command) {
+        Ok(c) => c,
+        Err(message) => {
+            let result = skill_manager_core::CliResult::failed_message(message);
+            return ExitCode::from(result.emit(options.json, "") as u8);
+        }
+    };
+
+    if let Coordination::Forward { listen } = &coordination {
+        if let Some((name, body)) = coord::to_invoke(&cli.command) {
+            return match coord::forward(listen, &name, &body) {
+                Ok(value) => {
+                    if value.get("error").is_some() {
+                        let msg = value
+                            .get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Host 转发失败")
+                            .to_string();
+                        ExitCode::from(
+                            skill_manager_core::CliResult::failed_message(msg.clone())
+                                .emit(options.json, &msg) as u8,
+                        )
+                    } else {
+                        ExitCode::from(
+                            skill_manager_core::CliResult::success(value).emit(options.json, "") as u8,
+                        )
+                    }
+                }
+                Err(err) => ExitCode::from(
+                    skill_manager_core::CliResult::failed_message(err.clone()).emit(options.json, &err) as u8,
+                ),
+            };
+        }
+        if coord::is_write(&cli.command) {
+            let msg = "本机 Host 已在运行，该写入命令请通过管理界面执行，或先停止 Host。".to_string();
+            return ExitCode::from(
+                skill_manager_core::CliResult::failed_message(msg.clone()).emit(options.json, &msg) as u8,
+            );
+        }
+    }
 
     let mut ctx = match open_context(&options) {
         Ok(ctx) => ctx,
@@ -84,8 +144,10 @@ fn main() -> ExitCode {
         Command::Instruction(command) => commands::instruction::run(command, &mut ctx, &options),
         Command::Tool(command) => commands::tool::run(command, &mut ctx, &options),
         Command::Settings(command) => commands::settings::run(command, &mut ctx, &options),
+        Command::Host(_) | Command::Station(_) | Command::Vault(_) => unreachable!(),
     };
 
+    let _keep = coordination;
     ExitCode::from(result.emit(options.json, &human) as u8)
 }
 

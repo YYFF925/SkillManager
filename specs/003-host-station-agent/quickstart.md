@@ -75,3 +75,22 @@ skill-manager --state-dir <state-a> host pair --station <url> --code <code> --na
 ## 5. 回归
 
 002 的核心 CLI 场景（list/set/deploy/sync pull）在 Host 在场与不在场各跑一次，结果一致。不得出现第二份技能库目录。
+
+## 6. 本轮实施取证（2026-11-11）
+
+在 `cursor/adr-host-management-station-1ec4` 实现 US1–US3 代码后记录：
+
+| 项 | 结果 |
+|---|---|
+| `cargo test -p skill-manager-host -p skill-manager-station` | 本轮执行；含锁双开、确认计划绑 session、Agent 不得写 `git_auto_push`、station 不依赖 core |
+| `cargo check -p skill-manager-host -p skill-manager-station -p skill-manager-cli -p skill-manager-core` | 本轮执行 |
+| 前端 `npm test`（vitest） | 本轮执行；桌面壳 mock `isDesktop() === true` |
+| `vault clone` + 真机 `host serve` 互斥与开机项 | **未取证**：Cloud Agent 环境无用户级 launchd/systemd 登录项、无第二台真机 |
+| 管理站双 state-dir 浏览器登录/切换/3 分钟改注释（SC-001） | **未取证**：无图形浏览器连到已配对 Host |
+| 对话「完善中文注释」、切页不串、取消不得成功 | **未取证**：依赖本机已登录的 OpenCode/Codex/Gemini；探测顺序已有单元断言 |
+| 管理站不可用时桌面改库（SC-005） | 代码路径：桌面内嵌 Host，station crate 不在桌面依赖链；**真机未取证** |
+| 002 CLI Host 在场/不在场回归 | **未取证**本轮未对着真实 Vault 跑 list/set/deploy |
+
+安装 Skill 源：`skill-manager/assets/skills/skill-manager-install/`。内置管理说明：`skill-manager/assets/skills/skill-manager-builtin-agent/`（不入库）。
+
+术语与 ADR 0002 / GLOSSARY 对照：无新名，不改术语。

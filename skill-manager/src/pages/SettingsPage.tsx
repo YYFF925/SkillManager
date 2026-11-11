@@ -49,6 +49,8 @@ export interface SettingsPageProps {
   /** 手动检查到新版本后交给整页共享的更新提示处理。 */
   onAppUpdateFound: (update: AppUpdate) => void;
   reloadToken: number;
+  /** 管理站远程壳：隐藏托盘、关窗收起与应用更新。 */
+  remote?: boolean;
 }
 
 const FREQUENCY_OPTIONS = [
@@ -133,6 +135,7 @@ export function SettingsPage({
   onAppUpdateFound,
   reloadToken,
   schedule,
+  remote = false,
 }: SettingsPageProps) {
   const [sharedDir, setSharedDir] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -327,26 +330,32 @@ export function SettingsPage({
             <ReadOnlyValue>简体中文</ReadOnlyValue>
           </SettingRow>
 
-          <SettingRow
-            label="关闭行为"
-          >
-            <ReadOnlyValue>托盘模式</ReadOnlyValue>
-          </SettingRow>
+          {!remote && (
+            <SettingRow
+              label="关闭行为"
+            >
+              <ReadOnlyValue>托盘模式</ReadOnlyValue>
+            </SettingRow>
+          )}
 
           <SettingRow
             label="软件版本"
           >
             <ReadOnlyValue mono>{appVersion}</ReadOnlyValue>
-            <Button compact disabled={checkingAppUpdate} onClick={() => void checkAppUpdate()}>
-              {checkingAppUpdate ? "正在检查…" : "检查更新"}
-            </Button>
+            {!remote && (
+              <Button compact disabled={checkingAppUpdate} onClick={() => void checkAppUpdate()}>
+                {checkingAppUpdate ? "正在检查…" : "检查更新"}
+              </Button>
+            )}
           </SettingRow>
 
-          <SettingRow
-            label="托盘／菜单栏图标"
-          >
-            <ReadOnlyValue>固定开启</ReadOnlyValue>
-          </SettingRow>
+          {!remote && (
+            <SettingRow
+              label="托盘／菜单栏图标"
+            >
+              <ReadOnlyValue>固定开启</ReadOnlyValue>
+            </SettingRow>
+          )}
         </div>
       </Panel>
 

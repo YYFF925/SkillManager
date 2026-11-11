@@ -216,3 +216,32 @@ body.is-sorting .preset-row-actions{opacity:1;pointer-events:auto}
 .instructions-dialog .dialog-head p{display:none}
 .instructions-dialog .dialog-foot{justify-content:flex-end}
 .instructions-dialog .instruction-preview{display:none}
+
+.login-screen{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:var(--bg);padding:24px}
+.login-screen[hidden]{display:none}
+.login-card{width:420px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;box-shadow:0 1px 2px #18181b0a}
+.login-card h1{margin:0;font-size:17px;font-weight:600}
+.login-card .muted{margin:6px 0 0;font-size:12px}
+.login-card label{display:block;margin:14px 0 0;font-size:12px;color:var(--muted)}
+.login-card .field-input{margin-top:6px}
+.device-bar{margin:0 2px 8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+.device-bar-row{display:flex;align-items:center;gap:8px}
+.device-bar-row span{font-size:11px;color:var(--muted);flex-shrink:0}
+.device-bar select{flex:1;min-width:0;height:28px;border:1px solid #d4d4d8;border-radius:6px;background:var(--surface);padding:0 6px;font-size:12px}
+.device-offline{margin:8px 0 0;font-size:12px;color:#ca6500}
+.window.has-chat .content{right:340px}
+.chat-panel{position:absolute;top:0;right:0;bottom:0;width:340px;border-left:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;z-index:4}
+.chat-panel[hidden]{display:none}
+.chat-panel-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border)}
+.chat-panel-head h2{margin:0;font-size:13px;font-weight:600}
+.chat-panel-head p{margin:2px 0 0;font-size:11px;color:var(--muted)}
+.chat-panel-body{flex:1;min-height:0;overflow:auto;padding:10px 12px}
+.chat-msg{margin:0 0 10px}
+.chat-msg .role{font-size:11px;color:var(--faint)}
+.chat-msg p{margin:2px 0 0;font-size:13px;line-height:20px;white-space:pre-wrap}
+.chat-panel-foot{border-top:1px solid var(--border);padding:10px 12px}
+.chat-panel-foot textarea{width:100%;height:72px;resize:none;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)}
+.chat-toggle{position:absolute;top:16px;right:20px;width:32px;height:32px;border:1px solid #d4d4d8;background:#fff;border-radius:8px;display:grid;place-items:center;color:#71717a;padding:0;z-index:5}
+.window.has-chat .chat-toggle{right:360px}
+.chat-toggle:hover{background:#f4f4f5;color:var(--green)}
+.station-note{font-size:12px;color:var(--muted);margin:8px 0 0}

@@ -1,11 +1,10 @@
 /**
- * Tauri command 的类型化封装。
+ * Host command 的类型化封装。
  *
- * 前端只调用这里，不重复实现业务判断；未在桌面壳中运行时给出明确错误，
+ * 前端只调用这里，不重复实现业务判断。桌面壳走 Tauri，管理站网页走 HTTP Transport。
  * 不用模拟数据代替真实结果。字段名与 core 的结构化输出一致。
  */
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { getTransport, isDesktopShell } from "./transport";
 
 export interface VaultInfo {
   root: string;
@@ -268,52 +267,49 @@ export interface OverlayDimensions {
   os?: string;
 }
 
-/** 是否运行在 Tauri 桌面壳中。 */
+/** 是否运行在 Tauri 桌面壳中。管理站网页为 false。 */
 export function isDesktop(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  return isDesktopShell();
 }
 
-function requireDesktop(): void {
-  if (!isDesktop()) {
-    throw new Error("当前不在桌面应用中运行，无法访问本机技能库。");
-  }
+async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  return getTransport().invoke<T>(command, args);
+}
+
+async function listen<T>(
+  event: string,
+  handler: (event: { payload: T }) => void,
+): Promise<() => void> {
+  return getTransport().subscribe(event, (payload) => handler({ payload: payload as T }));
 }
 
 /** 接入用户选择的本地 SkillManagerVault。 */
 export async function openVault(path: string): Promise<VaultInfo> {
-  requireDesktop();
   return invoke<VaultInfo>("vault_open", { path });
 }
 
 /** 当前已接入的 SkillManagerVault；尚未接入时为 null。 */
 export async function currentVault(): Promise<VaultInfo | null> {
-  if (!isDesktop()) {
-    return null;
-  }
   return invoke<VaultInfo | null>("vault_current");
 }
 
 /** 组合筛选列出技能。 */
 export async function listSkills(query: SkillListQuery = {}): Promise<SkillListResult> {
-  requireDesktop();
   return invoke<SkillListResult>("skill_list", { ...query });
 }
 
 /** 技能详情：正文、资料、来源、文件树、库内路径与部署位置。 */
 export async function getSkill(reference: string): Promise<SkillDetail> {
-  requireDesktop();
   return invoke<SkillDetail>("skill_get", { reference });
 }
 
 /** 读取正文；不传 lang 时有译文默认中文。 */
 export async function readSkill(reference: string, lang?: ReadLang): Promise<SkillBody> {
-  requireDesktop();
   return invoke<SkillBody>("skill_read", { reference, lang });
 }
 
 /** 修改管理资料（注释、标签、支持声明）。 */
 export async function setSkill(reference: string, update: SkillUpdate): Promise<SkillSummary> {
-  requireDesktop();
   return invoke<SkillSummary>("skill_set", { reference, ...update });
 }
 
@@ -322,7 +318,6 @@ export async function addSkillTags(
   references: string[],
   tags: string[],
 ): Promise<ManageItem[]> {
-  requireDesktop();
   return invoke<ManageItem[]>("skill_tag_add", { references, tags });
 }
 
@@ -331,19 +326,16 @@ export async function detachSkillTags(
   references: string[],
   tags: string[],
 ): Promise<ManageItem[]> {
-  requireDesktop();
   return invoke<ManageItem[]>("skill_tag_detach", { references, tags });
 }
 
 /** 全库重命名标签（两域生效）。 */
 export async function renameSkillTag(old: string, next: string): Promise<TagRenameResult> {
-  requireDesktop();
   return invoke<TagRenameResult>("skill_tag_rename", { old, new: next });
 }
 
 /** 全库删除标签关联（两域生效，不删除技能）。 */
 export async function removeSkillTag(tag: string): Promise<TagRemoveResult> {
-  requireDesktop();
   return invoke<TagRemoveResult>("skill_tag_remove", { tag });
 }
 
@@ -352,7 +344,6 @@ export async function moveSkill(
   reference: string,
   category?: string,
 ): Promise<SkillSummary> {
-  requireDesktop();
   return invoke<SkillSummary>("skill_move", { reference, category });
 }
 
@@ -362,13 +353,11 @@ export async function renameCategory(
   from: string,
   to: string,
 ): Promise<CategoryRenameResult> {
-  requireDesktop();
   return invoke<CategoryRenameResult>("skill_category_rename", { domain, old: from, new: to });
 }
 
 /** 读取译文本体（无译文如实为空）。 */
 export async function getTranslation(reference: string): Promise<TranslationView> {
-  requireDesktop();
   return invoke<TranslationView>("skill_translation_get", { reference });
 }
 
@@ -377,19 +366,16 @@ export async function setTranslation(
   reference: string,
   content: string,
 ): Promise<TranslationView> {
-  requireDesktop();
   return invoke<TranslationView>("skill_translation_set", { reference, content });
 }
 
 /** 删除译文。 */
 export async function removeTranslation(reference: string): Promise<TranslationView> {
-  requireDesktop();
   return invoke<TranslationView>("skill_translation_remove", { reference });
 }
 
 /** 列出覆盖层文件。 */
 export async function listOverlays(reference: string): Promise<OverlayEntryView[]> {
-  requireDesktop();
   return invoke<OverlayEntryView[]>("skill_overlay_list", { reference });
 }
 
@@ -399,7 +385,6 @@ export async function getOverlay(
   path: string,
   dimensions: OverlayDimensions = {},
 ): Promise<OverlayContentView> {
-  requireDesktop();
   return invoke<OverlayContentView>("skill_overlay_get", {
     reference,
     path,
@@ -414,7 +399,6 @@ export async function setOverlay(
   content: string,
   dimensions: OverlayDimensions = {},
 ): Promise<OverlayWriteView> {
-  requireDesktop();
   return invoke<OverlayWriteView>("skill_overlay_set", {
     reference,
     path,
@@ -429,7 +413,6 @@ export async function removeOverlay(
   path: string,
   dimensions: OverlayDimensions = {},
 ): Promise<OverlayRemoveView> {
-  requireDesktop();
   return invoke<OverlayRemoveView>("skill_overlay_remove", {
     reference,
     path,
@@ -452,45 +435,36 @@ export async function readSkillFile(
   reference: string,
   path: string,
 ): Promise<SkillFileView> {
-  requireDesktop();
   return invoke<SkillFileView>("skill_file_read", { reference, path });
 }
 
 /** 当前系统标识。 */
 export async function environmentOs(): Promise<EnvironmentOs> {
-  requireDesktop();
   return invoke<EnvironmentOs>("environment_os");
 }
 
 /** 全量内置 Agent 名单与本机状态；只读检测目录，不启动 Agent。 */
 export async function agentList(): Promise<AgentView[]> {
-  if (!isDesktop()) {
-    return [];
-  }
   return invoke<AgentView[]>("agent_list");
 }
 
 /** 重新检测本机 Agent；检测只读目录存在性。 */
 export async function agentDetect(): Promise<AgentView[]> {
-  requireDesktop();
   return invoke<AgentView[]>("agent_detect");
 }
 
 /** 启用一个 Agent；只写本机状态。 */
 export async function agentEnable(key: string): Promise<AgentView> {
-  requireDesktop();
   return invoke<AgentView>("agent_enable", { key });
 }
 
 /** 停用一个 Agent；只写本机状态。 */
 export async function agentDisable(key: string): Promise<AgentView> {
-  requireDesktop();
   return invoke<AgentView>("agent_disable", { key });
 }
 
 /** 调整显示顺序；只写本机状态。 */
 export async function agentReorder(order: string[]): Promise<AgentView[]> {
-  requireDesktop();
   return invoke<AgentView[]>("agent_reorder", { order });
 }
 
@@ -500,7 +474,6 @@ export async function agentSetDir(
   kind: AgentDirKind,
   path: string,
 ): Promise<AgentView> {
-  requireDesktop();
   return invoke<AgentView>("agent_set_dir", { key, kind, path });
 }
 
@@ -509,7 +482,6 @@ export async function agentResetDir(
   key: string,
   kind: AgentDirKind,
 ): Promise<AgentView> {
-  requireDesktop();
   return invoke<AgentView>("agent_reset_dir", { key, kind });
 }
 
@@ -518,7 +490,6 @@ export async function agentResetDir(
  * 目标为内置 Agent key 或 `shared`（共享目录是本机部署目标）。
  */
 export async function agentLocalSkills(target: DeployTarget): Promise<LocalSkillsView> {
-  requireDesktop();
   return invoke<LocalSkillsView>("agent_local_skills", { target });
 }
 
@@ -527,7 +498,6 @@ export async function agentDeleteLocal(
   target: DeployTarget,
   names: string[],
 ): Promise<LocalDeleteOutcome> {
-  requireDesktop();
   return invoke<LocalDeleteOutcome>("agent_delete_local", { target, names });
 }
 
@@ -542,13 +512,11 @@ export interface LocalSkillReadView {
 
 /** 阅读本机技能的实际副本；省略文件时返回正文。 */
 export async function agentReadLocal(target: string, name: string, file?: string): Promise<LocalSkillReadView> {
-  requireDesktop();
   return invoke<LocalSkillReadView>("agent_read_local", { target, name, file });
 }
 
 /** 共享部署路径，按当前系统用户主目录自动定位。 */
 export async function sharedDirGet(): Promise<string> {
-  requireDesktop();
   return invoke<string>("shared_dir_get");
 }
 
@@ -559,9 +527,6 @@ export async function sharedDirGet(): Promise<string> {
 export async function onVaultChanged(
   handler: () => void,
 ): Promise<() => void> {
-  if (!isDesktop()) {
-    return () => {};
-  }
   return listen("vault-changed", () => handler());
 }
 
@@ -629,7 +594,6 @@ export async function deployTo(
   references: string[],
   alsoTargets: DeployTarget[] = [],
 ): Promise<DeployReportView> {
-  requireDesktop();
   return invoke<DeployReportView>("deploy_to", {
     target,
     references,
@@ -644,7 +608,6 @@ export async function deployUndo(
   alsoTargets: DeployTarget[] = [],
   discardLocalChanges = false,
 ): Promise<DeployReportView> {
-  requireDesktop();
   return invoke<DeployReportView>("deploy_undo", {
     target,
     references,
@@ -659,7 +622,6 @@ export async function deploySync(
   target?: DeployTarget,
   overwriteLocal = false,
 ): Promise<DeployReportView> {
-  requireDesktop();
   return invoke<DeployReportView>("deploy_sync", {
     reference,
     target,
@@ -672,13 +634,11 @@ export async function deployStatus(
   target?: DeployTarget,
   paused = false,
 ): Promise<DeploymentStatusView[]> {
-  requireDesktop();
   return invoke<DeploymentStatusView[]>("deploy_status", { target, paused });
 }
 
 /** 删除库内技能并清理其受管部署（外改副本暂停并保留定位记录）。 */
 export async function deleteSkills(references: string[]): Promise<SkillDeleteView> {
-  requireDesktop();
   return invoke<SkillDeleteView>("skill_delete", { references });
 }
 
@@ -710,25 +670,21 @@ export interface SkillArchiveDeleteView {
 
 /** 列出已归档技能。 */
 export async function listArchivedSkills(domain?: Domain): Promise<ArchivedSkillView[]> {
-  requireDesktop();
   return invoke<ArchivedSkillView[]>("skill_archive_list", { domain });
 }
 
 /** 归档技能：先卸载全部受管部署，成功后才移入归档目录。 */
 export async function archiveSkills(references: string[]): Promise<SkillArchiveView> {
-  requireDesktop();
   return invoke<SkillArchiveView>("skill_archive", { references });
 }
 
 /** 从归档还原到正常库（不重新部署）。 */
 export async function restoreArchivedSkills(references: string[]): Promise<SkillRestoreView> {
-  requireDesktop();
   return invoke<SkillRestoreView>("skill_archive_restore", { references });
 }
 
 /** 从归档永久删除。 */
 export async function deleteArchivedSkills(references: string[]): Promise<SkillArchiveDeleteView> {
-  requireDesktop();
   return invoke<SkillArchiveDeleteView>("skill_archive_delete", { references });
 }
 
@@ -782,7 +738,6 @@ export interface HermesSkillView {
 }
 
 export async function hermesRead(profile: string, name: string, file?: string): Promise<LocalSkillReadView> {
-  requireDesktop();
   return invoke("hermes_read", { profile, name, file });
 }
 
@@ -840,7 +795,6 @@ export interface HermesListQuery {
 
 /** 列出本机现有档案（default 与具名档案）。 */
 export async function hermesProfiles(): Promise<HermesProfilesView> {
-  requireDesktop();
   return invoke<HermesProfilesView>("hermes_profiles");
 }
 
@@ -849,7 +803,6 @@ export async function hermesList(
   profile: string,
   query: HermesListQuery = {},
 ): Promise<HermesSkillsView> {
-  requireDesktop();
   return invoke<HermesSkillsView>("hermes_list", { profile, ...query });
 }
 
@@ -858,7 +811,6 @@ export async function hermesEnable(
   profile: string,
   names: string[],
 ): Promise<HermesToggleView> {
-  requireDesktop();
   return invoke<HermesToggleView>("hermes_enable", { profile, names });
 }
 
@@ -867,7 +819,6 @@ export async function hermesDisable(
   profile: string,
   names: string[],
 ): Promise<HermesToggleView> {
-  requireDesktop();
   return invoke<HermesToggleView>("hermes_disable", { profile, names });
 }
 
@@ -876,7 +827,6 @@ export async function hermesAdopt(
   profile: string,
   names: string[],
 ): Promise<HermesAdoptView> {
-  requireDesktop();
   return invoke<HermesAdoptView>("hermes_adopt", { profile, names });
 }
 
@@ -1021,9 +971,6 @@ export interface DecisionEntryView {
 export async function onFetchProgress(
   handler: (progress: FetchProgress) => void,
 ): Promise<() => void> {
-  if (!isDesktop()) {
-    return () => {};
-  }
   return listen<FetchProgress>("skill-fetch-progress", (event) => handler(event.payload));
 }
 
@@ -1033,13 +980,11 @@ export async function previewRepo(
   reference: string | undefined,
   jobId: string,
 ): Promise<PreviewReport> {
-  requireDesktop();
   return invoke<PreviewReport>("skill_preview", { repo, reference, jobId });
 }
 
 /** 取消一次进行中的获取。 */
 export async function cancelFetch(jobId: string): Promise<boolean> {
-  requireDesktop();
   return invoke<boolean>("skill_fetch_cancel", { jobId });
 }
 
@@ -1055,7 +1000,6 @@ export async function importSkills(
     jobId: string;
   },
 ): Promise<{ items: ImportItemView[]; errors: ItemErrorView[] }> {
-  requireDesktop();
   return invoke("skill_import", {
     repo,
     domain,
@@ -1079,7 +1023,6 @@ export async function adoptSkills(
     metadata?: Record<string, AdoptMetaInput>;
   } = {},
 ): Promise<AdoptOutcomeView> {
-  requireDesktop();
   return invoke<AdoptOutcomeView>("skill_adopt", { agent, names, ...options });
 }
 
@@ -1088,7 +1031,6 @@ export async function createSkill(
   reference: string,
   options: { category?: string; uncategorized?: boolean; comment?: string; tags?: string[] } = {},
 ): Promise<SkillSummary> {
-  requireDesktop();
   return invoke<SkillSummary>("skill_create", { reference, ...options });
 }
 
@@ -1098,7 +1040,6 @@ export async function copySkill(
   to: Domain,
   options: { category?: string; uncategorized?: boolean } = {},
 ): Promise<SkillSummary> {
-  requireDesktop();
   return invoke<SkillSummary>("skill_copy", { reference, to, ...options });
 }
 
@@ -1107,7 +1048,6 @@ export async function checkUpstream(
   scope: { reference?: string; repo?: string; all?: boolean },
   jobId: string,
 ): Promise<CheckReportView> {
-  requireDesktop();
   return invoke<CheckReportView>("skill_check", { ...scope, jobId });
 }
 
@@ -1117,7 +1057,6 @@ export async function updateSkill(
   to: string | undefined,
   jobId: string,
 ): Promise<UpdateItemView> {
-  requireDesktop();
   return invoke<UpdateItemView>("skill_update", { reference, to, jobId });
 }
 
@@ -1132,7 +1071,6 @@ export async function updateSkillRepo(
     jobId: string;
   },
 ): Promise<UpdateRepoView> {
-  requireDesktop();
   return invoke<UpdateRepoView>("skill_update_repo", {
     repo,
     includeNew: options.includeNew,
@@ -1149,7 +1087,6 @@ export async function rejectNew(
   domain: Domain,
   skills: string[],
 ): Promise<{ repo: string; domain: Domain; rejected: string[] }> {
-  requireDesktop();
   return invoke("skill_reject_new", { repo, domain, skills });
 }
 
@@ -1158,7 +1095,6 @@ export async function listRejected(
   repo?: string,
   domain?: Domain,
 ): Promise<DecisionEntryView[]> {
-  requireDesktop();
   return invoke<DecisionEntryView[]>("skill_rejected", { repo, domain });
 }
 
@@ -1167,7 +1103,6 @@ export async function skipVersion(
   reference: string,
   version?: string,
 ): Promise<{ skill: string; skipped_version: string }> {
-  requireDesktop();
   return invoke("skill_skip", { reference, version });
 }
 
@@ -1175,7 +1110,6 @@ export async function skipVersion(
 export async function unskipVersion(
   reference: string,
 ): Promise<{ skill: string; skipped_version: null }> {
-  requireDesktop();
   return invoke("skill_unskip", { reference });
 }
 
@@ -1189,7 +1123,6 @@ export async function listSkipped(): Promise<
     skipped_version: string;
   }>
 > {
-  requireDesktop();
   return invoke("skill_skipped");
 }
 
@@ -1221,7 +1154,6 @@ export interface InstructionTargetResult {
 export async function instructionGet(
   scope: InstructionScope,
 ): Promise<InstructionSourceView> {
-  requireDesktop();
   return invoke<InstructionSourceView>("instruction_get", { scope });
 }
 
@@ -1230,7 +1162,6 @@ export async function instructionSet(
   scope: InstructionScope,
   content: string,
 ): Promise<InstructionTargetResult[]> {
-  requireDesktop();
   return invoke<InstructionTargetResult[]>("instruction_set", { scope, content });
 }
 
@@ -1258,31 +1189,26 @@ export type FontScale = "small" | "default" | "large" | "xlarge";
 
 /** 读取主题、字号、共同检查频率与自动上传确认状态。 */
 export async function settingsGet(): Promise<SettingsView> {
-  requireDesktop();
   return invoke<SettingsView>("settings_get");
 }
 
 /** 设置主题；取值由 core 校验。 */
 export async function setTheme(theme: ThemeSetting): Promise<SettingsView> {
-  requireDesktop();
   return invoke<SettingsView>("settings_set_theme", { theme });
 }
 
 /** 设置字号；取值由 core 校验。 */
 export async function setFontScale(scale: FontScale): Promise<SettingsView> {
-  requireDesktop();
   return invoke<SettingsView>("settings_set_font_scale", { scale });
 }
 
 /** 设置共同检查频率；取值 0/30/60/360/1440 由 core 校验。 */
 export async function setAutoCheckMinutes(minutes: number): Promise<SettingsView> {
-  requireDesktop();
   return invoke<SettingsView>("settings_set_auto_check", { minutes });
 }
 
 /** 写入 GUI 保存自动上传的既有确认；首次确认后沿用。 */
 export async function setGitAutoPush(enabled: boolean): Promise<SettingsView> {
-  requireDesktop();
   return invoke<SettingsView>("settings_set_git_auto_push", { enabled });
 }
 
@@ -1346,17 +1272,14 @@ export interface ScheduleReportView {
 }
 
 export async function checkNow(): Promise<ScheduleReportView> {
-  requireDesktop();
   return invoke("environment_check");
 }
 
 export async function currentSchedule(): Promise<ScheduleReportView | null> {
-  requireDesktop();
   return invoke("environment_schedule_current");
 }
 
 export async function onScheduleFinished(handler: (report: ScheduleReportView) => void): Promise<() => void> {
-  requireDesktop();
   return listen<ScheduleReportView>("schedule-finished", (event) => handler(event.payload));
 }
 
@@ -1381,25 +1304,21 @@ export interface ConflictView {
 
 /** 拉取同一 SkillManagerVault；无冲突静默应用并刷新已有部署/指令目标。 */
 export async function syncPull(): Promise<PullReportView> {
-  requireDesktop();
   return invoke<PullReportView>("sync_pull");
 }
 
 /** 显式上传工作区全部改动（获明确同意后调用，或在 GUI 保存已确认策略下调用）。 */
 export async function syncPush(message?: string): Promise<PushReportView> {
-  requireDesktop();
   return invoke<PushReportView>("sync_push", { message });
 }
 
 /** 只读同步状态。 */
 export async function syncStatus(): Promise<SyncStatusView> {
-  requireDesktop();
   return invoke<SyncStatusView>("sync_status");
 }
 
 /** Git 冲突信息（供 Agent 检查）。 */
 export async function syncConflicts(): Promise<ConflictView> {
-  requireDesktop();
   return invoke<ConflictView>("sync_conflicts");
 }
 
@@ -1426,13 +1345,11 @@ export interface PresetView {
 
 /** 列出预设；不给域时两域分别列出。 */
 export async function listPresets(domain?: Domain): Promise<PresetView[]> {
-  requireDesktop();
   return invoke<PresetView[]>("preset_list", { domain });
 }
 
 /** 读取一个预设（完整引用 domain / id）。 */
 export async function getPreset(domain: Domain, id: string): Promise<PresetView> {
-  requireDesktop();
   return invoke<PresetView>("preset_get", { domain, id });
 }
 
@@ -1442,13 +1359,11 @@ export async function createPreset(
   name: string,
   icon?: string,
 ): Promise<PresetView> {
-  requireDesktop();
   return invoke<PresetView>("preset_create", { domain, name, icon });
 }
 
 /** 删除预设（只删组合定义，不影响实际部署）。 */
 export async function deletePreset(domain: Domain, id: string): Promise<PresetView> {
-  requireDesktop();
   return invoke<PresetView>("preset_delete", { domain, id });
 }
 
@@ -1458,7 +1373,6 @@ export async function renamePreset(
   id: string,
   name: string,
 ): Promise<PresetView> {
-  requireDesktop();
   return invoke<PresetView>("preset_rename", { domain, id, name });
 }
 
@@ -1468,7 +1382,6 @@ export async function setPresetIcon(
   id: string,
   icon: string | null,
 ): Promise<PresetView> {
-  requireDesktop();
   return invoke<PresetView>("preset_set_icon", { domain, id, icon });
 }
 
@@ -1477,7 +1390,6 @@ export async function reorderPresets(
   domain: Domain,
   order: string[],
 ): Promise<PresetView[]> {
-  requireDesktop();
   return invoke<PresetView[]>("preset_reorder", { domain, order });
 }
 
@@ -1487,7 +1399,6 @@ export async function addPresetMembers(
   id: string,
   names: string[],
 ): Promise<PresetView> {
-  requireDesktop();
   return invoke<PresetView>("preset_members_add", { domain, id, names });
 }
 
@@ -1497,7 +1408,6 @@ export async function removePresetMembers(
   id: string,
   names: string[],
 ): Promise<PresetView> {
-  requireDesktop();
   return invoke<PresetView>("preset_members_remove", { domain, id, names });
 }
 
@@ -1507,7 +1417,6 @@ export async function reorderPresetMembers(
   id: string,
   order: string[],
 ): Promise<PresetView> {
-  requireDesktop();
   return invoke<PresetView>("preset_reorder_members", { domain, id, order });
 }
 
@@ -1518,7 +1427,6 @@ export async function deployPreset(
   target: DeployTarget,
   alsoTargets: DeployTarget[] = [],
 ): Promise<DeployReportView> {
-  requireDesktop();
   return invoke<DeployReportView>("deploy_preset", {
     domain,
     presetId,
@@ -1534,7 +1442,6 @@ export async function deployUndoPreset(
   target: DeployTarget,
   alsoTargets: DeployTarget[] = [],
 ): Promise<DeployReportView> {
-  requireDesktop();
   return invoke<DeployReportView>("deploy_undo_preset", {
     domain,
     presetId,
@@ -1605,19 +1512,16 @@ export interface CapacityReport {
 
 /** 诊断报告（版本、平台、路径、最近日志与崩溃记录）。 */
 export async function diagnosticsReport(recent?: number): Promise<DiagnosticsReport> {
-  requireDesktop();
   return invoke<DiagnosticsReport>("environment_diagnostics", { recent });
 }
 
 /** 导出诊断资料到本机日志目录下的真实文件，返回文件路径。 */
 export async function diagnosticsExport(recent?: number): Promise<DiagnosticsExport> {
-  requireDesktop();
   return invoke<DiagnosticsExport>("environment_diagnostics_export", { recent });
 }
 
 /** 技能库容量报告；`top` 为排行条数。 */
 export async function capacityReport(top?: number): Promise<CapacityReport> {
-  requireDesktop();
   return invoke<CapacityReport>("environment_capacity", { top });
 }
 
@@ -1742,13 +1646,11 @@ export type ToolTaskAction = "register" | "edit" | "install" | "update" | "guide
 
 /** 工具清单（含未安装条目）。 */
 export async function toolList(params: ToolListParams = {}): Promise<ToolEntry[]> {
-  requireDesktop();
   return invoke<ToolEntry[]>("tool_list", { params });
 }
 
 /** 工具详情。 */
 export async function toolGet(slug: string): Promise<ToolEntry> {
-  requireDesktop();
   return invoke<ToolEntry>("tool_get", { slug });
 }
 
@@ -1756,7 +1658,6 @@ export async function toolGet(slug: string): Promise<ToolEntry> {
 export async function toolCheck(
   options: { slug?: string; all?: boolean },
 ): Promise<ToolCheckReport> {
-  requireDesktop();
   return invoke<ToolCheckReport>("tool_check", {
     slug: options.slug,
     all: options.all ?? false,
@@ -1769,7 +1670,6 @@ export async function toolTask(options: {
   action: ToolTaskAction;
   requirement?: string;
 }): Promise<string> {
-  requireDesktop();
   return invoke<string>("tool_task", {
     slug: options.slug,
     action: options.action,
@@ -1779,7 +1679,6 @@ export async function toolTask(options: {
 
 /** 配套 Skill 候选；入库仍走 US2 的预览与选择流程。 */
 export async function toolSkillCandidates(slug: string): Promise<ToolSkillCandidates> {
-  requireDesktop();
   return invoke<ToolSkillCandidates>("tool_skill_candidates", { slug });
 }
 
@@ -1788,6 +1687,5 @@ export async function skillTask(
   references: string[],
   requirement?: string,
 ): Promise<string> {
-  requireDesktop();
   return invoke<string>("skill_task", { references, requirement });
 }

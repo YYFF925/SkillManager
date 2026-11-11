@@ -1,13 +1,23 @@
-//! Tauri 2 桌面壳：command 层只转发到 core，不承载业务规则。
+//! Tauri 2 桌面壳：持有 Host runtime；command 层转发到 core，不承载业务规则。
 
 mod commands;
 mod diagnostics;
 mod tray;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use commands::AppState;
-use tauri::Manager;
+use skill_manager_host::EventSink;
+use tauri::{Emitter, Manager};
+
+struct TauriSink(tauri::AppHandle);
+
+impl EventSink for TauriSink {
+    fn emit(&self, event: &str, payload: &serde_json::Value) {
+        let _ = self.0.emit(event, payload);
+    }
+}
 
 /// 启动桌面应用。
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -16,11 +26,27 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(AppState::new())
+        .manage(AppState::boot().unwrap_or_else(|err| {
+            eprintln!("无法启动本机 Host：{err}");
+            std::process::exit(1);
+        }))
         .setup(|app| {
+            let state: tauri::State<'_, AppState> = app.state();
+            state
+                .runtime
+                .add_event_sink(Arc::new(TauriSink(app.handle().clone())));
+            skill_manager_host::pair::resume_if_paired(&state.runtime);
+            let http_runtime = state.runtime.clone();
+            std::thread::spawn(move || {
+                if let Err(err) = skill_manager_host::serve::run_http_blocking(
+                    http_runtime,
+                    skill_manager_host::serve::default_bind(),
+                ) {
+                    eprintln!("Host HTTP 退出：{err}");
+                }
+            });
             // 启动时若已记住 SkillManagerVault，接入后即开始监听外部改动。
             // 监听启动失败不影响库的使用（各命令都会重新读取库文件），只记录原因。
-            let state: tauri::State<'_, AppState> = app.state();
             if let Err(err) = state.watch_vault(app.handle()) {
                 eprintln!("启动库文件监听失败：{err}");
             }
@@ -141,6 +167,11 @@ pub fn run() {
             commands::tool::tool_check,
             commands::tool::tool_task,
             commands::tool::tool_skill_candidates,
+            commands::builtin_agent::agent_set_context,
+            commands::builtin_agent::agent_post_message,
+            commands::builtin_agent::agent_cancel_task,
+            commands::builtin_agent::agent_list_messages,
+            commands::builtin_agent::agent_list_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Skill Manager 桌面应用失败");

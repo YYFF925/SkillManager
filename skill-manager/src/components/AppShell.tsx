@@ -53,6 +53,10 @@ export interface AppShellProps {
   betweenNav?: ReactNode;
   vaultStatus?: VaultStatus;
   update?: SidebarUpdate;
+  /** 管理站远程壳的设备切换条；桌面壳不传。 */
+  deviceBar?: ReactNode;
+  /** 右侧对话面板。 */
+  chat?: ReactNode;
   children: ReactNode;
 }
 
@@ -119,6 +123,8 @@ export function AppShell({
   betweenNav,
   vaultStatus,
   update,
+  deviceBar,
+  chat,
   children,
 }: AppShellProps) {
   const SettingsIcon = settingsItem.icon;
@@ -130,6 +136,7 @@ export function AppShell({
           <img src={appLogo} alt="" className="size-[25px] shrink-0" />
           <span className="text-[16px] font-semibold">Skill Manager</span>
         </div>
+        {deviceBar}
 
         <nav className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto px-2 pb-2">
           {groups.map((group, index) => (
@@ -251,6 +258,7 @@ export function AppShell({
           </div>
         </div>
       </main>
+      {chat}
     </div>
   );
 }

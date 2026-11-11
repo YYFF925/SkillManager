@@ -16,7 +16,7 @@ pub async fn environment_check(app: tauri::AppHandle) -> Result<skill_manager_co
 
 #[tauri::command]
 pub fn environment_schedule_current(state: tauri::State<'_, AppState>) -> Result<Option<skill_manager_core::ScheduleReport>, String> {
-    state.schedule_report.lock().map(|report| report.clone()).map_err(|_| "检查报告锁已损坏".to_string())
+    state.current_schedule()
 }
 
 /// 当前操作系统标识；取值与 `.manager/meta.yaml` 的 `oses` 一致。

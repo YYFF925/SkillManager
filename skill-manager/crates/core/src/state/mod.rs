@@ -2,6 +2,7 @@
 
 pub mod deployments;
 pub mod hermes;
+pub mod migrate;
 pub mod settings;
 pub mod tool_checks;
 pub mod tool_installs;
@@ -67,6 +68,7 @@ impl StateStore {
         conn.pragma_update(None, "busy_timeout", 5_000)?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.execute_batch(SCHEMA)?;
+        migrate::apply(&conn)?;
 
         Ok(Self { conn, dir })
     }
@@ -76,6 +78,7 @@ impl StateStore {
         let conn = Connection::open_in_memory().map_err(|e| CoreError::State(e.to_string()))?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.execute_batch(SCHEMA)?;
+        migrate::apply(&conn)?;
         Ok(Self {
             conn,
             dir: PathBuf::new(),

@@ -98,6 +98,34 @@ impl Git {
         Self { cwd: cwd.into() }
     }
 
+    /// 把远端 clone 到目标路径。目标已存在且非空则失败，不覆盖。
+    pub fn clone_into(remote: &str, dest: impl AsRef<Path>) -> Result<PathBuf> {
+        let dest = dest.as_ref();
+        if dest.exists() {
+            let empty = dest.is_dir()
+                && std::fs::read_dir(dest)
+                    .map_err(|err| CoreError::io(dest, err))?
+                    .next()
+                    .is_none();
+            if !empty {
+                return Err(CoreError::Git {
+                    args: format!("clone {remote}"),
+                    cwd: dest.to_path_buf(),
+                    stderr: "目标目录已存在且非空，拒绝覆盖".to_string(),
+                });
+            }
+        } else if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).map_err(|err| CoreError::io(parent, err))?;
+        }
+        let parent = dest.parent().unwrap_or_else(|| Path::new("."));
+        let name = dest
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| CoreError::other("目标路径无效"))?;
+        Git::new(parent).ok(&["clone", "--", remote, name])?;
+        Ok(dest.to_path_buf())
+    }
+
     pub fn cwd(&self) -> &Path {
         &self.cwd
     }

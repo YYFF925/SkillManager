@@ -12,6 +12,7 @@ vi.mock("./pages/PresetPage", () => ({
 }));
 vi.mock("./services/client", async (importOriginal) => ({
   ...await importOriginal<typeof import("./services/client")>(),
+  isDesktop: () => true,
   currentVault: vi.fn(async () => ({ root: "/tmp/test-vault", remote: "test", has_remote: true })),
   agentList: vi.fn(async () => []),
   environmentOs: vi.fn(async () => "macos"),

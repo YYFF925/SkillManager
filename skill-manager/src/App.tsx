@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Bot, FileText, FolderTree, Layers, RefreshCw, Settings, Share2, Wrench } from "lucide-react";
+import { Bot, FileText, FolderTree, Layers, MessageSquare, RefreshCw, Settings, Share2, Wrench } from "lucide-react";
 
 import { AppShell, type NavGroup, type NavItem } from "./components/AppShell";
 import { SidebarPresets } from "./components/SidebarPresets";
@@ -10,9 +10,12 @@ import { HermesPage } from "./pages/HermesPage";
 import { PresetPage } from "./pages/PresetPage";
 import { ToolCenterPage } from "./pages/ToolCenterPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { LoginPage } from "./pages/LoginPage";
 import { InstructionEditor } from "./components/InstructionEditor";
 import { FastTooltip } from "./components/FastTooltip";
 import { AppUpdateDialog } from "./components/AppUpdateDialog";
+import { DeviceBar } from "./components/DeviceBar";
+import { ChatPanel, type ChatViewRef } from "./components/ChatPanel";
 import { Button, Notice } from "./components/ui";
 import { checkForAppUpdate, type AppUpdate } from "./lib/appUpdate";
 import { useAppearance } from "./lib/appearance";
@@ -69,10 +72,16 @@ const SHARED_VIEW_KEY = "agent:shared";
 function VaultWelcome({
   error,
   busy,
+  remote,
+  path,
+  onPathChange,
   onChoose,
 }: {
   error: string | null;
   busy: boolean;
+  remote: boolean;
+  path: string;
+  onPathChange: (path: string) => void;
   onChoose: () => void;
 }) {
   return (
@@ -84,25 +93,31 @@ function VaultWelcome({
         </div>
         <h1 className="text-[15px] font-semibold">接入你的 SkillManagerVault</h1>
         <p className="mt-2 text-[13px] leading-[21px] text-muted">
-          选择一个已存在的本地技能库目录；它需要是 Git 仓库并已配置远端。
+          {remote
+            ? "填写当前 Host 上已存在的技能库目录；由 Host 校验路径，不使用浏览器文件选择器。"
+            : "选择一个已存在的本地技能库目录；它需要是 Git 仓库并已配置远端。"}
           编码技能库（code/）与龙虾技能库（lobster/）在同一个库内分别管理，
           技能内容与管理资料都留在这个目录里。
         </p>
+        {remote ? (
+          <label className="mt-5 block text-[12px] text-muted">
+            Host 上的技能库路径
+            <input
+              className="mt-1.5 h-10 w-full rounded-lg border border-line bg-panel px-3 text-[13px]"
+              value={path}
+              onChange={(event) => onPathChange(event.target.value)}
+              placeholder="/home/user/SkillManagerVault"
+            />
+          </label>
+        ) : null}
         <div className="mt-5 flex items-center gap-2.5">
-          <Button kind="primary" disabled={busy} onClick={onChoose}>
-            {busy ? "正在接入…" : "选择技能库目录"}
+          <Button kind="primary" disabled={busy || (remote && !path.trim())} onClick={onChoose}>
+            {busy ? "正在接入…" : remote ? "接入该路径" : "选择技能库目录"}
           </Button>
           <span className="text-[12px] text-faint">
             不提供克隆或创建向导；库的创建与远端配置请在 Git 中完成。
           </span>
         </div>
-        {!isDesktop() && (
-          <div className="mt-4">
-            <Notice tone="warn">
-              当前不在桌面应用中运行，无法访问本机技能库；请通过 `npm run tauri dev` 启动。
-            </Notice>
-          </div>
-        )}
         {error && (
           <div className="mt-4">
             <Notice tone="danger">{error}</Notice>
@@ -148,6 +163,13 @@ export function App() {
   const [appUpdate, setAppUpdate] = useState<AppUpdate | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [updateAutoInstall, setUpdateAutoInstall] = useState(false);
+  const remote = !isDesktop();
+  const [stationReady, setStationReady] = useState(!remote);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [deviceOnline, setDeviceOnline] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatSelection, setChatSelection] = useState<string[]>([]);
+  const [vaultPathDraft, setVaultPathDraft] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -183,6 +205,7 @@ export function App() {
   );
 
   useEffect(() => {
+    if (remote) return;
     let cancelled = false;
     void checkForAppUpdate({ silent: true }).then((update) => {
       if (!cancelled && update) {
@@ -193,7 +216,27 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [remote]);
+
+  useEffect(() => {
+    if (!remote) {
+      setStationReady(true);
+      return;
+    }
+    let cancelled = false;
+    void fetch("/auth/session", { credentials: "include" })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const body = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        setDeviceId(typeof body.deviceId === "string" ? body.deviceId : null);
+        setStationReady(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [remote]);
 
   useEffect(() => {
     let cancelled = false;
@@ -213,6 +256,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (remote && !stationReady) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -242,7 +289,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [remote, stationReady, deviceId]);
 
   // 库内外部改动（GUI 自身写入也会触发）：重新拉取界面，不重启、不提交或部署。
   useEffect(() => {
@@ -268,12 +315,16 @@ export function App() {
     setBusy(true);
     setError(null);
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "选择已有的 SkillManagerVault 目录",
-      });
-      if (typeof selected !== "string") {
+      let selected: string | null = vaultPathDraft.trim() || null;
+      if (!remote) {
+        const picked = await open({
+          directory: true,
+          multiple: false,
+          title: "选择已有的 SkillManagerVault 目录",
+        });
+        selected = typeof picked === "string" ? picked : null;
+      }
+      if (!selected) {
         return;
       }
       const info = await openVault(selected);
@@ -285,6 +336,34 @@ export function App() {
       setError(String(err));
     } finally {
       setBusy(false);
+    }
+  }, [remote, vaultPathDraft]);
+
+  const switchDevice = useCallback(async (nextId: string) => {
+    setError(null);
+    setVault(null);
+    setAgents([]);
+    setDeviceOnline(true);
+    try {
+      const response = await fetch("/current", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId: nextId }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setDeviceOnline(false);
+        throw new Error(
+          typeof body === "object" && body && "error" in body
+            ? String((body as { error: unknown }).error)
+            : "无法切换设备",
+        );
+      }
+      setDeviceId(nextId);
+    } catch (err) {
+      setDeviceOnline(false);
+      setError(String(err));
     }
   }, []);
 
@@ -341,6 +420,10 @@ export function App() {
     ];
   }, [agents]);
 
+  if (remote && !stationReady) {
+    return <LoginPage onLoggedIn={(id) => { setDeviceId(id ?? null); setStationReady(true); }} />;
+  }
+
   if (loading) {
     return (
       <div className="grid h-full place-items-center bg-app text-[13px] text-muted">
@@ -350,7 +433,16 @@ export function App() {
   }
 
   if (!vault) {
-    return <VaultWelcome error={error} busy={busy} onChoose={chooseVault} />;
+    return (
+      <VaultWelcome
+        error={error}
+        busy={busy}
+        remote={remote}
+        path={vaultPathDraft}
+        onPathChange={setVaultPathDraft}
+        onChoose={() => void chooseVault()}
+      />
+    );
   }
 
   const isLibrary = activeKey === "library-code" || activeKey === "library-lobster";
@@ -365,6 +457,17 @@ export function App() {
     ? { title: selectedAgent.display_name }
     : (VIEWS[activeKey] ?? { title: activeKey, pending: "后续里程碑" });
   const pageTitle = titleOverride ?? view.title;
+  const chatView: ChatViewRef = {
+    page: activeKey,
+    domain: isLibrary
+      ? activeKey === "library-lobster"
+        ? "lobster"
+        : "code"
+      : agentDomain,
+    selection: chatSelection.length
+      ? { refs: chatSelection, ref: chatSelection[0] }
+      : undefined,
+  };
 
   return (
     <>
@@ -382,8 +485,16 @@ export function App() {
       title={pageTitle}
       subtitle={subtitle ?? undefined}
       count={count ?? undefined}
+      deviceBar={
+        remote ? (
+          <DeviceBar currentId={deviceId} onChange={(id) => void switchDevice(id)} />
+        ) : undefined
+      }
+      chat={
+        <ChatPanel open={chatOpen} view={chatView} onClose={() => setChatOpen(false)} />
+      }
       update={
-        appUpdate
+        !remote && appUpdate
           ? {
               version: appUpdate.version,
               onInstall: () => {
@@ -416,6 +527,15 @@ export function App() {
             className="grid size-8 place-items-center rounded-lg border border-line bg-panel text-muted transition-colors hover:bg-hover hover:text-accent"
           >
             <FileText className="size-4" strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            title="管理对话"
+            aria-label="管理对话"
+            onClick={() => setChatOpen((open) => !open)}
+            className="grid size-8 place-items-center rounded-lg border border-line bg-panel text-muted transition-colors hover:bg-hover hover:text-accent"
+          >
+            <MessageSquare className="size-4" strokeWidth={1.75} />
           </button>
         </>
       }
@@ -462,6 +582,11 @@ export function App() {
       vaultStatus={{ label: "SkillManagerVault", detail: vault.root, ok: true }}
     >
       {error && <div className="mb-3"><Notice tone="danger">{error}</Notice></div>}
+      {remote && !deviceOnline && (
+        <div className="mb-3">
+          <Notice tone="warn">当前设备离线，不能操作，也不会用缓存技能顶上。</Notice>
+        </div>
+      )}
       {isLibrary ? (
         <LibraryPage
           key={activeKey}
@@ -474,6 +599,7 @@ export function App() {
           onLibrarySaved={saveFlow.afterSave}
           focusReference={libraryFocus}
           onFocusConsumed={() => setLibraryFocus(null)}
+          onSelectionChange={setChatSelection}
         />
       ) : activeKey === "hermes" ? (
         <HermesPage
@@ -547,10 +673,12 @@ export function App() {
             setNotice(null);
           }}
           onAppUpdateFound={(update) => {
+            if (remote) return;
             setAppUpdate(update);
             setUpdateOpen(true);
           }}
           reloadToken={reloadToken}
+          remote={remote}
         />
       ) : (
         <div className="flex items-center gap-2 rounded-xl border border-line-soft bg-panel p-6 text-[13px] text-muted">
@@ -567,7 +695,7 @@ export function App() {
       />
     )}
     {saveFlow.dialog}
-    {appUpdate && updateOpen && (
+    {appUpdate && updateOpen && !remote && (
       <AppUpdateDialog
         update={appUpdate}
         autoInstall={updateAutoInstall}
