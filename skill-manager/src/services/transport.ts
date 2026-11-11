@@ -146,6 +146,9 @@ class HttpTransport implements Transport {
   }
 
   async subscribe(event: string, handler: (payload: unknown) => void): Promise<() => void> {
+    if (typeof EventSource === "undefined") {
+      return () => undefined;
+    }
     const source = new EventSource("/current/events", { withCredentials: true });
     const listener = (e: MessageEvent) => {
       try {

@@ -10,6 +10,8 @@ pub const VAULT_CHANGED_EVENT: &str = "vault-changed";
 pub const SCHEDULE_FINISHED_EVENT: &str = "schedule-finished";
 /// 仓库获取进度事件名。
 pub const FETCH_PROGRESS_EVENT: &str = "skill-fetch-progress";
+/// 内置 Agent 触发的破坏性确认计划，须由图形界面确认。
+pub const HOST_PLAN_EVENT: &str = "host-plan";
 
 /// 一条发给界面的事件。
 #[derive(Clone, Debug)]

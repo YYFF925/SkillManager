@@ -6,7 +6,13 @@ import { getTransport } from "../services/transport";
 export interface ChatViewRef {
   page?: string;
   domain?: string;
-  selection?: { refs?: string[]; ref?: string };
+  selection?: {
+    refs?: string[];
+    ref?: string;
+    presetId?: string;
+    agent?: string;
+    tool?: string;
+  };
 }
 
 export interface ChatPanelProps {
@@ -125,14 +131,14 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
               taskId: row.taskId,
             })),
           );
-          const done = rows.some(
+          const forTask = rows.filter((row) => row.taskId === taskId);
+          const finished = forTask.some(
             (row) =>
-              row.taskId === taskId &&
-              (row.role === "system" ||
-                row.text === "cancelled" ||
-                /失败|未能|未登录|不可用/.test(row.text ?? "")),
+              row.role === "system" ||
+              (row.role === "assistant" &&
+                forTask.some((item) => item.role === "user")),
           );
-          if (done) setTaskId(null);
+          if (finished) setTaskId(null);
         })
         .catch(() => undefined);
     };

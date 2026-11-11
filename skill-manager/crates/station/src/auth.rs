@@ -180,14 +180,31 @@ fn expiry(ttl: i64) -> String {
 }
 
 pub fn create_session(db: &StationDb, ttl: i64) -> Result<String, String> {
+    create_session_with(db, ttl, false)
+}
+
+fn create_session_with(db: &StationDb, ttl: i64, pending_rebind: bool) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
     db.conn()
         .execute(
-            "INSERT INTO sessions (session_id, created_at, expires_at, last_device_id) VALUES (?1, ?2, ?3, NULL)",
-            rusqlite::params![id, now_rfc3339(), expiry(ttl)],
+            "INSERT INTO sessions (session_id, created_at, expires_at, last_device_id, pending_rebind) VALUES (?1, ?2, ?3, NULL, ?4)",
+            rusqlite::params![id, now_rfc3339(), expiry(ttl), if pending_rebind { 1 } else { 0 }],
         )
         .map_err(|err| err.to_string())?;
     Ok(id)
+}
+
+pub fn session_pending_rebind(db: &StationDb, session_id: &str) -> Result<bool, String> {
+    let flag: Option<i64> = db
+        .conn()
+        .query_row(
+            "SELECT pending_rebind FROM sessions WHERE session_id = ?1",
+            [session_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|err| err.to_string())?;
+    Ok(flag.unwrap_or(0) != 0)
 }
 
 pub fn session_valid(db: &StationDb, session_id: &str) -> Result<bool, String> {
@@ -311,7 +328,7 @@ pub fn login(
             .map_err(|err| err.to_string())?;
         rebind = Some(shown);
     }
-    let session_id = create_session(db, admin.session_ttl_seconds)?;
+    let session_id = create_session_with(db, admin.session_ttl_seconds, rebind.is_some())?;
     Ok(LoginResult {
         session_id,
         must_rebind_totp: rebind.is_some(),
@@ -327,6 +344,9 @@ pub fn confirm_totp_rebind(db: &StationDb, otp: &str) -> Result<serde_json::Valu
         .ok_or_else(|| "尚未生成新的一次性密码，请重新用恢复码登录".to_string())?;
     let totp = totp_from_secret(&secret, &admin.username)?;
     if totp.check_current(otp).unwrap_or(false) {
+        db.conn()
+            .execute("UPDATE sessions SET pending_rebind = 0", [])
+            .map_err(|err| err.to_string())?;
         Ok(json!({ "ok": true, "bound": true }))
     } else {
         Err("一次性密码不正确，请确认验证器已添加新密钥".to_string())
@@ -404,5 +424,10 @@ mod tests {
             reused.is_err(),
             "consumed recovery code must not work again"
         );
+        assert!(session_pending_rebind(&db, &result.session_id).unwrap());
+        let totp = totp_from_secret(&rebind.totp_secret, "admin").unwrap();
+        let otp = totp.generate_current().unwrap();
+        confirm_totp_rebind(&db, &otp).unwrap();
+        assert!(!session_pending_rebind(&db, &result.session_id).unwrap());
     }
 }

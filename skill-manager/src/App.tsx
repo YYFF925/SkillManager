@@ -464,10 +464,14 @@ export function App() {
       ? activeKey === "library-lobster"
         ? "lobster"
         : "code"
-      : agentDomain,
-    selection: chatSelection.length
-      ? { refs: chatSelection, ref: chatSelection[0] }
-      : undefined,
+      : activeKey === "presets"
+        ? presetDomain
+        : agentDomain,
+    selection: {
+      ...(chatSelection.length ? { refs: chatSelection, ref: chatSelection[0] } : {}),
+      ...(activeKey === "presets" && presetId ? { presetId } : {}),
+      ...(selectedTarget ? { agent: selectedTarget } : {}),
+    },
   };
 
   return (

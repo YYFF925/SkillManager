@@ -212,3 +212,18 @@ T011 实现 vault clone（core/cli）
 - [X] T053 提供配置 `session_ttl` 的界面或 CLI，使登录保持时长可被操作者改，而不仅有 `PUT /auth/session-ttl` per FR-007 (partial)
 - [X] T054 远程破坏性确认用现有 `ConfirmDialog` 展示对象预览，不得只用无预览的 `window.confirm` per FR-019 (partial)
 - [X] T055 按 plan 把 `src-tauri` command 收成薄壳、转发 Host invoke，去掉与 `crates/host/src/commands` 平行的第二套入口 per plan: 薄壳 (partial)
+
+---
+
+## Phase 8: Convergence
+
+对照代码复查 T044–T055 勾选后的赶工缺口（2026-11-11）。真机验收不在本阶段。
+
+- [X] T056 禁止 Agent 调用 `plans_confirm` 或把口头同意当成确认；破坏性工具须把计划绑到图形界面会话并弹出 ConfirmDialog per FR-019, US3/AC6 (contradicts)
+- [X] T057 确认计划执行后消耗，同一 `planId` 不得重复执行 per FR-013, FR-019 (partial)
+- [X] T058 恢复码登录会话在完成 TOTP 重绑前不得操作设备/转发；重绑成功后才是完整会话 per US2/AC3, FR-007 (partial)
+- [X] T059 ACP `initialize` 声明工具清单，并路由 `tools/call` per FR-015, T044 (missing)
+- [X] T060 Host 在场时 CLI 转发 skill tag/move/archive/import/create 等写入；409 不得当成功 per FR-006, T048 (partial)
+- [X] T061 对话任务完成后清除进行中状态，取消不得显示成功 per FR-022, FR-023 (partial)
+- [X] T062 确认计划识别须带 `needsConfirmation`；无 ConfirmDialog 时拒绝而不是 `window.confirm` per FR-019, T054 (partial)
+- [X] T063 对照 core JSON CLI / GUI 页面补 `assemble_snapshot`：可入库新增、冲突路径与 git 原文、`paused_local_change`、最近命令失败原文；无 skill ref 时 view 按当前页补齐对象。对照表见 `snapshot-inventory.md`。不声称齐全。D9 默认 CLI 锁定不在本任务。 per FR-015, T047 (partial)

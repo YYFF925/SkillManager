@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { ConfirmDialog } from "./ui";
-import { planDialogCopy, setPlanPresenter, type HostPlan } from "../services/planConfirm";
+import { confirmHostPlan, isHostPlan, planDialogCopy, setPlanPresenter, type HostPlan } from "../services/planConfirm";
+import { getTransport } from "../services/transport";
 
 interface Pending {
   plan: HostPlan;
@@ -20,6 +21,24 @@ export function PlanConfirmHost() {
         }),
     );
     return () => setPlanPresenter(null);
+  }, []);
+
+  useEffect(() => {
+    const transport = getTransport();
+    let unsub: (() => void) | undefined;
+    void transport.subscribe("host-plan", (payload) => {
+      if (!isHostPlan(payload)) return;
+      void confirmHostPlan(payload).then((ok) => {
+        if (ok) {
+          void transport.confirmPlan?.(payload.planId);
+        }
+      });
+    }).then((fn) => {
+      unsub = fn;
+    });
+    return () => {
+      unsub?.();
+    };
   }, []);
 
   if (!pending) return null;

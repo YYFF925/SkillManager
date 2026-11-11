@@ -12,7 +12,9 @@ use crate::commands::hermes::HermesAction;
 use crate::commands::instruction::InstructionAction;
 use crate::commands::preset::PresetAction;
 use crate::commands::settings::SettingsAction;
-use crate::commands::skill::SkillAction;
+use crate::commands::skill::{
+    ArchiveCommand, CategoryCommand, OverlayCommand, SkillAction, TagCommand, TranslationCommand,
+};
 use crate::commands::sync::SyncAction;
 use crate::commands::tool::ToolAction;
 
@@ -65,6 +67,151 @@ pub fn to_invoke(command: &Command) -> Option<(String, Value)> {
             SkillAction::Delete(args) => Some((
                 "skill_delete".into(),
                 json!({ "references": args.references }),
+            )),
+            SkillAction::Tag(TagCommand::Add(args)) => Some((
+                "skill_tag_add".into(),
+                json!({ "references": args.references, "tags": csv(&args.tags) }),
+            )),
+            SkillAction::Tag(TagCommand::Detach(args)) => Some((
+                "skill_tag_detach".into(),
+                json!({ "references": args.references, "tags": csv(&args.tags) }),
+            )),
+            SkillAction::Tag(TagCommand::Rename { old, new }) => {
+                Some(("skill_tag_rename".into(), json!({ "old": old, "new": new })))
+            }
+            SkillAction::Tag(TagCommand::Remove { tag }) => {
+                Some(("skill_tag_remove".into(), json!({ "tag": tag })))
+            }
+            SkillAction::Category(CategoryCommand::Rename { domain, old, new }) => Some((
+                "skill_category_rename".into(),
+                json!({ "domain": domain, "old": old, "new": new }),
+            )),
+            SkillAction::Move(args) => Some((
+                "skill_move".into(),
+                json!({ "reference": args.reference, "category": args.category }),
+            )),
+            SkillAction::Archive(ArchiveCommand::Add(args)) => Some((
+                "skill_archive".into(),
+                json!({ "references": args.references }),
+            )),
+            SkillAction::Archive(ArchiveCommand::Restore(args)) => Some((
+                "skill_archive_restore".into(),
+                json!({ "references": args.references }),
+            )),
+            SkillAction::Archive(ArchiveCommand::Delete(args)) => Some((
+                "skill_archive_delete".into(),
+                json!({ "references": args.references }),
+            )),
+            SkillAction::Translation(TranslationCommand::Set(args)) => Some((
+                "skill_translation_set".into(),
+                json!({
+                    "reference": args.reference,
+                    "content": read_maybe_file(args.file.as_ref(), args.stdin)?,
+                }),
+            )),
+            SkillAction::Translation(TranslationCommand::Remove(args)) => Some((
+                "skill_translation_remove".into(),
+                json!({ "reference": args.reference }),
+            )),
+            SkillAction::Overlay(OverlayCommand::Set(args)) => Some((
+                "skill_overlay_set".into(),
+                json!({
+                    "reference": args.reference,
+                    "path": args.path,
+                    "content": read_maybe_file(args.file.as_ref(), args.stdin)?,
+                    "agent": args.agent,
+                    "os": args.os,
+                }),
+            )),
+            SkillAction::Overlay(OverlayCommand::Remove(args)) => Some((
+                "skill_overlay_remove".into(),
+                json!({
+                    "reference": args.reference,
+                    "path": args.path,
+                    "agent": args.agent,
+                    "os": args.os,
+                }),
+            )),
+            SkillAction::Import(args) => Some((
+                "skill_import".into(),
+                json!({
+                    "repo": args.repo,
+                    "skills": args.skills,
+                    "domain": args.domain,
+                    "reference": args.reference,
+                    "category": args.category,
+                    "uncategorized": args.uncategorized,
+                    "job_id": job_id(),
+                }),
+            )),
+            SkillAction::Adopt(args) => Some((
+                "skill_adopt".into(),
+                json!({
+                    "agent": args.agent,
+                    "names": args.names,
+                    "category": args.category,
+                    "uncategorized": args.uncategorized,
+                    "comment": args.comment,
+                    "tags": args.tags.as_ref().map(|s| csv(s)),
+                }),
+            )),
+            SkillAction::Create(args) => Some((
+                "skill_create".into(),
+                json!({
+                    "reference": args.reference,
+                    "category": args.category,
+                    "uncategorized": args.uncategorized,
+                    "comment": args.comment,
+                    "tags": args.tags.as_ref().map(|s| csv(s)),
+                }),
+            )),
+            SkillAction::Copy(args) => Some((
+                "skill_copy".into(),
+                json!({
+                    "reference": args.reference,
+                    "to": args.to,
+                    "category": args.category,
+                    "uncategorized": args.uncategorized,
+                }),
+            )),
+            SkillAction::Update(args) => Some((
+                "skill_update".into(),
+                json!({ "reference": args.reference, "to": args.to, "job_id": job_id() }),
+            )),
+            SkillAction::UpdateRepo(args) => Some((
+                "skill_update_repo".into(),
+                json!({
+                    "repo": args.repo,
+                    "include_new": args.include_new,
+                    "domain": args.domain,
+                    "category": args.category,
+                    "uncategorized": args.uncategorized,
+                    "job_id": job_id(),
+                }),
+            )),
+            SkillAction::RejectNew(args) => Some((
+                "skill_reject_new".into(),
+                json!({ "repo": args.repo, "domain": args.domain, "skills": args.skills }),
+            )),
+            SkillAction::Skip(args) => Some((
+                "skill_skip".into(),
+                json!({ "reference": args.reference, "version": args.version }),
+            )),
+            SkillAction::Unskip(args) => Some((
+                "skill_unskip".into(),
+                json!({ "reference": args.reference }),
+            )),
+            SkillAction::AdoptHermes(args) => Some((
+                "hermes_adopt".into(),
+                json!({ "profile": args.profile, "names": args.names }),
+            )),
+            SkillAction::Preview(args) => Some((
+                "skill_preview".into(),
+                json!({
+                    "repo": args.repo,
+                    "reference": args.reference,
+                    "job_id": job_id(),
+                }),
             )),
             _ => None,
         },
@@ -299,6 +446,10 @@ pub fn is_write(command: &Command) -> bool {
                 | SkillAction::Skipped
                 | SkillAction::Rejected(_)
                 | SkillAction::Task(_)
+                | SkillAction::Check(_)
+                | SkillAction::Archive(ArchiveCommand::List { .. })
+                | SkillAction::Translation(TranslationCommand::Get(_))
+                | SkillAction::Overlay(OverlayCommand::List(_) | OverlayCommand::Get(_))
         ),
         Command::Preset(cmd) => !matches!(cmd.action, PresetAction::List(_) | PresetAction::Get(_)),
         Command::Agent(cmd) => !matches!(
@@ -313,7 +464,32 @@ pub fn is_write(command: &Command) -> bool {
             HermesAction::Enable(_) | HermesAction::Disable(_)
         ),
         Command::Instruction(cmd) => matches!(cmd.action, InstructionAction::Set(_)),
-        Command::Tool(cmd) => !matches!(cmd.action, ToolAction::List(_) | ToolAction::Get(_)),
+        Command::Tool(cmd) => !matches!(
+            cmd.action,
+            ToolAction::List(_) | ToolAction::Get(_) | ToolAction::Check(_)
+        ),
+    }
+}
+
+fn job_id() -> String {
+    format!(
+        "cli-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    )
+}
+
+fn read_maybe_file(path: Option<&std::path::PathBuf>, stdin: bool) -> Option<String> {
+    if let Some(path) = path {
+        std::fs::read_to_string(path).ok()
+    } else if stdin {
+        let mut buffer = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut buffer).ok()?;
+        Some(buffer)
+    } else {
+        None
     }
 }
 
@@ -353,5 +529,30 @@ mod tests {
         let (name, body) = to_invoke(&agent).expect("agent enable must forward");
         assert_eq!(name, "agent_enable");
         assert_eq!(body["key"], "codex");
+    }
+
+    #[test]
+    fn skill_tag_and_archive_writes_map_to_host_invoke() {
+        use crate::commands::skill::{
+            ArchiveCommand, DeleteArgs, SkillCommand, TagBatchArgs, TagCommand,
+        };
+        let tag = Command::Skill(SkillCommand {
+            action: SkillAction::Tag(TagCommand::Add(TagBatchArgs {
+                references: vec!["code/demo".into()],
+                tags: "a,b".into(),
+            })),
+        });
+        let (name, body) = to_invoke(&tag).expect("tag add must forward");
+        assert_eq!(name, "skill_tag_add");
+        assert_eq!(body["references"][0], "code/demo");
+        assert!(is_write(&tag));
+
+        let archive = Command::Skill(SkillCommand {
+            action: SkillAction::Archive(ArchiveCommand::Add(DeleteArgs {
+                references: vec!["code/demo".into()],
+            })),
+        });
+        let (name, _) = to_invoke(&archive).expect("archive add must forward");
+        assert_eq!(name, "skill_archive");
     }
 }

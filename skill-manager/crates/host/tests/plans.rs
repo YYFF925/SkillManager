@@ -2,8 +2,8 @@
 
 use serde_json::json;
 use skill_manager_core::AppContext;
-use skill_manager_host::plans::{self, DestructiveAction};
 use skill_manager_host::HostRuntime;
+use skill_manager_host::plans::{self, DestructiveAction};
 
 #[test]
 fn other_session_cannot_confirm() {
@@ -35,4 +35,18 @@ fn other_session_cannot_confirm() {
         DestructiveAction::SkillDelete,
     );
     assert!(mismatch.is_err());
+    plans::take_confirmed(
+        &runtime,
+        plan_id,
+        Some("session-a"),
+        DestructiveAction::SkillDelete,
+    )
+    .expect("owner can consume once");
+    let reused = plans::take_confirmed(
+        &runtime,
+        plan_id,
+        Some("session-a"),
+        DestructiveAction::SkillDelete,
+    );
+    assert!(reused.is_err(), "confirmed plan must not be reusable");
 }

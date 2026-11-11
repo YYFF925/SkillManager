@@ -78,17 +78,19 @@ skill-manager --state-dir <state-a> host pair --station <url> --code <code> --na
 
 ## 6. 本轮实施取证（2026-11-11）
 
-在 `cursor/adr-host-management-station-1ec4` 实现 US1–US3 代码后记录：
+在 `cursor/adr-host-management-station-1ec4` 实现 US1–US3 代码后记录。云上补跑（赶工修复 + T063 快照对照）结果如下。**未做** D9 默认 CLI 锁定。
 
 | 项 | 结果 |
 |---|---|
-| `cargo test -p skill-manager-host -p skill-manager-station` | 本轮执行；含锁双开、确认计划绑 session、Agent 不得写 `git_auto_push`、station 不依赖 core、恢复码登录须重绑 TOTP、station 409 映射、快照全局字段、未检测到 CLI 不得标 running |
-| `cargo check -p skill-manager-host -p skill-manager-station -p skill-manager-cli -p skill-manager-core` | 本轮执行 |
-| 前端 `npm test`（vitest） | 本轮 88 项通过；含 DeviceBar 对接码、LoginPage 恢复码重绑、planConfirm 预览、桌面壳 mock `isDesktop() === true` |
-| Phase 7 T044–T055 | 代码已落地并勾选；桌面 crate 本环境缺 `gdk-3.0` 未能 `cargo check -p skill-manager-desktop` |
+| `cargo test -p skill-manager-host -p skill-manager-station` | **通过**（host 9 单测 + git_auto_push / lock / plans；station 6 单测）。含锁双开、确认计划绑 session 且确认后消耗、Agent 不得 `plans_confirm` / 不得写 `git_auto_push`、station 不依赖 core、恢复码登录 `pending_rebind`、station 409 映射、快照含 `newCandidates` / `pullConflicts` / `lastCommandFailures` / 无 ref 时 `view.pageObjects`、未检测到 CLI 不得标 running |
+| `cargo test -p skill-manager-cli --bin skill-manager coord` | **通过**（preset/agent/tag/archive 写入映射到 Host invoke） |
+| `cargo check -p skill-manager-host -p skill-manager-station -p skill-manager-cli -p skill-manager-core` | **通过** |
+| 前端 `npm test`（vitest） | **23 files / 88 tests 通过**，无未处理异常。含 DeviceBar、LoginPage 恢复码重绑、planConfirm 须 `needsConfirmation`、HttpTransport 在无 `EventSource` 时不抛 |
+| `cargo check -p skill-manager-desktop` | **未通过**。`gdk-3.0`（3.24.41）与 `webkit2gtk-4.1` 已能 `pkg-config`；失败原因是 Tauri build script：`resource path binaries/skill-manager-x86_64-unknown-linux-gnu doesn't exist`（sidecar 不在本环境）。不是缺 GTK |
+| 快照对照表 | 已写入 [snapshot-inventory.md](snapshot-inventory.md)。只读事实有快照字段或工具命令；**不声称齐全**（部分写入对内置 Agent 未开放） |
 | `vault clone` + 真机 `host serve` 互斥与开机项 | **未取证**：Cloud Agent 环境无用户级 launchd/systemd 登录项、无第二台真机 |
 | 管理站双 state-dir 浏览器登录/切换/3 分钟改注释（SC-001） | **未取证**：无图形浏览器连到已配对 Host |
-| 对话「完善中文注释」、切页不串、取消不得成功 | **未取证**：依赖本机已登录的 OpenCode/Codex/Gemini；探测顺序已有单元断言 |
+| 对话「完善中文注释」、切页不串、取消不得成功 | **未取证**：依赖本机已登录的管理 CLI；D9 默认 CLI **未锁定**（另开对话） |
 | 管理站不可用时桌面改库（SC-005） | 代码路径：桌面内嵌 Host，station crate 不在桌面依赖链；**真机未取证** |
 | 002 CLI Host 在场/不在场回归 | **未取证**本轮未对着真实 Vault 跑 list/set/deploy |
 

@@ -3,7 +3,15 @@ import { expect, it } from "vitest";
 import { isHostPlan, planDialogCopy } from "./planConfirm";
 
 it("identifies a Host confirmation plan", () => {
-  expect(isHostPlan({ planId: "p1", action: "skill.delete", preview: { references: ["code/a"] } })).toBe(true);
+  expect(
+    isHostPlan({
+      needsConfirmation: true,
+      planId: "p1",
+      action: "skill.delete",
+      preview: { references: ["code/a"] },
+    }),
+  ).toBe(true);
+  expect(isHostPlan({ planId: "p1" })).toBe(false);
   expect(isHostPlan({ error: "offline" })).toBe(false);
 });
 

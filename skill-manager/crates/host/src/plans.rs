@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::HostRuntime;
@@ -88,7 +88,11 @@ pub fn issue(
 }
 
 /// 确认计划。必须是签发该计划的 session_id。
-pub fn confirm(runtime: &HostRuntime, plan_id: &str, session_id: Option<&str>) -> Result<Value, String> {
+pub fn confirm(
+    runtime: &HostRuntime,
+    plan_id: &str,
+    session_id: Option<&str>,
+) -> Result<Value, String> {
     let session_id = session_id.unwrap_or("");
     let mut guard = store().lock().map_err(|_| "确认计划锁已损坏".to_string())?;
     let plan = guard
@@ -144,4 +148,65 @@ pub fn assert_confirmed(
 /// 创建界面会话。
 pub fn new_session() -> String {
     Uuid::new_v4().to_string()
+}
+
+fn last_gui_session() -> &'static Mutex<Option<String>> {
+    static LAST: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+    LAST.get_or_init(|| Mutex::new(None))
+}
+
+/// 记住最近一次图形界面会话，供 Agent 破坏性操作绑定确认。
+pub fn remember_gui_session(session_id: &str) {
+    if session_id.is_empty() {
+        return;
+    }
+    if let Ok(mut slot) = last_gui_session().lock() {
+        *slot = Some(session_id.to_string());
+    }
+}
+
+pub fn gui_session() -> Option<String> {
+    last_gui_session().lock().ok().and_then(|g| g.clone())
+}
+
+/// 已确认则成功；不消耗计划。
+pub fn is_confirmed(
+    runtime: &HostRuntime,
+    plan_id: &str,
+    session_id: Option<&str>,
+    action: DestructiveAction,
+) -> bool {
+    assert_confirmed(runtime, plan_id, session_id, action).is_ok()
+}
+
+/// 确认后消耗计划，防止同一 planId 被重复执行。
+pub fn take_confirmed(
+    runtime: &HostRuntime,
+    plan_id: &str,
+    session_id: Option<&str>,
+    action: DestructiveAction,
+) -> Result<(), String> {
+    assert_confirmed(runtime, plan_id, session_id, action)?;
+    let mut guard = store().lock().map_err(|_| "确认计划锁已损坏".to_string())?;
+    guard.remove(plan_id);
+    Ok(())
+}
+
+/// 等图形界面确认。超时则失败，不把口头同意当成确认。
+pub fn wait_confirmed(
+    runtime: &HostRuntime,
+    plan_id: &str,
+    session_id: Option<&str>,
+    action: DestructiveAction,
+) -> Result<(), String> {
+    let deadline = now_secs() + 120;
+    loop {
+        if is_confirmed(runtime, plan_id, session_id, action) {
+            return Ok(());
+        }
+        if now_secs() >= deadline {
+            return Err("用户未在界面确认该破坏性操作，任务不会改库。".to_string());
+        }
+        std::thread::sleep(Duration::from_millis(80));
+    }
 }

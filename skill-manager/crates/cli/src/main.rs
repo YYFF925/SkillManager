@@ -75,7 +75,10 @@ fn main() -> ExitCode {
         state_dir: cli.state_dir,
     };
 
-    if matches!(cli.command, Command::Host(_) | Command::Station(_) | Command::Vault(_)) {
+    if matches!(
+        cli.command,
+        Command::Host(_) | Command::Station(_) | Command::Vault(_)
+    ) {
         let (result, human) = match &cli.command {
             Command::Host(command) => commands::host::run(command.clone(), &options),
             Command::Station(command) => commands::station::run(command.clone(), &options),
@@ -97,7 +100,18 @@ fn main() -> ExitCode {
         if let Some((name, body)) = coord::to_invoke(&cli.command) {
             return match coord::forward(listen, &name, &body) {
                 Ok(value) => {
-                    if value.get("error").is_some() {
+                    if value
+                        .get("needsConfirmation")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                    {
+                        let msg =
+                            "该操作需要在管理界面确认后才能继续（确认前不会改库）。".to_string();
+                        ExitCode::from(
+                            skill_manager_core::CliResult::failed_message(msg.clone())
+                                .emit(options.json, &msg) as u8,
+                        )
+                    } else if value.get("error").is_some() {
                         let msg = value
                             .get("error")
                             .and_then(|v| v.as_str())
@@ -109,19 +123,23 @@ fn main() -> ExitCode {
                         )
                     } else {
                         ExitCode::from(
-                            skill_manager_core::CliResult::success(value).emit(options.json, "") as u8,
+                            skill_manager_core::CliResult::success(value).emit(options.json, "")
+                                as u8,
                         )
                     }
                 }
                 Err(err) => ExitCode::from(
-                    skill_manager_core::CliResult::failed_message(err.clone()).emit(options.json, &err) as u8,
+                    skill_manager_core::CliResult::failed_message(err.clone())
+                        .emit(options.json, &err) as u8,
                 ),
             };
         }
         if coord::is_write(&cli.command) {
-            let msg = "本机 Host 已在运行，该写入命令请通过管理界面执行，或先停止 Host。".to_string();
+            let msg =
+                "本机 Host 已在运行，该写入命令请通过管理界面执行，或先停止 Host。".to_string();
             return ExitCode::from(
-                skill_manager_core::CliResult::failed_message(msg.clone()).emit(options.json, &msg) as u8,
+                skill_manager_core::CliResult::failed_message(msg.clone()).emit(options.json, &msg)
+                    as u8,
             );
         }
     }

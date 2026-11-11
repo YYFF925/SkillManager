@@ -4,6 +4,7 @@ export interface HostPlan {
   planId: string;
   action?: string;
   preview?: unknown;
+  needsConfirmation?: boolean;
 }
 
 export function isHostPlan(body: unknown): body is HostPlan {
@@ -11,7 +12,8 @@ export function isHostPlan(body: unknown): body is HostPlan {
     typeof body === "object" &&
     body !== null &&
     "planId" in body &&
-    typeof (body as { planId: unknown }).planId === "string"
+    typeof (body as { planId: unknown }).planId === "string" &&
+    (body as { needsConfirmation?: unknown }).needsConfirmation === true
   );
 }
 
@@ -67,9 +69,5 @@ export async function confirmHostPlan(plan: HostPlan): Promise<boolean> {
   if (presenter) {
     return presenter(plan);
   }
-  return window.confirm(
-    plan.action === "skill.delete"
-      ? "确认删除这些技能？确认前不会改库。"
-      : "确认覆盖本机已改动的部署副本？确认前不会改库。",
-  );
+  return false;
 }

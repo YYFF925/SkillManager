@@ -68,10 +68,19 @@ pub fn cancel_live(task_id: &str) -> bool {
     task.cancel.store(true, Ordering::SeqCst);
     if let Ok(pid) = task.pid.lock() {
         if let Some(pid) = *pid {
-            let _ = Command::new("kill")
-                .arg("-TERM")
-                .arg(pid.to_string())
-                .status();
+            #[cfg(windows)]
+            {
+                let _ = Command::new("taskkill")
+                    .args(["/PID", &pid.to_string(), "/F"])
+                    .status();
+            }
+            #[cfg(unix)]
+            {
+                let _ = Command::new("kill")
+                    .arg("-TERM")
+                    .arg(pid.to_string())
+                    .status();
+            }
         }
     }
     true
@@ -255,6 +264,27 @@ fn handle_incoming(
                 json!({ "outcome": { "outcome": "selected", "optionId": "allow-once" } })
             }
             name if name.starts_with("fs/") => json!({ "content": "" }),
+            "tools/call" | "tool/call" => {
+                let name = params
+                    .get("name")
+                    .or_else(|| params.get("toolName"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let args = params
+                    .get("arguments")
+                    .or_else(|| params.get("input"))
+                    .cloned()
+                    .unwrap_or(params);
+                if let Some(runtime) = runtime {
+                    match tools::run_tool(runtime, &name, args, session_id) {
+                        Ok(value) => value,
+                        Err(err) => json!({ "error": err }),
+                    }
+                } else {
+                    json!({ "error": "no runtime" })
+                }
+            }
             name => {
                 if let Some(runtime) = runtime {
                     match tools::run_tool(runtime, name, params, session_id) {
@@ -292,7 +322,9 @@ pub(crate) fn initialize_or_fail(
             "initializationOptions": {
                 "skillDir": skill_dir,
                 "skillText": if skill_dir.is_dir() { Value::Null } else { json!(skill_text) },
-            }
+                "tools": tools::tool_descriptors(),
+            },
+            "tools": tools::tool_descriptors(),
         }),
         until,
         cancel,

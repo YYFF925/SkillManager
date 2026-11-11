@@ -72,6 +72,23 @@ fn require_session(
     }
 }
 
+fn require_full_session(
+    state: &AppState,
+    jar: &CookieJar,
+    headers: &HeaderMap,
+) -> Result<String, (StatusCode, Json<Value>)> {
+    let id = require_session(state, jar, headers)?;
+    let pending = with_db(state, |db| auth::session_pending_rebind(db, &id)).unwrap_or(false);
+    if pending {
+        Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "请先完成一次性密码绑定" })),
+        ))
+    } else {
+        Ok(id)
+    }
+}
+
 fn err_status(message: String) -> (StatusCode, Json<Value>) {
     (StatusCode::BAD_REQUEST, Json(json!({ "error": message })))
 }
@@ -267,7 +284,7 @@ async fn auth_ttl_get(
     jar: CookieJar,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if let Err(err) = require_session(&state, &jar, &headers) {
+    if let Err(err) = require_full_session(&state, &jar, &headers) {
         return err.into_response();
     }
     match with_db(&state, auth::ttl) {
@@ -282,7 +299,7 @@ async fn auth_ttl(
     headers: HeaderMap,
     Json(body): Json<TtlBody>,
 ) -> impl IntoResponse {
-    if let Err(err) = require_session(&state, &jar, &headers) {
+    if let Err(err) = require_full_session(&state, &jar, &headers) {
         return err.into_response();
     }
     match with_db(&state, |db| auth::set_ttl(db, body.seconds)) {
@@ -312,7 +329,7 @@ async fn pairing_codes(
     jar: CookieJar,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if let Err(err) = require_session(&state, &jar, &headers) {
+    if let Err(err) = require_full_session(&state, &jar, &headers) {
         return err.into_response();
     }
     match with_db(&state, devices::issue_pairing_code) {
@@ -326,7 +343,7 @@ async fn list_devices(
     jar: CookieJar,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if let Err(err) = require_session(&state, &jar, &headers) {
+    if let Err(err) = require_full_session(&state, &jar, &headers) {
         return err.into_response();
     }
     match with_db(&state, |db| devices::list_devices(db, &state.live)) {
@@ -348,7 +365,7 @@ async fn rename_device(
     Path(id): Path<String>,
     Json(body): Json<RenameBody>,
 ) -> impl IntoResponse {
-    if let Err(err) = require_session(&state, &jar, &headers) {
+    if let Err(err) = require_full_session(&state, &jar, &headers) {
         return err.into_response();
     }
     match with_db(&state, |db| devices::rename(db, &id, &body.display_name)) {
@@ -363,7 +380,7 @@ async fn revoke_device(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(err) = require_session(&state, &jar, &headers) {
+    if let Err(err) = require_full_session(&state, &jar, &headers) {
         return err.into_response();
     }
     match with_db(&state, |db| devices::revoke(db, &state.live, &id)) {
@@ -486,7 +503,7 @@ async fn set_current(
     headers: HeaderMap,
     Json(body): Json<CurrentBody>,
 ) -> impl IntoResponse {
-    let session = match require_session(&state, &jar, &headers) {
+    let session = match require_full_session(&state, &jar, &headers) {
         Ok(id) => id,
         Err(err) => return err.into_response(),
     };
@@ -521,7 +538,7 @@ async fn current_invoke(
     Path(command): Path<String>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
-    let session = match require_session(&state, &jar, &headers) {
+    let session = match require_full_session(&state, &jar, &headers) {
         Ok(id) => id,
         Err(err) => return err.into_response(),
     };
@@ -545,7 +562,7 @@ async fn current_events(
     jar: CookieJar,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let session = match require_session(&state, &jar, &headers) {
+    let session = match require_full_session(&state, &jar, &headers) {
         Ok(id) => id,
         Err(err) => return err.into_response(),
     };
@@ -584,7 +601,7 @@ async fn current_session(
     jar: CookieJar,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let session = match require_session(&state, &jar, &headers) {
+    let session = match require_full_session(&state, &jar, &headers) {
         Ok(id) => id,
         Err(err) => return err.into_response(),
     };
@@ -614,7 +631,7 @@ async fn current_confirm(
     Path(id): Path<String>,
     Json(body): Json<ConfirmBody>,
 ) -> impl IntoResponse {
-    let session = match require_session(&state, &jar, &headers) {
+    let session = match require_full_session(&state, &jar, &headers) {
         Ok(id) => id,
         Err(err) => return err.into_response(),
     };
@@ -685,7 +702,7 @@ async fn forward_named(
     command: &str,
     body: Value,
 ) -> Response {
-    let session = match require_session(state, jar, headers) {
+    let session = match require_full_session(state, jar, headers) {
         Ok(id) => id,
         Err(err) => return err.into_response(),
     };

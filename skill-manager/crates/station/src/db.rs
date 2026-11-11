@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   session_id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
-  last_device_id TEXT
+  last_device_id TEXT,
+  pending_rebind INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS devices (
   device_id TEXT PRIMARY KEY,
@@ -49,6 +50,10 @@ impl StationDb {
         conn.pragma_update(None, "busy_timeout", 5_000)
             .map_err(|err| err.to_string())?;
         conn.execute_batch(SCHEMA).map_err(|err| err.to_string())?;
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN pending_rebind INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
         Ok(Self { conn, dir })
     }
 
