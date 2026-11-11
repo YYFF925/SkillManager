@@ -1,6 +1,6 @@
 ---
 name: "speckit-plan"
-description: "（实现规划） Execute the implementation planning workflow using the plan template to generate design artifacts."
+description: "（5.实现规划） Execute the implementation planning workflow using the plan template to generate design artifacts."
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:
   author: "github-spec-kit"

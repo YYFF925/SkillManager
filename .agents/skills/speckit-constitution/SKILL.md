@@ -1,6 +1,6 @@
 ---
 name: "speckit-constitution"
-description: "（项目原则） Create or update the project constitution from interactive or provided principle inputs."
+description: "（1.项目原则） Create or update the project constitution from interactive or provided principle inputs."
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:
   author: "github-spec-kit"

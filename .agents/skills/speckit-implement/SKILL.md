@@ -1,6 +1,6 @@
 ---
 name: "speckit-implement"
-description: "（代码实现） Execute the implementation plan by processing and executing all tasks defined in tasks.md"
+description: "（9.代码实现） Execute the implementation plan by processing and executing all tasks defined in tasks.md"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:
   author: "github-spec-kit"

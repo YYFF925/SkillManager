@@ -1,6 +1,6 @@
 ---
 name: "speckit-checklist"
-description: "（需求质检） Generate a custom checklist for the current feature based on user requirements."
+description: "（6.需求质检） Generate a custom checklist for the current feature based on user requirements."
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:
   author: "github-spec-kit"

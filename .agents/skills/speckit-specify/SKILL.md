@@ -1,6 +1,6 @@
 ---
 name: "speckit-specify"
-description: "（需求定义） Create or update the feature specification from a natural language feature description."
+description: "（2.需求定义） Create or update the feature specification from a natural language feature description."
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:
   author: "github-spec-kit"
@@ -91,9 +91,9 @@ Given that feature description, do this:
       - If `branch_numbering` was used (and `feature_numbering` was absent), emit a one-line warning: "⚠️ `branch_numbering` in init-options.json is deprecated. Rename to `feature_numbering`."
 
    **Create the directory and spec file**:
+   - Run `.specify/scripts/bash/resolve-template.sh spec-template --json` from the repository root and parse `TEMPLATE_CONTENT` as the active `spec-template`. The shared resolver composes project overrides, preset layers, and extension layers over the core template, including `append`, `prepend`, and `wrap` strategies. If it fails, stop and report the resolution error; do not continue with only one contributing template layer.
    - `mkdir -p SPECIFY_FEATURE_DIRECTORY`
-   - Resolve the active `spec-template` through the Spec Kit preset/template resolution stack (equivalent to `specify preset resolve spec-template`)
-   - Copy the resolved `spec-template` file to `SPECIFY_FEATURE_DIRECTORY/spec.md` as the starting point
+   - Write `TEMPLATE_CONTENT` to `SPECIFY_FEATURE_DIRECTORY/spec.md` as the starting point. Do not copy a template file from disk instead: when a preset composes `spec-template`, no single file holds the full template.
    - Set `SPEC_FILE` to `SPECIFY_FEATURE_DIRECTORY/spec.md`
    - Persist the resolved path to `.specify/feature.json`:
      ```json
@@ -109,7 +109,7 @@ Given that feature description, do this:
    - The spec directory name and the git branch name are independent — they may be the same but that is the user's choice
    - The spec directory and file are always created by this command, never by the hook
 
-4. Load the resolved active `spec-template` file to understand required sections.
+4. Use `TEMPLATE_CONTENT` to understand required sections.
 
 5. **IF EXISTS**: Load `.specify/memory/constitution.md` for project principles and governance constraints.
 
@@ -178,7 +178,7 @@ Given that feature description, do this:
 
       ## Notes
 
-      - Items marked incomplete require spec updates before `$speckit-clarify` or `$speckit-plan`
+      - Items marked incomplete require spec updates before `$speckit-clarify`, `$speckit-coldread`, or `$speckit-plan`
       ```
 
    b. **Run Validation Check**: Review the spec against each checklist item:
@@ -275,6 +275,8 @@ Report completion to the user with:
 - Checklist results summary
 - Readiness for the next phase (`$speckit-clarify` or `$speckit-plan`)
 
+**Mandatory cold-read recommendation**: You MUST proactively recommend `$speckit-coldread` before `$speckit-plan`: tell the user that a cold-read test verifies the spec is self-contained for a zero-context agent (no semantic gaps), and ask whether to run it now. Never skip this recommendation silently. If spec items are still unresolved, recommend resolving them (via `$speckit-clarify`) first, then the cold read.
+
 **NOTE:** Branch creation is handled by the `before_specify` hook (git extension). Spec directory and file creation are always handled by this core command.
 
 ## Quick Guidelines
@@ -342,4 +344,5 @@ Success criteria must be:
 
 - [ ] Specification written to `SPEC_FILE` and validated against quality checklist
 - [ ] Extension hooks dispatched or skipped according to the rules in Mandatory Post-Execution Hooks above
+- [ ] Cold-read recommendation surfaced to the user before recommending plan
 - [ ] Completion reported to user with feature directory, spec file path, and checklist results
