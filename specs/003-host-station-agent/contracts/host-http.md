@@ -36,16 +36,16 @@ POST /plans/:id/confirm  { sessionId }  → 仅签发该计划的 sessionId 可�
 
 `POST /plans` 也可由 Host 在 invoke 缺 planId 时内联返回，不必强迫前端多打一次，但确认必须是显式第二步。
 
-## 界面上下文（给内置管理 Agent）
+## 对话上下文（给内置管理 Agent）
 
 ```text
-PUT /agent/context     { sessionId, snapshot }
+PUT /agent/context     { sessionId, view }
 POST /agent/messages   { sessionId, text }
 GET  /agent/sessions
 GET  /agent/sessions/:id/messages
 ```
 
-`snapshot` 含管理域、页面、选中技能/分类/预设等标识，以及 Host 当时已知的失败/暂停（冲突路径、paused 部署、原文错误）。由 Host 填写，客户端不必让用户粘贴。`POST /agent/messages` 把**当时**快照钉死到该条任务。后续 `PUT /agent/context` 只影响之后的新消息。
+客户端只上报**当前界面** `view`（页面、选中对象）。**全局** `global` 由 Host 在收消息时从 core 组装，不由浏览器拼。`POST /agent/messages` 把当时 `{ global, view }` 钉死到该条任务。后续 `PUT /agent/context` 只更新界面层，只影响之后的新消息。不得要求用户粘贴报错、清单或技能正文。
 
 ## 本机状态
 

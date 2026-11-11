@@ -8,7 +8,7 @@
 
 在不改技能管理业务规则的前提下，把今日只活在 Tauri 里的进程内协调抽成 **Host**：本机唯一操作入口。再加 **管理站**（一次登录、出站对接、切换当前设备、转发到该机 Host）和 **内置管理 Agent**（ACP 拉起成熟 CLI，经 Host 用现有 JSON CLI 做事）。Vault 仍只在各机克隆；管理站 crate 不依赖 core。
 
-核心决策见 [research.md](research.md)：invoke 同名 POST + SSE；Host 出站长连接；CLI 在 Host 在场时走 Host；确认计划只覆盖删除/覆盖；`git_auto_push` 仍仅 GUI 可写；ACP 默认 CLI 按 OpenCode → Codex → Gemini 探测锁定；内置 Agent 自动附带界面对象与 Host 已知失败（D13），不做冲突合并 UI；新 UI 先走设计层。
+核心决策见 [research.md](research.md)：invoke 同名 POST + SSE；Host 出站长连接；CLI 在 Host 在场时走 Host；确认计划只覆盖删除/覆盖；`git_auto_push` 仍仅 GUI 可写；ACP 默认 CLI 按 OpenCode → Codex → Gemini 探测锁定；内置 Agent 自动附带全局 + 当前界面两层上下文（D13），不做冲突合并 UI；新 UI 先走设计层。
 
 ## Technical Context
 

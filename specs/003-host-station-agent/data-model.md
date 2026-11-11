@@ -37,7 +37,7 @@
 
 | 表 | 说明 |
 |---|---|
-| agent_sessions | session_id、界面会话、创建时间；钉死的上下文快照 JSON（管理域、页面、选中引用列表，以及当时 Host 已知的失败/暂停：冲突路径、paused 部署、原文错误） |
+| agent_sessions | session_id、界面会话、创建时间；钉死的上下文快照 JSON：`global`（库级摘要、待更新/译文待更新/部署摘要、失败与暂停）+ `view`（当前页与对象详情）。不存整库正文。 |
 | agent_messages | session_id、角色（用户/助手/系统）、正文、关联 task_id、时间 |
 
 不写入 Vault，不随库同步。任务对象以会话创建或该条用户消息发出时的快照为准。
