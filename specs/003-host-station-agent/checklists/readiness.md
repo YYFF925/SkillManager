@@ -131,4 +131,4 @@
 - 勾选表示评审认为该项需求质量已满足，不表示代码已实现。
 - 本轮修订了 `spec.md`（Clarifications、FR-005/012/017/020/022、US2-8、Edge Cases、SC-001、Assumptions）与 `research.md` D11。
 - `checklists/requirements.md` 由 specify/clarify 维护，与本清单分开。
-- 下一步仍是 `/speckit-tasks`。
+- 2026-11-11 上下文讨论查漏补缺（非 `/speckit-converge`）：补写 Host 按引用从 core 补齐两层详情、快照为摘要+计数+引用、内置说明不入库、不为对话改 002 CLI、可取消任务、快照进入所选 CLI 的模型（FR-015/023、SC-008/009、research D15）。CHK006/028 仍成立。下一步是新对话在本分支实施；`/speckit-converge` 须在 implement 之后才对代码查漏。

@@ -1,6 +1,6 @@
 # Data Model: Host、管理站与对话状态
 
-**Date**: 2026-11-11 | 依据：[spec.md](spec.md)、[research.md](research.md) D1–D12。
+**Date**: 2026-11-11 | 依据：[spec.md](spec.md)、[research.md](research.md) D1–D15。
 
 技能文件、`.manager`、预设、指令源、工具资料与 002 部署/Agent/Hermes 表**不在此重复**。本文件只增加入口层实体。共享资产仍只在 SkillManagerVault；下列全部为**本机状态**或**管理站状态**，丢失不删库内技能。
 
@@ -37,10 +37,10 @@
 
 | 表 | 说明 |
 |---|---|
-| agent_sessions | session_id、界面会话、创建时间；钉死的上下文快照 JSON：`global`（库级摘要、待更新/译文待更新/部署摘要、失败与暂停）+ `view`（当前页与对象详情）。不存整库正文。 |
+| agent_sessions | session_id、界面会话、创建时间；钉死的上下文快照 JSON：`global`（摘要 + 计数 + 引用，含待更新/译文待更新/部署/事故及预设·Hermes·工具·本机 Agent 目录摘要）+ `view`（Host 按引用补齐的当前页详情）。不存整库正文。客户端上报的原始 `view` 引用可另存，但详情以发消息时 core 为准。 |
 | agent_messages | session_id、角色（用户/助手/系统）、正文、关联 task_id、时间 |
 
-不写入 Vault，不随库同步。任务对象以会话创建或该条用户消息发出时的快照为准。
+不写入 Vault，不随库同步。任务对象以该条用户消息发出时 Host 组装的快照为准。任务状态含进行中 / 成功 / 部分失败 / 失败 / **已取消**。
 
 ### 1.4 `agent_runtime` — 本机管理 CLI
 
@@ -102,10 +102,14 @@
 
 路径：`skill-manager/assets/skills/skill-manager-install/`。随本项目仓库维护，按普通上游技能入库到用户 Vault。**不是** `station.db` 或 Host 表。与 `skill-manager-maintenance` 并列，不得合并。
 
+## 三之一、内置管理说明（应用资产，不入库）
+
+路径：`skill-manager/assets/skills/skill-manager-builtin-agent/`。随本项目仓库维护，由 Host 注入到所用 Agent CLI 的 skills 搜索目录（或 ACP 初始化文本）。**不是**用户 SkillManagerVault 里的技能，不出现在 `skill list`，不可部署，不按普通上游入库。与安装 Skill、配套维护 Skill 都分开。
+
 ## 四、校验与状态
 
 - Host：同一 `state-dir` 只能有一个进程持有 `host.lock`。
 - 设备在线 = 管理站上该 `device_id` 的长连接仍在。
 - 操作计划：未确认 / 已确认 / 已过期 / 会话不匹配（拒绝）。
-- 对话任务：进行中 / 成功 / 部分失败 / 失败；「任务已生成」≠ 已写库。
+- 对话任务：进行中 / 成功 / 部分失败 / 失败 / 已取消；「任务已生成」≠ 已写库；已取消 ≠ 成功。
 - `git_auto_push` 仍是 002 设置表字段，本模型不新增上传授权表。

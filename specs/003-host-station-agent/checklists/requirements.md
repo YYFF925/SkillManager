@@ -33,4 +33,5 @@
 
 - 2026-11-11 specify 自检：无 `[NEEDS CLARIFICATION]`。`git clone`、HTTPS、基于时间的一次性密码、本机服务是已裁决的用户可见行为，不是实现选型。Host / 管理站 / 内置管理 Agent / 安装 Skill 的含义见仓库 GLOSSARY 与 ADR 0002。
 - 技能管理字段与流程仍以 002 为准；本规格只定义入口与覆盖关系。
+- 2026-11-11 查漏补缺：补写界面引用由 Host 补齐、内置说明不入库、不新增 002 筛选、取消任务、模型外发假设。无新增 `[NEEDS CLARIFICATION]`。
 - Items marked incomplete require spec updates before `/speckit-clarify`, `/speckit-coldread`, or `/speckit-plan`

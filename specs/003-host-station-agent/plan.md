@@ -8,7 +8,7 @@
 
 在不改技能管理业务规则的前提下，把今日只活在 Tauri 里的进程内协调抽成 **Host**：本机唯一操作入口。再加 **管理站**（一次登录、出站对接、切换当前设备、转发到该机 Host）和 **内置管理 Agent**（ACP 拉起成熟 CLI，经 Host 用现有 JSON CLI 做事）。Vault 仍只在各机克隆；管理站 crate 不依赖 core。
 
-核心决策见 [research.md](research.md)：invoke 同名 POST + SSE；Host 出站长连接；CLI 在 Host 在场时走 Host；确认计划只覆盖删除/覆盖；`git_auto_push` 仍仅 GUI 可写；ACP 默认 CLI 按 OpenCode → Codex → Gemini 探测锁定；内置 Agent 自动附带全局 + 当前界面两层上下文（D13），不够则 ACP 工具查现有 CLI、第一版不做 MCP（D14）；新 UI 先走设计层。
+核心决策见 [research.md](research.md)：invoke 同名 POST + SSE；Host 出站长连接；CLI 在 Host 在场时走 Host；确认计划只覆盖删除/覆盖；`git_auto_push` 仍仅 GUI 可写；ACP 默认 CLI 按 OpenCode → Codex → Gemini 探测锁定；内置 Agent 自动附带全局 + 当前界面两层上下文（D13），客户端只报引用、Host 从 core 补齐详情；不够则 ACP 工具查现有 CLI、第一版不做 MCP（D14）；内置说明不入库、可取消任务（D15）；新 UI 先走设计层。
 
 ## Technical Context
 
@@ -36,7 +36,7 @@
 
 | 原则 | 对照结论 |
 |---|---|
-| I. 掌控优先 | FR-022、确认计划、未登录模型不得冒充已写库。通过 |
+| I. 掌控优先 | FR-022、确认计划、未登录模型不得冒充已写库。快照外发到所选 CLI 的模型在 Assumptions 写明，不静默脱敏。通过 |
 | II. Vault 是统一维护中心 | 管理站 crate 不依赖 core；clone 已有远端。通过 |
 | III. 管理能力可持续维护 | 远程与对话走同一套 `.manager` 写入。通过 |
 | IV. 上游与个人成果共存 | 不改 002 更新规则。通过 |
@@ -46,7 +46,7 @@
 
 技术基线：HTTP/SSE/TOTP 是基线内入口扩展。ACP 客户端与隧道库为辅助依赖，实施时选成熟实现，不修订宪章。
 
-**Phase 1 设计后复查**：data-model 把对话/设备放本机或管理站 SQLite、不镜像技能；contracts 让 station 只做登录与转发；`git_auto_push` 仍禁止 Agent/CLI 写。通过。
+**Phase 1 设计后复查**：data-model 把对话/设备放本机或管理站 SQLite、不镜像技能；内置管理说明标明不入库；contracts 让 station 只做登录与转发；`git_auto_push` 仍禁止 Agent/CLI 写。通过。
 
 ## Project Structure
 
@@ -83,7 +83,7 @@ skill-manager/
 └── assets/skills/
     ├── skill-manager-maintenance/
     ├── skill-manager-install/           # 新机器接入
-    └── skill-manager-builtin-agent/     # Host 注入给内置管理 Agent CLI，不是 MCP
+    └── skill-manager-builtin-agent/     # Host 注入给内置管理 Agent CLI；不是 MCP，不入库
 ```
 
 **Structure Decision**: 在现有 Cargo workspace 增加 `host` 与 `station`。桌面、无窗口、管理站共用 `skill-manager` CLI 二进制（桌面包仍用 Tauri 主程序 + 已有 externalBin）。前端仍是一份 Vite 应用。新界面必须先改 `design/` 与 `ui-prototype`，同一轮再改 React。

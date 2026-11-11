@@ -79,7 +79,7 @@ Skill Manager 产品内的对话式管理能力，跑在当前设备的 Host 上
 给新机器上已有的编码 Agent 使用的技能，指导 clone SkillManagerVault、配置并启动 Host、对接管理站；内置管理 Agent 所用 CLI 选型锁定后，再指导该 CLI 的登录。与配套维护 Skill 分开：后者管库内技能与工具，前者把 SkillManager 接到一台电脑上。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
 
 **内置管理说明**:
-Host 注入到内置管理 Agent 所用 CLI 的短说明（仓库源 `skill-manager/assets/skills/skill-manager-builtin-agent/`）：上下文已在消息里、细节用 ACP 工具查、003 的确认与上传规则。不是查询 API（查询走 JSON CLI 工具），也不是配套维护 Skill 或安装 Skill。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md) 与 specs/003 `research.md` D14。
+Host 注入到内置管理 Agent 所用 CLI 的短说明（仓库源 `skill-manager/assets/skills/skill-manager-builtin-agent/`）：上下文已在消息里、细节用 ACP 工具查、003 的确认与上传规则。由 Host 写入该 CLI 的 skills 搜索目录（或 ACP 初始化文本）。**不是**用户 SkillManagerVault 里的技能，不入库、不出现在技能列表、不可部署。不是查询 API（查询走 JSON CLI 工具），也不是配套维护 Skill 或安装 Skill。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md) 与 specs/003 `research.md` D14–D15。
 
 **Maintenance skill（配套维护 Skill）**:
 随 Skill Manager 开发维护的单一技能，内容涵盖库维护规范、CLI（命令行）使用参考与工具安装登记流程；从本项目仓库作为普通上游技能入库与更新，软件生成的维护任务说明引用该技能路径而非内联规范全文。

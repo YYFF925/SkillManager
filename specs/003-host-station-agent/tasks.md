@@ -6,7 +6,7 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 
 **Input**: 本目录 `spec.md`、`plan.md`、`research.md`、`data-model.md`、`contracts/`、`quickstart.md`；约束 [宪章](../../.specify/memory/constitution.md) 2.1.0 与 [ADR 0002](../../docs/adr/0002-host-management-station-and-agent.md)。
 
-**范围**: US1–US3（均可 P1，按 Clarifications 分里程碑 US1 → US2 → US3）。不实现冲突合并界面、主动维护、跨设备总览、唤醒休眠、管理站自行申请证书。对话必须自动带上**全局 + 当前界面**两层上下文（足够办事，举例非穷尽），不要求用户为 Agent 拼现场。技能业务仍走 `skill-manager-core`，不在 Host/station 重写。
+**范围**: US1–US3（均可 P1，按 Clarifications 分里程碑 US1 → US2 → US3）。不实现冲突合并界面、主动维护、跨设备总览、唤醒休眠、管理站自行申请证书。对话必须自动带上**全局 + 当前界面**两层上下文（足够办事，举例非穷尽）：客户端只报引用，Host 从 core 补齐；快照为摘要+计数+引用；内置说明不入库；不要求用户为 Agent 拼现场。技能业务仍走 `skill-manager-core`，不在 Host/station 重写。
 
 **测试**: 规格未要求 TDD。不对每个入口先写失败测试。锁、确认计划、station 不依赖 core 等后果不可逆的边界，在对应实现任务里带 cargo 断言。GUI 与双机场景按 `quickstart.md` 人工验收。
 
@@ -98,24 +98,24 @@ description: "003 Host、管理站与内置管理 Agent 开发任务，按用户
 
 **Goal**: 在当前 Host 上对话完成与 GUI 同类管理；上下文钉死；不主动维护；确认与上传按 FR-019/020。
 
-**Independent Test**: 本机桌面（不经管理站）打开对话，技能详情说「完善中文注释」写入该技能；切到 B 发新指令不串改进行中的 A。
+**Independent Test**: 本机桌面（不经管理站）打开对话，技能详情说「完善中文注释」写入该技能；切到 B 发新指令不串改进行中的 A。不打开详情时「有哪些译文待更新」能对上库内项；取消进行中任务不得显示成功。
 
 ### 设计前置
 
-- [ ] T029 [US3] 在 `specs/001-skill-management-prototype/ui-prototype/index.html`、`prototype.css` 与 `design/DESIGN.md` 增加对话面板（可见当前界面对象、流式结果、确认卡；不必把全局清单画成第二套界面）；同一轮改 `skill-manager/src/` 对应组件。
+- [ ] T029 [US3] 在 `specs/001-skill-management-prototype/ui-prototype/index.html`、`prototype.css` 与 `design/DESIGN.md` 增加对话面板（可见当前界面对象、流式结果、确认卡、取消进行中任务；不必把全局清单画成第二套界面）；同一轮改 `skill-manager/src/` 对应组件。
 
 ### Implementation
 
-- [ ] T030 [US3] 按 `research.md` D9 探测清单测 OpenCode → Codex CLI → Gemini CLI（会话、流式、取消、工具调用、stdio）；将通过者写入 `agent_runtime.cli_id` 约定与实施记录。全部失败则对话入口如实不可用，不得假回复。
-- [ ] T031 [US3] 在 `skill-manager/crates/core/src/state/` 增加 `agent_sessions`（界面会话、钉死快照 JSON：`global` 库级摘要——技能/分类/标签、待更新、译文待更新、部署摘要、失败与暂停；`view` 当前页与打开对象详情/上游/部署）、`agent_messages`（角色、正文、task_id）、`agent_runtime`（cli_id、binary_path、detected_at / installed_by_app）。不进 Vault、不存整库正文。模型密钥不得出现在这些表。
-- [ ] T032 [US3] 在 `skill-manager/crates/host/src/agent/` 用 ACP stdio 拉起已锁定 CLI；检测已装，没有则软件内安装到本机目录，不打进 Skill Manager 安装包。启动时把 `skill-manager/assets/skills/skill-manager-builtin-agent/` 注入该 CLI 的 skills 目录（不注入配套维护 Skill）。未登录模型时只说明无法执行，不写库。第一版不实现 MCP 服务。
-- [ ] T033 [US3] 在 `skill-manager/crates/host/src/agent/tools.rs` 经 ACP 声明工具，映射现有 `skill-manager` JSON CLI **经 Host** 执行，供快照不够时主动查询（读正文、列待更新、查部署等）与写入。不得直打 core。删除/覆盖必须走 T024 计划；Agent 文本「已同意」无效。在 `skill-manager/assets/skills/skill-manager-builtin-agent/` 编写短说明（两层上下文已注入、细节用工具、003 确认与上传），不得抄 002「每次询问上传」。
-- [ ] T034 [US3] 在 `skill-manager/crates/host/src/http.rs` 实现 `PUT /agent/context`（只收 `view`）、`POST /agent/messages`、会话与消息读取（`contracts/host-http.md`）。收消息时 Host 从 core 组装 `global`，与 `view` 一并钉死到该条任务；之后的 `view` 只影响新消息。不得要求用户粘贴报错、清单或技能名。不把整库正文写入快照。
+- [ ] T030 [US3] 按 `research.md` D9 探测清单测 OpenCode → Codex CLI → Gemini CLI（会话、流式、取消、工具调用、stdio、**内置说明注入路径或「无目录则初始化文本」**）；将通过者写入 `agent_runtime.cli_id` 约定与实施记录。全部失败则对话入口如实不可用，不得假回复。
+- [ ] T031 [US3] 在 `skill-manager/crates/core/src/state/` 增加 `agent_sessions`（界面会话、钉死快照 JSON：`global` 为摘要+计数+引用——技能/分类/标签、待更新、译文待更新、部署摘要、失败与暂停、预设/Hermes/工具/本机 Agent 目录摘要；`view` 为 Host 按引用补齐的当前页详情）、`agent_messages`（角色、正文、task_id）、`agent_runtime`（cli_id、binary_path、detected_at / installed_by_app）。不进 Vault、不存整库正文。模型密钥不得出现在这些表。任务状态含已取消。
+- [ ] T032 [US3] 在 `skill-manager/crates/host/src/agent/` 用 ACP stdio 拉起已锁定 CLI；检测已装，没有则软件内安装到本机目录，不打进 Skill Manager 安装包。启动时把 `skill-manager/assets/skills/skill-manager-builtin-agent/` 注入 **该 CLI 的 skills 搜索路径**（探测记录的路径；无目录则 ACP 初始化文本）。该资产不入库、不进用户 `skill list`。不注入配套维护 Skill。未登录模型时只说明无法执行，不写库。第一版不实现 MCP 服务。
+- [ ] T033 [US3] 在 `skill-manager/crates/host/src/agent/tools.rs` 经 ACP 声明工具，映射现有 `skill-manager` JSON CLI **经 Host** 执行，供快照不够时主动查询（读正文、按现有 JSON 字段列待更新、查部署等）与写入。不得直打 core。不得为对话新增 002 筛选开关。删除/覆盖必须走 T024 计划；Agent 文本「已同意」无效。工具失败须交回错误，不得编造正文。在 `skill-manager/assets/skills/skill-manager-builtin-agent/` 编写短说明（两层上下文已注入、细节用工具、003 确认与上传），不得抄 002「每次询问上传」。
+- [ ] T034 [US3] 在 `skill-manager/crates/host/src/http.rs` 实现 `PUT /agent/context`（只收页面与选中引用，不含正文/注释/报错）、`POST /agent/messages`、`POST /agent/tasks/:id/cancel`、会话与消息读取（`contracts/host-http.md`）。收消息时 Host 从 core 组装 `global`，并按引用补齐 `view` 详情，一并钉死到该条任务；之后的 `view` 只影响新消息。引用失效则如实标空。不得要求用户粘贴报错、清单或技能名。不把整库正文写入快照。
 - [ ] T035 [US3] 在 `skill-manager/crates/host/src/agent/tools.rs` 落实 FR-020：有 `git_auto_push` 则内置管理 Agent 可 push 且不逐步确认；无授权则失败并说明去设置开启，Agent 不得写该设置。外部编码 Agent 路径不改 002。
 - [ ] T036 [US3] 在 `skill-manager/crates/host/src/agent/` 只实现对话响应；不实现巡检/自动采用上游/自动入库/无人值守 push。002 调度器保持与对话无关。
-- [ ] T037 [US3] 在 `skill-manager/src/` 接通对话 UI：只上报当前界面 `view`；全局由 Host 组装。用户能说「待更新的那些」「这个技能的上游」而无须点名或粘贴。进行中任务切页不改对象；局部失败分项说明；历史从 Host 本机状态读取。
+- [ ] T037 [US3] 在 `skill-manager/src/` 接通对话 UI：只上报当前界面引用（页面、选中 `ref` 等），不得把详情 JSON 当快照源；全局与详情由 Host 组装。提供取消进行中任务。用户能说「待更新的那些」「这个技能的上游」而无须点名或粘贴。进行中任务切页不改对象；局部失败分项说明；历史从 Host 本机状态读取。第一版不要求多会话工作区。
 - [ ] T038 [P] [US3] 在 `skill-manager/assets/skills/skill-manager-install/` 补「配置已锁定管理 CLI 登录」章节，不与配套维护 Skill 合并。
-- [ ] T039 [US3] 按 `quickstart.md` §3 验收：注释写入、切页不串、删除确认、未授权上传、空闲不改库、未登录不冒充成功；未打开详情时「译文待更新的那些」能对上全局清单；详情页问上游不必粘贴；冲突/暂停不必粘贴报错；快照无全文时 Agent 能用工具读出片段且用户未粘贴。
+- [ ] T039 [US3] 按 `quickstart.md` §3 验收：注释写入、切页不串、删除确认、未授权上传、空闲不改库、未登录不冒充成功；未打开详情时「译文待更新的那些」能对上全局清单；详情页问上游不必粘贴；冲突/暂停不必粘贴报错；快照无全文时 Agent 能用工具读出片段且用户未粘贴；取消进行中任务不得显示成功；内置说明不出现在用户技能列表。
 
 **Checkpoint**: 对话在当前 Host 上可用；管理站切到哪台即用哪台的 Agent。
 
@@ -191,4 +191,5 @@ T011 实现 vault clone（core/cli）
 - `crates/station` 任何时候都不得依赖 core
 - 不要把 002 的「外部 Agent 每次问上传」套到内置管理 Agent
 - 规格「一键命令」= `vault clone` 再 `host serve`（契约允许日后加 `--pair`），不另发明第三条入口
+- 内置管理说明不入库；客户端只报引用；不为对话新增 002 CLI 筛选开关
 - 提交按任务或逻辑组进行；本文件生成不代替实现
