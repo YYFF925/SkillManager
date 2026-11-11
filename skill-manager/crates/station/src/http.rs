@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Path, State, WebSocketUpgrade};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, patch, post, put};
@@ -15,7 +15,7 @@ use axum::{Json, Router};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::{broadcast, mpsc};
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -31,8 +31,14 @@ pub struct AppState {
     pub web_dir: PathBuf,
 }
 
-fn with_db<T>(state: &AppState, f: impl FnOnce(&StationDb) -> Result<T, String>) -> Result<T, String> {
-    let db = state.db.lock().map_err(|_| "管理站数据库锁已损坏".to_string())?;
+fn with_db<T>(
+    state: &AppState,
+    f: impl FnOnce(&StationDb) -> Result<T, String>,
+) -> Result<T, String> {
+    let db = state
+        .db
+        .lock()
+        .map_err(|_| "管理站数据库锁已损坏".to_string())?;
     f(&db)
 }
 
@@ -47,7 +53,11 @@ fn session_id(jar: &CookieJar, headers: &HeaderMap) -> Option<String> {
         })
 }
 
-fn require_session(state: &AppState, jar: &CookieJar, headers: &HeaderMap) -> Result<String, (StatusCode, Json<Value>)> {
+fn require_session(
+    state: &AppState,
+    jar: &CookieJar,
+    headers: &HeaderMap,
+) -> Result<String, (StatusCode, Json<Value>)> {
     let Some(id) = session_id(jar, headers) else {
         return Err((StatusCode::UNAUTHORIZED, Json(json!({ "error": "未登录" }))));
     };
@@ -55,7 +65,10 @@ fn require_session(state: &AppState, jar: &CookieJar, headers: &HeaderMap) -> Re
     if ok {
         Ok(id)
     } else {
-        Err((StatusCode::UNAUTHORIZED, Json(json!({ "error": "登录已过期" }))))
+        Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "登录已过期" })),
+        ))
     }
 }
 
@@ -71,7 +84,8 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/login", post(auth_login))
         .route("/auth/logout", post(auth_logout))
         .route("/auth/session", get(auth_session))
-        .route("/auth/session-ttl", put(auth_ttl))
+        .route("/auth/session-ttl", get(auth_ttl_get).put(auth_ttl))
+        .route("/auth/totp/rebind", post(auth_totp_rebind))
         .route("/devices/pairing-codes", post(pairing_codes))
         .route("/devices", get(list_devices))
         .route("/devices/{id}", patch(rename_device))
@@ -85,7 +99,10 @@ pub fn router(state: AppState) -> Router {
         .route("/current/plans/{id}/confirm", post(current_confirm))
         .route("/current/agent/context", put(current_agent_context))
         .route("/current/agent/messages", post(current_agent_messages))
-        .route("/current/agent/tasks/{id}/cancel", post(current_agent_cancel))
+        .route(
+            "/current/agent/tasks/{id}/cancel",
+            post(current_agent_cancel),
+        )
         .route("/current/host/status", get(current_host_status));
 
     if state.web_dir.is_dir() {
@@ -103,7 +120,9 @@ pub fn router(state: AppState) -> Router {
 async fn frontend_missing() -> impl IntoResponse {
     (
         StatusCode::NOT_FOUND,
-        Json(json!({ "error": "未找到前端静态文件。请先构建 skill-manager 前端，或设置 SKILL_MANAGER_WEB。" })),
+        Json(
+            json!({ "error": "未找到前端静态文件。请先构建 skill-manager 前端，或设置 SKILL_MANAGER_WEB。" }),
+        ),
     )
 }
 
@@ -113,8 +132,13 @@ struct SetupBody {
     password: String,
 }
 
-async fn auth_setup(State(state): State<AppState>, Json(body): Json<SetupBody>) -> impl IntoResponse {
-    match with_db(&state, |db| auth::create_admin(db, &body.username, &body.password)) {
+async fn auth_setup(
+    State(state): State<AppState>,
+    Json(body): Json<SetupBody>,
+) -> impl IntoResponse {
+    match with_db(&state, |db| {
+        auth::create_admin(db, &body.username, &body.password)
+    }) {
         Ok(shown) => Json(json!({
             "username": shown.username,
             "totpSecret": shown.totp_secret,
@@ -134,7 +158,11 @@ async fn auth_totp_setup(State(state): State<AppState>) -> impl IntoResponse {
             "username": admin.username,
         }))
         .into_response(),
-        Ok(_) => (StatusCode::NOT_FOUND, Json(json!({ "error": "请先 POST /auth/setup" }))).into_response(),
+        Ok(_) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "请先 POST /auth/setup" })),
+        )
+            .into_response(),
         Err(err) => err_status(err).into_response(),
     }
 }
@@ -145,7 +173,10 @@ struct OtpBody {
     code: Option<String>,
 }
 
-async fn auth_totp_verify(State(state): State<AppState>, Json(body): Json<OtpBody>) -> impl IntoResponse {
+async fn auth_totp_verify(
+    State(state): State<AppState>,
+    Json(body): Json<OtpBody>,
+) -> impl IntoResponse {
     let otp = body.otp.or(body.code).unwrap_or_default();
     match with_db(&state, |db| auth::verify_totp(db, &otp)) {
         Ok(value) => Json(value).into_response(),
@@ -168,14 +199,27 @@ async fn auth_login(
     Json(body): Json<LoginBody>,
 ) -> impl IntoResponse {
     let otp = body.otp.or(body.recovery_code).unwrap_or_default();
-    match with_db(&state, |db| auth::login(db, &body.username, &body.password, &otp)) {
-        Ok(session) => {
-            let cookie = Cookie::build((auth::cookie_name(), session.clone()))
+    match with_db(&state, |db| {
+        auth::login(db, &body.username, &body.password, &otp)
+    }) {
+        Ok(result) => {
+            let cookie = Cookie::build((auth::cookie_name(), result.session_id.clone()))
                 .path("/")
                 .http_only(true)
                 .same_site(SameSite::Lax)
                 .build();
-            (jar.add(cookie), Json(json!({ "ok": true, "sessionId": session }))).into_response()
+            let mut body = json!({
+                "ok": true,
+                "sessionId": result.session_id,
+                "mustRebindTotp": result.must_rebind_totp,
+            });
+            if let Some(rebind) = result.rebind {
+                body["totpSecret"] = json!(rebind.totp_secret);
+                body["otpauth"] = json!(rebind.otpauth);
+                body["qr"] = json!(rebind.qr_unicode);
+                body["recoveryCodes"] = json!(rebind.recovery_codes);
+            }
+            (jar.add(cookie), Json(body)).into_response()
         }
         Err(err) => err_status(err).into_response(),
     }
@@ -204,7 +248,9 @@ async fn auth_session(
 ) -> impl IntoResponse {
     match require_session(&state, &jar, &headers) {
         Ok(id) => {
-            let device = with_db(&state, |db| auth::session_device(db, &id)).ok().flatten();
+            let device = with_db(&state, |db| auth::session_device(db, &id))
+                .ok()
+                .flatten();
             Json(json!({ "ok": true, "sessionId": id, "deviceId": device })).into_response()
         }
         Err(err) => err.into_response(),
@@ -214,6 +260,20 @@ async fn auth_session(
 #[derive(Deserialize)]
 struct TtlBody {
     seconds: i64,
+}
+
+async fn auth_ttl_get(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Err(err) = require_session(&state, &jar, &headers) {
+        return err.into_response();
+    }
+    match with_db(&state, auth::ttl) {
+        Ok(seconds) => Json(json!({ "ok": true, "seconds": seconds })).into_response(),
+        Err(err) => err_status(err).into_response(),
+    }
 }
 
 async fn auth_ttl(
@@ -226,7 +286,23 @@ async fn auth_ttl(
         return err.into_response();
     }
     match with_db(&state, |db| auth::set_ttl(db, body.seconds)) {
-        Ok(()) => Json(json!({ "ok": true })).into_response(),
+        Ok(seconds) => Json(json!({ "ok": true, "seconds": seconds })).into_response(),
+        Err(err) => err_status(err).into_response(),
+    }
+}
+
+async fn auth_totp_rebind(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    headers: HeaderMap,
+    Json(body): Json<OtpBody>,
+) -> impl IntoResponse {
+    if let Err(err) = require_session(&state, &jar, &headers) {
+        return err.into_response();
+    }
+    let otp = body.otp.or(body.code).unwrap_or_default();
+    match with_db(&state, |db| auth::confirm_totp_rebind(db, &otp)) {
+        Ok(value) => Json(value).into_response(),
         Err(err) => err_status(err).into_response(),
     }
 }
@@ -317,7 +393,11 @@ async fn host_ws(
         .to_string();
     let ok = with_db(&state, |db| devices::verify_device_key(db, &id, &key)).unwrap_or(false);
     if !ok {
-        return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "设备密钥无效或已解除" }))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "设备密钥无效或已解除" })),
+        )
+            .into_response();
     }
     ws.on_upgrade(move |socket| handle_host_socket(state, id, socket))
         .into_response()
@@ -340,8 +420,10 @@ async fn handle_host_socket(state: AppState, device_id: String, socket: WebSocke
         Ok(())
     });
 
-    let mut pending: std::collections::HashMap<String, tokio::sync::oneshot::Sender<Value>> =
-        std::collections::HashMap::new();
+    let mut pending: std::collections::HashMap<
+        String,
+        tokio::sync::oneshot::Sender<crate::devices::InvokeReply>,
+    > = std::collections::HashMap::new();
 
     loop {
         tokio::select! {
@@ -354,8 +436,7 @@ async fn handle_host_socket(state: AppState, device_id: String, socket: WebSocke
                                 Some("invoke_result") => {
                                     if let Some(id) = value.get("id").and_then(Value::as_str) {
                                         if let Some(tx) = pending.remove(id) {
-                                            let body = value.get("body").cloned().unwrap_or(json!(null));
-                                            let _ = tx.send(body);
+                                            let _ = tx.send(proxy::reply_from_host_message(&value));
                                         }
                                     }
                                 }
@@ -416,7 +497,9 @@ async fn set_current(
         )
             .into_response();
     }
-    match with_db(&state, |db| auth::set_session_device(db, &session, Some(&body.device_id))) {
+    match with_db(&state, |db| {
+        auth::set_session_device(db, &session, Some(&body.device_id))
+    }) {
         Ok(()) => Json(json!({ "ok": true, "deviceId": body.device_id })).into_response(),
         Err(err) => err_status(err).into_response(),
     }
@@ -426,10 +509,7 @@ fn current_device(state: &AppState, session: &str) -> Result<String, (StatusCode
     let device = with_db(state, |db| auth::session_device(db, session)).map_err(err_status)?;
     match device {
         Some(id) if state.live.is_online(&id) => Ok(id),
-        Some(id) => Err((
-            StatusCode::CONFLICT,
-            Json(proxy::offline_error(Some(&id))),
-        )),
+        Some(id) => Err((StatusCode::CONFLICT, Json(proxy::offline_error(Some(&id))))),
         None => Err((StatusCode::CONFLICT, Json(proxy::offline_error(None)))),
     }
 }
@@ -455,7 +535,7 @@ async fn current_invoke(
         .and_then(Value::as_str)
         .map(str::to_string);
     match proxy::invoke(&state.live, &device, &command, body, host_session).await {
-        Ok(value) => Json(value).into_response(),
+        Ok(reply) => invoke_response(reply),
         Err(err) => (StatusCode::CONFLICT, Json(json!({ "error": err }))).into_response(),
     }
 }
@@ -513,7 +593,7 @@ async fn current_session(
         Err(err) => return err.into_response(),
     };
     match proxy::invoke(&state.live, &device, "__session__", json!({}), None).await {
-        Ok(value) => Json(value).into_response(),
+        Ok(reply) => invoke_response(reply),
         Err(_) => {
             // Host 没有 __session__ 命令时，由本站生成并让后续 invoke 带上。
             Json(json!({ "sessionId": uuid::Uuid::new_v4().to_string() })).into_response()
@@ -544,8 +624,16 @@ async fn current_confirm(
     };
     // 通过 Host 的 plans confirm：借用 invoke 通道发一条内部命令，失败则说明离线。
     let payload = json!({ "planId": id, "sessionId": body.session_id });
-    match proxy::invoke(&state.live, &device, "plans_confirm", payload, body.session_id).await {
-        Ok(value) => Json(value).into_response(),
+    match proxy::invoke(
+        &state.live,
+        &device,
+        "plans_confirm",
+        payload,
+        body.session_id,
+    )
+    .await
+    {
+        Ok(reply) => invoke_response(reply),
         Err(err) => (StatusCode::CONFLICT, Json(json!({ "error": err }))).into_response(),
     }
 }
@@ -606,9 +694,14 @@ async fn forward_named(
         Err(err) => return err.into_response(),
     };
     match proxy::invoke(&state.live, &device, command, body, None).await {
-        Ok(value) => Json(value).into_response(),
+        Ok(reply) => invoke_response(reply),
         Err(err) => (StatusCode::CONFLICT, Json(json!({ "error": err }))).into_response(),
     }
+}
+
+fn invoke_response(reply: crate::devices::InvokeReply) -> Response {
+    let status = StatusCode::from_u16(reply.status).unwrap_or(StatusCode::BAD_REQUEST);
+    (status, Json(reply.body)).into_response()
 }
 
 /// 给 Host WS 增加 plans_confirm / agent_* / host_status 的本地翻译。

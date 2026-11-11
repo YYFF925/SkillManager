@@ -134,7 +134,7 @@ Agent 改界面前读本文。视觉画布是可操作原型，不是本文的�
 - 共用控件：`.btn` `.seg` `.badge` `.dialog` → `components/ui.tsx`
 - 弹窗：`skillDialog` `deployDialog` `intakeDialog` `drawInstructions` 等 → 同名职责的 `components/*.tsx`
 - 管理站登录：`login-screen` / `login-card` → `pages/LoginPage.tsx`
-- 设备条（仅远程壳）：`device-bar` → `components/DeviceBar.tsx`；桌面原型不得出现「切换其它设备」
+- 设备条（仅远程壳）：`device-bar` → `components/DeviceBar.tsx`；含生成对接码、改名、解除对接；桌面原型不得出现「切换其它设备」
 - 管理对话：`chat-panel` → `components/ChatPanel.tsx`
 
 样式源文件是 `specs/001-skill-management-prototype/ui-prototype/prototype.css`。

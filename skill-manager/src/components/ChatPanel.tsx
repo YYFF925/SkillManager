@@ -96,16 +96,53 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
         return;
       }
       setTaskId(status === "running" ? nextTask : null);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: message || "已收到。", taskId: nextTask },
-      ]);
+      if (message) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: message, taskId: nextTask },
+        ]);
+      }
     } catch (err) {
       setError(String(err));
     } finally {
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!open || !taskId) return;
+    let cancelled = false;
+    const tick = () => {
+      void getTransport()
+        .invoke<{ messages?: ChatMessage[] }>("agent_list_messages", { sessionId })
+        .then((result) => {
+          if (cancelled) return;
+          const rows = result.messages ?? [];
+          setMessages(
+            rows.map((row) => ({
+              role: row.role,
+              text: row.text,
+              taskId: row.taskId,
+            })),
+          );
+          const done = rows.some(
+            (row) =>
+              row.taskId === taskId &&
+              (row.role === "system" ||
+                row.text === "cancelled" ||
+                /失败|未能|未登录|不可用/.test(row.text ?? "")),
+          );
+          if (done) setTaskId(null);
+        })
+        .catch(() => undefined);
+    };
+    tick();
+    const timer = window.setInterval(tick, 800);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [open, sessionId, taskId]);
 
   async function cancel() {
     if (!taskId) return;

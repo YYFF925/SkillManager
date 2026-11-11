@@ -1,17 +1,31 @@
-//! Tauri command 层：薄封装 core，不承载业务规则。
+//! 桌面 IPC：业务经 Host invoke。旧 command 模块仅保留给运行时测试，不再注册。
 
+#[allow(dead_code)]
 pub mod acquire;
+#[allow(dead_code)]
 pub mod agent;
+#[allow(dead_code)]
 pub mod builtin_agent;
+#[allow(dead_code)]
 pub mod deploy;
+#[allow(dead_code)]
 pub mod environment;
+#[allow(dead_code)]
 pub mod hermes;
+pub mod host_invoke;
+#[allow(dead_code)]
 pub mod preset;
+#[allow(dead_code)]
 pub mod settings;
+#[allow(dead_code)]
 pub mod skill;
+#[allow(dead_code)]
 pub mod sync;
+#[allow(dead_code)]
 pub mod tool;
+#[allow(dead_code)]
 pub mod upstream;
+#[allow(dead_code)]
 pub mod vault;
 
 use std::sync::atomic::AtomicBool;
@@ -99,7 +113,10 @@ where
 }
 
 /// 各桌面触发入口共用；仅在内存保留最近一次实际执行报告，避免启动事件早于界面订阅而丢失。
-pub fn run_schedule<R: tauri::Runtime>(app: &tauri::AppHandle<R>, trigger: skill_manager_core::Trigger) -> Result<skill_manager_core::ScheduleReport, String> {
+pub fn run_schedule<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    trigger: skill_manager_core::Trigger,
+) -> Result<skill_manager_core::ScheduleReport, String> {
     let state: tauri::State<'_, AppState> = app.state();
     state.runtime.run_schedule(trigger)
 }
@@ -107,9 +124,9 @@ pub fn run_schedule<R: tauri::Runtime>(app: &tauri::AppHandle<R>, trigger: skill
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use skill_manager_core::sync::{Git, SyncService};
     use std::os::unix::fs::PermissionsExt;
     use std::time::{Duration, Instant};
-    use skill_manager_core::sync::{Git, SyncService};
 
     #[test]
     fn slow_git_upload_does_not_block_local_context_reads_or_edits() {
@@ -118,13 +135,22 @@ mod tests {
         let remote = temp.path().join("remote.git");
         std::fs::create_dir(&repo).unwrap();
         let git = Git::new(&repo);
-        git.ok(&["init", "--quiet", "--initial-branch=main"]).unwrap();
-        git.ok(&["init", "--quiet", "--bare", remote.to_str().unwrap()]).unwrap();
+        git.ok(&["init", "--quiet", "--initial-branch=main"])
+            .unwrap();
+        git.ok(&["init", "--quiet", "--bare", remote.to_str().unwrap()])
+            .unwrap();
         git.ok(&["config", "user.name", "Test"]).unwrap();
-        git.ok(&["config", "user.email", "test@example.invalid"]).unwrap();
+        git.ok(&["config", "user.email", "test@example.invalid"])
+            .unwrap();
         git.ok(&["config", "commit.gpgsign", "false"]).unwrap();
-        git.ok(&["config", "core.hooksPath", repo.join(".git/hooks").to_str().unwrap()]).unwrap();
-        git.ok(&["remote", "add", "origin", remote.to_str().unwrap()]).unwrap();
+        git.ok(&[
+            "config",
+            "core.hooksPath",
+            repo.join(".git/hooks").to_str().unwrap(),
+        ])
+        .unwrap();
+        git.ok(&["remote", "add", "origin", remote.to_str().unwrap()])
+            .unwrap();
         std::fs::write(repo.join("README.md"), "test vault\n").unwrap();
         git.ok(&["add", "-A"]).unwrap();
         git.ok(&["commit", "--quiet", "-m", "initial"]).unwrap();
@@ -134,10 +160,15 @@ mod tests {
         let started = temp.path().join("started");
         let release = temp.path().join("release");
         let hook = repo.join(".git/hooks/pre-push");
-        std::fs::write(&hook, format!(
-            "#!/bin/sh\ntouch '{0}'\nwhile [ ! -f '{1}' ]; do sleep 0.01; done\n",
-            started.display(), release.display(),
-        )).unwrap();
+        std::fs::write(
+            &hook,
+            format!(
+                "#!/bin/sh\ntouch '{0}'\nwhile [ ! -f '{1}' ]; do sleep 0.01; done\n",
+                started.display(),
+                release.display(),
+            ),
+        )
+        .unwrap();
         std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
 
         let ctx = AppContext::open_with_vault(&repo, Some(temp.path().join("state"))).unwrap();
@@ -146,9 +177,15 @@ mod tests {
         let worker = std::thread::spawn(move || {
             worker_state.with_background_context(|ctx| {
                 let resolver = ctx.target_resolver().map_err(|err| err.to_string())?;
-                SyncService::new(ctx.vault().unwrap(), ctx.home().unwrap(), ctx.catalog(), ctx.state(), &resolver)
-                    .push(Some("test upload"))
-                    .map_err(|err| err.to_string())
+                SyncService::new(
+                    ctx.vault().unwrap(),
+                    ctx.home().unwrap(),
+                    ctx.catalog(),
+                    ctx.state(),
+                    &resolver,
+                )
+                .push(Some("test upload"))
+                .map_err(|err| err.to_string())
             })
         });
 

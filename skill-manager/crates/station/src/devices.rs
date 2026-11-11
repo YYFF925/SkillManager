@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use rand::RngCore;
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::sync::{broadcast, mpsc, oneshot};
 
@@ -33,13 +33,20 @@ pub struct LiveLink {
     pub events: broadcast::Sender<Value>,
 }
 
+/// Host 经 WebSocket 返回的 invoke 结果，保留 HTTP 状态（含 409 确认计划）。
+#[derive(Debug, Clone)]
+pub struct InvokeReply {
+    pub status: u16,
+    pub body: Value,
+}
+
 #[derive(Debug)]
 pub struct InvokeReq {
     pub id: String,
     pub command: String,
     pub body: Value,
     pub session_id: Option<String>,
-    pub reply: oneshot::Sender<Value>,
+    pub reply: oneshot::Sender<InvokeReply>,
 }
 
 #[derive(Clone, Default)]
@@ -76,7 +83,10 @@ impl LiveMap {
     }
 
     pub fn get(&self, device_id: &str) -> Option<LiveLink> {
-        self.inner.lock().ok().and_then(|g| g.get(device_id).cloned())
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|g| g.get(device_id).cloned())
     }
 }
 
@@ -152,7 +162,12 @@ pub fn consume_pair(db: &StationDb, body: PairBody) -> Result<Value, String> {
                device_key_hash = excluded.device_key_hash,
                revoked = 0,
                last_seen_at = excluded.last_seen_at",
-            rusqlite::params![body.device_id, body.display_name, hash_code(&body.device_key), now_s],
+            rusqlite::params![
+                body.device_id,
+                body.display_name,
+                hash_code(&body.device_key),
+                now_s
+            ],
         )
         .map_err(|err| err.to_string())?;
     Ok(json!({ "ok": true, "deviceId": body.device_id }))

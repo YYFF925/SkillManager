@@ -82,9 +82,10 @@ skill-manager --state-dir <state-a> host pair --station <url> --code <code> --na
 
 | 项 | 结果 |
 |---|---|
-| `cargo test -p skill-manager-host -p skill-manager-station` | 本轮执行；含锁双开、确认计划绑 session、Agent 不得写 `git_auto_push`、station 不依赖 core |
+| `cargo test -p skill-manager-host -p skill-manager-station` | 本轮执行；含锁双开、确认计划绑 session、Agent 不得写 `git_auto_push`、station 不依赖 core、恢复码登录须重绑 TOTP、station 409 映射、快照全局字段、未检测到 CLI 不得标 running |
 | `cargo check -p skill-manager-host -p skill-manager-station -p skill-manager-cli -p skill-manager-core` | 本轮执行 |
-| 前端 `npm test`（vitest） | 本轮执行；桌面壳 mock `isDesktop() === true` |
+| 前端 `npm test`（vitest） | 本轮 88 项通过；含 DeviceBar 对接码、LoginPage 恢复码重绑、planConfirm 预览、桌面壳 mock `isDesktop() === true` |
+| Phase 7 T044–T055 | 代码已落地并勾选；桌面 crate 本环境缺 `gdk-3.0` 未能 `cargo check -p skill-manager-desktop` |
 | `vault clone` + 真机 `host serve` 互斥与开机项 | **未取证**：Cloud Agent 环境无用户级 launchd/systemd 登录项、无第二台真机 |
 | 管理站双 state-dir 浏览器登录/切换/3 分钟改注释（SC-001） | **未取证**：无图形浏览器连到已配对 Host |
 | 对话「完善中文注释」、切页不串、取消不得成功 | **未取证**：依赖本机已登录的 OpenCode/Codex/Gemini；探测顺序已有单元断言 |

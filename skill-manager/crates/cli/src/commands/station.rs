@@ -18,6 +18,8 @@ pub enum StationAction {
     Serve(ServeArgs),
     /// 仅本机：清除管理员，下次 serve 重新创建。
     ResetAdmin,
+    /// 读取或设置登录保持时长（秒）。
+    SessionTtl(TtlArgs),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -29,13 +31,38 @@ pub struct ServeArgs {
     pub data_dir: Option<PathBuf>,
 }
 
+#[derive(Args, Debug, Clone)]
+pub struct TtlArgs {
+    /// 新的登录保持时长（秒）。省略则只读取当前值。
+    #[arg(long)]
+    pub seconds: Option<i64>,
+    /// 管理站本机数据目录（station.db）。
+    #[arg(long)]
+    pub data_dir: Option<PathBuf>,
+}
+
 pub fn run(command: StationCommand, _options: &GlobalOptions) -> (CliResult, String) {
     match command.action {
         StationAction::Serve(args) => serve_cmd(args),
         StationAction::ResetAdmin => match skill_manager_station::serve::reset_admin(None) {
-            Ok(msg) => (CliResult::success(serde_json::json!({ "message": msg })), msg),
+            Ok(msg) => (
+                CliResult::success(serde_json::json!({ "message": msg })),
+                msg,
+            ),
             Err(err) => (CliResult::failed_message(err.clone()), err),
         },
+        StationAction::SessionTtl(args) => {
+            match skill_manager_station::serve::session_ttl(args.data_dir, args.seconds) {
+                Ok(seconds) => {
+                    let msg = format!("登录保持时长 {seconds} 秒");
+                    (
+                        CliResult::success(serde_json::json!({ "seconds": seconds })),
+                        msg,
+                    )
+                }
+                Err(err) => (CliResult::failed_message(err.clone()), err),
+            }
+        }
     }
 }
 

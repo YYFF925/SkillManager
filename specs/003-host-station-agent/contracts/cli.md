@@ -27,11 +27,13 @@ host status
 ```text
 station serve [--listen <addr>]
 station reset-admin
+station session-ttl [--seconds <n>]
 ```
 
 - `serve`：HTTP 入口，供已有 HTTPS 反代指过来。第一版不在进程内申请证书。`--listen` 默认本机回环或反代可达地址，不要求对公网暴露原始端口策略。
 - 首次启动若无管理员，在本机完成创建（密码 + 绑定一次性密码）。不提供公网注册。
 - `reset-admin`：只能在管理站这台机器执行，清除管理员并要求重新创建。
+- `session-ttl`：读取或设置登录保持时长（秒，最小 60）。省略 `--seconds` 只读取。
 
 ## vault — 新机器接入
 

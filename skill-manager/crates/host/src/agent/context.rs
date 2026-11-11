@@ -1,7 +1,7 @@
 //! 两层上下文：客户端只报引用，Host 从 core 补齐。
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::HostRuntime;
 
@@ -36,8 +36,8 @@ pub fn set_context(runtime: &HostRuntime, body: Value) -> Result<Value, String> 
         .and_then(Value::as_str)
         .ok_or_else(|| "缺少 sessionId".to_string())?
         .to_string();
-    let view: ViewRef = serde_json::from_value(body.get("view").cloned().unwrap_or(json!({})))
-        .unwrap_or_default();
+    let view: ViewRef =
+        serde_json::from_value(body.get("view").cloned().unwrap_or(json!({}))).unwrap_or_default();
     let ctx = runtime.get()?;
     let conn = ctx.state().connection();
     conn.execute(
@@ -92,7 +92,11 @@ pub fn remember_session(runtime: &HostRuntime, session: AgentSession) -> Result<
     Ok(())
 }
 
-pub fn push_message(runtime: &HostRuntime, session_id: &str, message: AgentMessage) -> Result<(), String> {
+pub fn push_message(
+    runtime: &HostRuntime,
+    session_id: &str,
+    message: AgentMessage,
+) -> Result<(), String> {
     let ctx = runtime.get()?;
     ctx.state()
         .connection()
@@ -135,7 +139,9 @@ pub fn list_sessions(runtime: &HostRuntime) -> Result<Value, String> {
     let mut stmt = ctx
         .state()
         .connection()
-        .prepare("SELECT session_id, view_ref, created_at FROM agent_sessions ORDER BY created_at DESC")
+        .prepare(
+            "SELECT session_id, view_ref, created_at FROM agent_sessions ORDER BY created_at DESC",
+        )
         .map_err(|err| err.to_string())?;
     let rows = stmt
         .query_map([], |row| {
@@ -180,12 +186,26 @@ pub fn assemble_snapshot(runtime: &HostRuntime, view: &ViewRef) -> Result<Value,
         Some(v) => v.root().to_path_buf(),
         None => {
             return Ok(json!({
-                "global": { "error": "尚未接入 SkillManagerVault" },
+                "global": {
+                    "error": "尚未接入 SkillManagerVault",
+                    "skillCount": 0,
+                    "skills": [],
+                    "translationStale": [],
+                    "pendingUpdates": [],
+                    "failedChecks": [],
+                    "deployments": [],
+                    "pausedDeployments": [],
+                    "presets": [],
+                    "hermes": { "count": 0, "refs": [] },
+                    "tools": { "count": 0, "refs": [], "failed": [] },
+                    "agents": [],
+                },
                 "view": { "empty": true, "reason": "尚未接入 SkillManagerVault" }
             }));
         }
     };
-    let index = skill_manager_core::vault::index::SkillIndex::build(&vault).map_err(|err| err.to_string())?;
+    let index = skill_manager_core::vault::index::SkillIndex::build(&vault)
+        .map_err(|err| err.to_string())?;
     let skills: Vec<Value> = index
         .all()
         .iter()
@@ -204,7 +224,11 @@ pub fn assemble_snapshot(runtime: &HostRuntime, view: &ViewRef) -> Result<Value,
         .collect();
     let translation_stale: Vec<_> = skills
         .iter()
-        .filter(|s| s.get("translation_stale").and_then(Value::as_bool).unwrap_or(false))
+        .filter(|s| {
+            s.get("translation_stale")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        })
         .cloned()
         .collect();
     let deployments = ctx.state().deployments().map_err(|err| err.to_string())?;
@@ -218,6 +242,97 @@ pub fn assemble_snapshot(runtime: &HostRuntime, view: &ViewRef) -> Result<Value,
             })
         })
         .collect();
+    let paused: Vec<Value> = deployments
+        .iter()
+        .filter(|row| {
+            matches!(
+                row.status,
+                skill_manager_core::state::DeploymentStatus::PausedLocalChange
+            )
+        })
+        .map(|row| {
+            json!({
+                "ref": format!("{}/{}", row.domain, row.name),
+                "target": row.target,
+            })
+        })
+        .collect();
+    let checks = ctx.state().upstream_checks().unwrap_or_default();
+    let pending_updates: Vec<Value> = checks
+        .iter()
+        .filter(|row| row.result.as_deref() == Some("update_available"))
+        .map(|row| {
+            json!({
+                "ref": format!("{}/{}", row.domain, row.name),
+                "repo": row.repo,
+                "remoteVersion": row.remote_version,
+            })
+        })
+        .collect();
+    let failed_checks: Vec<Value> = checks
+        .iter()
+        .filter(|row| row.result.as_deref() == Some("error"))
+        .map(|row| {
+            json!({
+                "ref": format!("{}/{}", row.domain, row.name),
+                "repo": row.repo,
+            })
+        })
+        .collect();
+    let vault_root = vault.clone();
+    let presets = skill_manager_core::preset::list(&vault_root, None)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|preset| {
+            json!({
+                "ref": format!("{}/{}", preset.domain, preset.id),
+                "name": preset.name,
+                "memberCount": preset.members.len(),
+            })
+        })
+        .collect::<Vec<Value>>();
+    let hermes = match ctx.target_resolver() {
+        Ok(resolver) => skill_manager_core::hermes::HermesService::from_context(&ctx, &resolver)
+            .ok()
+            .and_then(|svc| svc.profiles().ok())
+            .map(|profiles| {
+                json!({
+                    "count": profiles.len(),
+                    "refs": profiles.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
+                })
+            })
+            .unwrap_or(json!({ "count": 0, "refs": [] })),
+        Err(_) => json!({ "count": 0, "refs": [] }),
+    };
+    let tools = skill_manager_core::toolcenter::catalog::list(
+        &vault_root,
+        ctx.state(),
+        &skill_manager_core::toolcenter::ToolQuery::default(),
+    )
+    .unwrap_or_default();
+    let tool_summary = json!({
+        "count": tools.len(),
+        "refs": tools.iter().take(50).map(|t| t.slug.clone()).collect::<Vec<_>>(),
+        "failed": tools.iter().filter(|t| t.check.status == "failed").map(|t| t.slug.clone()).collect::<Vec<_>>(),
+    });
+    let agents = match ctx.home() {
+        Ok(home) => {
+            skill_manager_core::deploy::AgentConfigService::new(home, ctx.catalog(), ctx.state())
+                .list()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|agent| {
+                    json!({
+                        "key": agent.key,
+                        "detected": agent.detected,
+                        "enabled": agent.enabled,
+                        "skillsDir": agent.skills_dir,
+                    })
+                })
+                .collect::<Vec<Value>>()
+        }
+        Err(_) => Vec::new(),
+    };
 
     let selected_ref = view
         .selection
@@ -256,8 +371,48 @@ pub fn assemble_snapshot(runtime: &HostRuntime, view: &ViewRef) -> Result<Value,
             "skillCount": skills.len(),
             "translationStale": translation_stale,
             "translationStaleCount": translation_stale.len(),
+            "pendingUpdates": pending_updates,
+            "pendingUpdateCount": pending_updates.len(),
+            "failedChecks": failed_checks,
+            "failedCheckCount": failed_checks.len(),
             "deployments": deploy_summary,
+            "pausedDeployments": paused,
+            "pausedCount": paused.len(),
+            "presets": presets,
+            "presetCount": presets.len(),
+            "hermes": hermes,
+            "tools": tool_summary,
+            "agents": agents,
+            "agentCount": agents.len(),
         },
         "view": view_detail,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::HostRuntime;
+
+    #[test]
+    fn snapshot_has_global_summary_fields_without_bodies() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = skill_manager_core::AppContext::open(Some(dir.path().to_path_buf())).unwrap();
+        let runtime = HostRuntime::from_context(ctx);
+        let snap = assemble_snapshot(&runtime, &ViewRef::default()).unwrap();
+        let global = snap.get("global").expect("global layer");
+        for key in [
+            "skillCount",
+            "pendingUpdates",
+            "pausedDeployments",
+            "presets",
+            "hermes",
+            "tools",
+            "agents",
+            "translationStale",
+        ] {
+            assert!(global.get(key).is_some(), "missing {key}");
+        }
+        assert!(global.get("skills").is_some());
+    }
 }

@@ -10,10 +10,12 @@
 POST /auth/setup          # 仅当尚无管理员：用户名、密码、开始绑定 TOTP
 GET  /auth/totp/setup     # 二维码与密钥、一次性恢复码（只展示一次）
 POST /auth/totp/verify
-POST /auth/login          # 用户名、密码、TOTP 或恢复码
+POST /auth/login          # 用户名、密码、TOTP 或恢复码；恢复码成功时须带 mustRebindTotp 与新密钥/恢复码
 POST /auth/logout
 GET  /auth/session
-PUT  /auth/session-ttl    # 保持登录秒数
+GET  /auth/session-ttl    # 当前保持登录秒数
+PUT  /auth/session-ttl    # 保持登录秒数（最小 60）
+POST /auth/totp/rebind    # 恢复码登录后用新 TOTP 完成绑定
 ```
 
 无管理员时除 `setup` 外一律拒绝。不得公网注册第二人。
@@ -35,7 +37,8 @@ Host 出站对接不走浏览器：Host 使用配对码调用管理站的设备�
 
 ```text
 PUT  /current { deviceId }     # 本管理员会话切换
-POST /current/invoke/<command> # 转到当前 Host 的 /invoke/<command>
+POST /current/invoke/<command> # 转到当前 Host 的 /invoke/<command>；Host 409 / needsConfirmation 原样返回 409
+POST /current/plans/:id/confirm # 转到当前 Host 确认计划（须带签发该计划的 sessionId）
 GET  /current/events           # 转到当前 Host SSE
 ```
 

@@ -4,7 +4,13 @@
 //! 共享资料修改与本机安装结果回写由外部 Agent 经 CLI 核实完成（FR-047/050），因此这里
 //! 不提供直接写 `tool.yaml` 或安装事实的入口，避免绕过“真实核实后回写”。
 
+use std::path::PathBuf;
+
 use serde::Serialize;
+use serde_json::Value;
+use skill_manager_core::domain::SkillRef;
+use skill_manager_core::state::ToolInstallRecord;
+use skill_manager_core::toolcenter::files;
 use skill_manager_core::toolcenter::{self, ToolQuery, ToolStatusFilter, ToolTaskAction};
 use skill_manager_core::vault::index::SkillIndex;
 use skill_manager_core::{ToolCheckOutcome, ToolEntry, ToolSkillCandidates};
@@ -57,10 +63,7 @@ pub fn tool_list(
 }
 
 /// 工具详情：简介、本机事实、检查结果、指南与配套 Skill。
-pub fn tool_get(
-    runtime: &HostRuntime,
-    slug: String,
-) -> Result<ToolEntry, String> {
+pub fn tool_get(runtime: &HostRuntime, slug: String) -> Result<ToolEntry, String> {
     let ctx = runtime.get()?;
     let root = ctx
         .vault()
@@ -135,4 +138,103 @@ pub fn tool_skill_candidates(
         .root()
         .to_path_buf();
     toolcenter::skills::candidates(&root, ctx.state(), &slug).map_err(|err| err.to_string())
+}
+
+fn vault_root(runtime: &HostRuntime) -> Result<PathBuf, String> {
+    Ok(runtime
+        .get()?
+        .vault()
+        .map_err(|err| err.to_string())?
+        .root()
+        .to_path_buf())
+}
+
+/// 从本机目录登记工具（CLI 转发；Host 与 CLI 同机）。
+pub fn tool_register(runtime: &HostRuntime, dir: String) -> Result<Value, String> {
+    let root = vault_root(runtime)?;
+    let dir = PathBuf::from(dir);
+    let path = dir.join(files::TOOL_FILE);
+    let text = std::fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    let file = files::ToolFile::from_yaml(&text, &path).map_err(|err| err.to_string())?;
+    let meta = file.meta().map_err(|err| err.to_string())?;
+    meta.validate().map_err(|err| err.to_string())?;
+    let slug = files::slugify(&meta.name);
+    if files::tool_path(&root, &slug).is_file() {
+        return Err(format!("工具已登记：{slug}"));
+    }
+    let report = files::write_from_dir(&root, &slug, &dir).map_err(|err| err.to_string())?;
+    serde_json::to_value(report).map_err(|err| err.to_string())
+}
+
+/// 从本机目录更新已登记工具资料。
+pub fn tool_set(runtime: &HostRuntime, slug: String, dir: String) -> Result<Value, String> {
+    let root = vault_root(runtime)?;
+    files::ToolFile::load(&root, &slug).map_err(|err| err.to_string())?;
+    let report =
+        files::write_from_dir(&root, &slug, &PathBuf::from(dir)).map_err(|err| err.to_string())?;
+    serde_json::to_value(report).map_err(|err| err.to_string())
+}
+
+/// 回写本机安装事实。
+pub fn tool_set_install(
+    runtime: &HostRuntime,
+    slug: String,
+    version: String,
+    method: Option<String>,
+    path: Option<String>,
+    config_path: Option<String>,
+) -> Result<Value, String> {
+    let ctx = runtime.get()?;
+    let root = ctx
+        .vault()
+        .map_err(|err| err.to_string())?
+        .root()
+        .to_path_buf();
+    files::ToolFile::load(&root, &slug).map_err(|err| err.to_string())?;
+    if version.trim().is_empty() {
+        ctx.state()
+            .clear_tool_install(&slug)
+            .map_err(|err| err.to_string())?;
+        return Ok(serde_json::json!({ "tool": slug, "installed": false, "check_reset": true }));
+    }
+    ctx.state()
+        .set_tool_install(&ToolInstallRecord {
+            tool_slug: slug.clone(),
+            version: version.clone(),
+            method,
+            path,
+            config_path,
+        })
+        .map_err(|err| err.to_string())?;
+    Ok(serde_json::json!({
+        "tool": slug,
+        "installed": true,
+        "version": version,
+        "check_reset": true,
+    }))
+}
+
+/// 添加配套 Skill 关联。
+pub fn tool_skill_link(
+    runtime: &HostRuntime,
+    slug: String,
+    reference: String,
+) -> Result<Value, String> {
+    let root = vault_root(runtime)?;
+    let parsed = SkillRef::parse(&reference).map_err(|err| err.to_string())?;
+    let mut file = files::ToolFile::load(&root, &slug).map_err(|err| err.to_string())?;
+    let added = file.add_skill_link(&files::ToolSkillLink {
+        domain: parsed.domain,
+        name: parsed.name.clone(),
+        repo: None,
+        subpath: None,
+    });
+    if added {
+        file.save().map_err(|err| err.to_string())?;
+    }
+    Ok(serde_json::json!({
+        "tool": slug,
+        "skill": parsed.to_string(),
+        "added": added,
+    }))
 }

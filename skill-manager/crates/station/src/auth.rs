@@ -3,8 +3,8 @@
 use std::io::{self, Write};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand::RngCore;
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
@@ -58,7 +58,7 @@ pub fn load_admin(db: &StationDb) -> Result<Option<AdminRow>, String> {
                     password_hash: row.get(1)?,
                     totp_secret: row.get(2)?,
                     recovery_code_hashes: serde_json::from_str(&hashes).unwrap_or_default(),
-                    session_ttl_seconds: row.get(5)?,
+                    session_ttl_seconds: row.get(4)?,
                 })
             },
         )
@@ -77,7 +77,11 @@ fn hash_password(password: &str) -> Result<String, String> {
 fn verify_password(hash: &str, password: &str) -> bool {
     PasswordHash::new(hash)
         .ok()
-        .and_then(|parsed| Argon2::default().verify_password(password.as_bytes(), &parsed).ok())
+        .and_then(|parsed| {
+            Argon2::default()
+                .verify_password(password.as_bytes(), &parsed)
+                .ok()
+        })
         .is_some()
 }
 
@@ -213,7 +217,11 @@ pub fn session_device(db: &StationDb, session_id: &str) -> Result<Option<String>
     Ok(row.flatten())
 }
 
-pub fn set_session_device(db: &StationDb, session_id: &str, device_id: Option<&str>) -> Result<(), String> {
+pub fn set_session_device(
+    db: &StationDb,
+    session_id: &str,
+    device_id: Option<&str>,
+) -> Result<(), String> {
     db.conn()
         .execute(
             "UPDATE sessions SET last_device_id = ?1 WHERE session_id = ?2",
@@ -230,15 +238,45 @@ pub fn delete_session(db: &StationDb, session_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn set_ttl(db: &StationDb, seconds: i64) -> Result<(), String> {
+pub fn set_ttl(db: &StationDb, seconds: i64) -> Result<i64, String> {
+    if seconds < 60 {
+        return Err("登录保持时长至少 60 秒".to_string());
+    }
     db.conn()
         .execute("UPDATE admin SET session_ttl_seconds = ?1", [seconds])
         .map_err(|err| err.to_string())?;
-    Ok(())
+    Ok(seconds)
 }
 
-/// 登录：用户名 + 密码 + TOTP 或恢复码。
-pub fn login(db: &StationDb, username: &str, password: &str, otp: &str) -> Result<String, String> {
+#[derive(Clone, Debug)]
+pub struct LoginResult {
+    pub session_id: String,
+    pub must_rebind_totp: bool,
+    pub rebind: Option<SetupShown>,
+}
+
+fn mint_totp(username: &str) -> Result<SetupShown, String> {
+    let secret = Secret::generate_secret();
+    let totp_secret = secret.to_encoded().to_string();
+    let totp = totp_from_secret(&totp_secret, username)?;
+    let otpauth = totp.get_url();
+    let recovery_codes = random_codes(8);
+    Ok(SetupShown {
+        username: username.to_string(),
+        totp_secret,
+        otpauth: otpauth.clone(),
+        qr_unicode: qr_unicode(&otpauth),
+        recovery_codes,
+    })
+}
+
+/// 登录：用户名 + 密码 + TOTP 或恢复码。恢复码登录必须能重新绑定 TOTP。
+pub fn login(
+    db: &StationDb,
+    username: &str,
+    password: &str,
+    otp: &str,
+) -> Result<LoginResult, String> {
     let admin = load_admin(db)?.ok_or_else(|| "尚未创建管理员".to_string())?;
     if admin.username != username || !verify_password(&admin.password_hash, password) {
         return Err("用户名或密码不正确".to_string());
@@ -250,24 +288,55 @@ pub fn login(db: &StationDb, username: &str, password: &str, otp: &str) -> Resul
         .and_then(|totp| totp.check_current(otp).ok())
         .unwrap_or(false);
     let recovery_hash = hash_code(otp);
-    let recovery_ok = admin.recovery_code_hashes.iter().any(|h| h == &recovery_hash);
+    let recovery_ok = admin
+        .recovery_code_hashes
+        .iter()
+        .any(|h| h == &recovery_hash);
     if !totp_ok && !recovery_ok {
         return Err("一次性密码或恢复码不正确".to_string());
     }
+    let mut rebind = None;
     if recovery_ok {
-        let remain: Vec<String> = admin
-            .recovery_code_hashes
-            .into_iter()
-            .filter(|h| h != &recovery_hash)
-            .collect();
+        let shown = mint_totp(&admin.username)?;
+        let recovery_hashes: Vec<String> =
+            shown.recovery_codes.iter().map(|c| hash_code(c)).collect();
         db.conn()
             .execute(
-                "UPDATE admin SET recovery_code_hashes = ?1",
-                [serde_json::to_string(&remain).unwrap_or_else(|_| "[]".into())],
+                "UPDATE admin SET totp_secret = ?1, recovery_code_hashes = ?2",
+                rusqlite::params![
+                    shown.totp_secret,
+                    serde_json::to_string(&recovery_hashes).unwrap_or_else(|_| "[]".into()),
+                ],
             )
             .map_err(|err| err.to_string())?;
+        rebind = Some(shown);
     }
-    create_session(db, admin.session_ttl_seconds)
+    let session_id = create_session(db, admin.session_ttl_seconds)?;
+    Ok(LoginResult {
+        session_id,
+        must_rebind_totp: rebind.is_some(),
+        rebind,
+    })
+}
+
+/// 恢复码登录后确认新的 TOTP 已写入验证器。
+pub fn confirm_totp_rebind(db: &StationDb, otp: &str) -> Result<serde_json::Value, String> {
+    let admin = load_admin(db)?.ok_or_else(|| "尚未创建管理员".to_string())?;
+    let secret = admin
+        .totp_secret
+        .ok_or_else(|| "尚未生成新的一次性密码，请重新用恢复码登录".to_string())?;
+    let totp = totp_from_secret(&secret, &admin.username)?;
+    if totp.check_current(otp).unwrap_or(false) {
+        Ok(json!({ "ok": true, "bound": true }))
+    } else {
+        Err("一次性密码不正确，请确认验证器已添加新密钥".to_string())
+    }
+}
+
+pub fn ttl(db: &StationDb) -> Result<i64, String> {
+    Ok(load_admin(db)?
+        .ok_or_else(|| "尚未创建管理员".to_string())?
+        .session_ttl_seconds)
 }
 
 /// 本机交互式创建管理员（仅 TTY）。
@@ -297,11 +366,43 @@ pub fn interactive_setup(db: &StationDb) -> Result<SetupShown, String> {
 
 pub fn verify_totp(db: &StationDb, otp: &str) -> Result<serde_json::Value, String> {
     let admin = load_admin(db)?.ok_or_else(|| "尚未创建管理员".to_string())?;
-    let secret = admin.totp_secret.ok_or_else(|| "尚未绑定一次性密码".to_string())?;
+    let secret = admin
+        .totp_secret
+        .ok_or_else(|| "尚未绑定一次性密码".to_string())?;
     let totp = totp_from_secret(&secret, &admin.username)?;
     if totp.check_current(otp).unwrap_or(false) {
         Ok(json!({ "ok": true }))
     } else {
         Err("一次性密码不正确".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::StationDb;
+
+    #[test]
+    fn recovery_login_issues_new_totp_instead_of_only_a_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StationDb::open(dir.path()).unwrap();
+        let shown = create_admin(&db, "admin", "password1").unwrap();
+        let code = shown.recovery_codes[0].clone();
+        let result = login(&db, "admin", "password1", &code).unwrap();
+        assert!(result.must_rebind_totp);
+        let rebind = result.rebind.expect("recovery login must return new TOTP");
+        assert!(!rebind.totp_secret.is_empty());
+        assert!(!rebind.recovery_codes.is_empty());
+        assert_ne!(rebind.totp_secret, shown.totp_secret);
+        let admin = load_admin(&db).unwrap().unwrap();
+        assert_eq!(
+            admin.totp_secret.as_deref(),
+            Some(rebind.totp_secret.as_str())
+        );
+        let reused = login(&db, "admin", "password1", &code);
+        assert!(
+            reused.is_err(),
+            "consumed recovery code must not work again"
+        );
     }
 }

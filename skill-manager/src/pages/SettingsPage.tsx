@@ -147,6 +147,7 @@ export function SettingsPage({
   const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [manualSchedule, setManualSchedule] = useState<ScheduleReportView | null>(null);
+  const [sessionTtl, setSessionTtl] = useState<string>("");
   const latestSchedule = manualSchedule ?? schedule;
   useEffect(() => setManualSchedule(null), [schedule]);
 
@@ -159,6 +160,23 @@ export function SettingsPage({
   useEffect(() => {
     void currentAppVersion().then(setAppVersion);
   }, []);
+
+  useEffect(() => {
+    if (!remote) return;
+    let cancelled = false;
+    void fetch("/auth/session-ttl", { credentials: "include" })
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(String(body?.error ?? "无法读取登录保持时长"));
+        if (!cancelled) setSessionTtl(String(body.seconds ?? ""));
+      })
+      .catch((err) => {
+        if (!cancelled) setError(String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [remote]);
 
   const changeTheme = useCallback(
     async (value: string) => {
@@ -354,6 +372,46 @@ export function SettingsPage({
               label="托盘／菜单栏图标"
             >
               <ReadOnlyValue>固定开启</ReadOnlyValue>
+            </SettingRow>
+          )}
+
+          {remote && (
+            <SettingRow label="登录保持时长">
+              <input
+                className="h-8 w-[120px] rounded-md border border-line bg-panel px-2 text-[12px]"
+                value={sessionTtl}
+                onChange={(e) => setSessionTtl(e.target.value)}
+                aria-label="登录保持时长（秒）"
+              />
+              <Button
+                compact
+                disabled={busy || !sessionTtl}
+                onClick={() => {
+                  const seconds = Number(sessionTtl);
+                  if (!Number.isFinite(seconds) || seconds < 60) {
+                    setError("登录保持时长至少 60 秒");
+                    return;
+                  }
+                  setBusy(true);
+                  setError(null);
+                  void fetch("/auth/session-ttl", {
+                    method: "PUT",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ seconds }),
+                  })
+                    .then(async (res) => {
+                      const body = await res.json().catch(() => ({}));
+                      if (!res.ok) throw new Error(String(body?.error ?? "无法保存"));
+                      setSessionTtl(String(body.seconds ?? seconds));
+                      setNotice(`登录保持时长已设为 ${body.seconds ?? seconds} 秒。`);
+                    })
+                    .catch((err) => setError(String(err)))
+                    .finally(() => setBusy(false));
+                }}
+              >
+                保存
+              </Button>
             </SettingRow>
           )}
         </div>

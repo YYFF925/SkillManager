@@ -23,7 +23,10 @@ pub fn frontend_dir() -> PathBuf {
         return PathBuf::from(path);
     }
     if let Ok(exe) = std::env::current_exe() {
-        let next_to_exe = exe.parent().unwrap_or(std::path::Path::new(".")).join("web");
+        let next_to_exe = exe
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join("web");
         if next_to_exe.is_dir() {
             return next_to_exe;
         }
@@ -39,7 +42,9 @@ pub fn run_blocking(listen: SocketAddr, data_dir: Option<PathBuf>) -> Result<(),
         if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
             auth::interactive_setup(&db)?;
         } else {
-            eprintln!("尚未创建管理员。请在本机打开终端运行 `skill-manager station serve`，或 POST /auth/setup。");
+            eprintln!(
+                "尚未创建管理员。请在本机打开终端运行 `skill-manager station serve`，或 POST /auth/setup。"
+            );
         }
     }
     let state = AppState {
@@ -69,4 +74,14 @@ pub fn reset_admin(data_dir: Option<PathBuf>) -> Result<String, String> {
     let db = StationDb::open(&dir)?;
     auth::reset_admin(&db)?;
     Ok("已清除管理员，下次 station serve 将重新创建。".to_string())
+}
+
+/// 读取或设置管理员会话保持时长。
+pub fn session_ttl(data_dir: Option<PathBuf>, seconds: Option<i64>) -> Result<i64, String> {
+    let dir = data_dir.unwrap_or_else(default_data_dir);
+    let db = StationDb::open(&dir)?;
+    match seconds {
+        Some(value) => auth::set_ttl(&db, value),
+        None => auth::ttl(&db),
+    }
 }

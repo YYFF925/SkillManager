@@ -15,6 +15,7 @@ import { InstructionEditor } from "./components/InstructionEditor";
 import { FastTooltip } from "./components/FastTooltip";
 import { AppUpdateDialog } from "./components/AppUpdateDialog";
 import { DeviceBar } from "./components/DeviceBar";
+import { PlanConfirmHost } from "./components/PlanConfirmHost";
 import { ChatPanel, type ChatViewRef } from "./components/ChatPanel";
 import { Button, Notice } from "./components/ui";
 import { checkForAppUpdate, type AppUpdate } from "./lib/appUpdate";
@@ -471,6 +472,7 @@ export function App() {
 
   return (
     <>
+    <PlanConfirmHost />
     <AppShell
       groups={groups}
       settingsItem={settingsItem}

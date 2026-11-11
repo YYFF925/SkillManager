@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::identity::{self, HostIdentity};
 use crate::HostRuntime;
+use crate::identity::{self, HostIdentity};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,8 +83,15 @@ pub fn pair(
             paired_at: Some(chrono::Utc::now().to_rfc3339()),
         },
     )?;
-    spawn_link(runtime.clone(), station_url.trim_end_matches('/').to_string(), device_id, device_key);
-    identity::read(runtime.get()?.state()).map_err(|err| err.to_string())?.ok_or_else(|| "对接已完成但本机身份未写入".to_string())
+    spawn_link(
+        runtime.clone(),
+        station_url.trim_end_matches('/').to_string(),
+        device_id,
+        device_key,
+    );
+    identity::read(runtime.get()?.state())
+        .map_err(|err| err.to_string())?
+        .ok_or_else(|| "对接已完成但本机身份未写入".to_string())
 }
 
 /// `host unpair`：清本机 station_url / device_key。
@@ -125,7 +132,12 @@ fn spawn_link(runtime: HostRuntime, station_url: String, device_id: String, devi
     });
 }
 
-async fn link_loop(runtime: HostRuntime, station_url: String, device_id: String, device_key: String) {
+async fn link_loop(
+    runtime: HostRuntime,
+    station_url: String,
+    device_id: String,
+    device_key: String,
+) {
     let ws_url = station_ws_url(&station_url, &device_id);
     loop {
         match connect_once(&runtime, &ws_url, &device_key).await {
@@ -137,9 +149,10 @@ async fn link_loop(runtime: HostRuntime, station_url: String, device_id: String,
         tokio::time::sleep(Duration::from_secs(5)).await;
         // 解除对接后 identity.station_url 为空，停止。
         let still_paired = runtime.get().ok().and_then(|ctx| {
-            identity::read(ctx.state()).ok().flatten().map(|id| {
-                !id.station_url.is_empty() && id.device_id == device_id
-            })
+            identity::read(ctx.state())
+                .ok()
+                .flatten()
+                .map(|id| !id.station_url.is_empty() && id.device_id == device_id)
         });
         if still_paired != Some(true) {
             break;
@@ -177,13 +190,17 @@ fn station_ws_url(station_url: &str, device_id: &str) -> String {
 
 async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> Result<(), String> {
     use futures_util::{SinkExt, StreamExt};
-    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
     use tokio_tungstenite::tungstenite::Message;
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
-    let mut request = ws_url.into_client_request().map_err(|err| err.to_string())?;
+    let mut request = ws_url
+        .into_client_request()
+        .map_err(|err| err.to_string())?;
     request.headers_mut().insert(
         "authorization",
-        format!("Bearer {device_key}").parse().map_err(|err: axum::http::header::InvalidHeaderValue| err.to_string())?,
+        format!("Bearer {device_key}")
+            .parse()
+            .map_err(|err: axum::http::header::InvalidHeaderValue| err.to_string())?,
     );
     let (ws, _) = tokio_tungstenite::connect_async(request)
         .await
@@ -234,23 +251,46 @@ where
     if value.get("type").and_then(|v| v.as_str()) != Some("invoke") {
         return;
     }
-    let id = value.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let command = value.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let id = value
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let command = value
+        .get("command")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let body = value.get("body").cloned().unwrap_or(json!({}));
-    let session = value.get("sessionId").and_then(|v| v.as_str()).map(str::to_string);
+    let session = value
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
     let runtime = runtime.clone();
     let result = tokio::task::spawn_blocking(move || {
-        invoke::invoke(&runtime, &command, body, InvokeSource::Gui, session.as_deref())
+        invoke::invoke(
+            &runtime,
+            &command,
+            body,
+            InvokeSource::Gui,
+            session.as_deref(),
+        )
     })
     .await;
-    let (ok, payload) = match result {
-        Ok(Ok(v)) => (true, v),
+    let (ok, status, payload) = match result {
+        Ok(Ok(v)) => (true, 200u16, v),
         Ok(Err(err)) => {
-            let (_, body) = err.status_and_body();
-            (false, body)
+            let (status, body) = err.status_and_body();
+            (false, status, body)
         }
-        Err(err) => (false, json!({ "error": err.to_string() })),
+        Err(err) => (false, 500, json!({ "error": err.to_string() })),
     };
-    let reply = json!({ "type": "invoke_result", "id": id, "ok": ok, "body": payload });
+    let reply = json!({
+        "type": "invoke_result",
+        "id": id,
+        "ok": ok,
+        "status": status,
+        "body": payload,
+    });
     let _ = sink.send(Message::Text(reply.to_string().into())).await;
 }
