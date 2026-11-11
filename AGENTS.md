@@ -12,7 +12,7 @@
 | [GLOSSARY.md](GLOSSARY.md) | 领域术语与边界 | 对库、管理域、同步、部署等概念有疑问时 |
 | [docs/requirements.md](docs/requirements.md) | 核心需求、访谈结论、修订与未决事项 | 确认用户意图、查找业务规则或继续需求讨论时，定位相关章节阅读 |
 | [docs/legacy-skill-capabilities.md](docs/legacy-skill-capabilities.md) | 旧能力盘点及当前范围裁决 | 核对旧能力是否保留、调整或暂缓时；区分已确认裁决与后面的旧事实清单 |
-| `docs/adr/` | ADR（架构决策记录），说明跨功能边界及原因 | 任务涉及对应决策时，例如共享库与本机状态的边界 |
+| `docs/adr/` | ADR（架构决策记录），说明跨功能边界及原因 | 任务涉及对应决策时，例如共享库与本机状态的边界、本机 Host 与统一管理站 |
 | [docs/technical-reference/README.md](docs/technical-reference/README.md) | 本项目技术参考索引 | 需要接入数据、素材、实现经验或旧行为教训时，先查索引，再读对应主题 |
 | `docs/tasks/` | 提取、调查等专项任务单 | 执行或复查对应专项任务时；不是功能开发任务的统一入口 |
 | [design/](design/README.md) | 前端设计层：看设计、改原型、把正式界面改到与原型一致 | 任何会改变 GUI 外观或交互的工作；先读本入口再改原型 |

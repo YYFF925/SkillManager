@@ -66,5 +66,14 @@ Hermes 中独立的配置与数据目录，各 Agent 可使用各自档案运行
 **Tool record（工具登记）**:
 工具中心的共享资料（登记条目、简介、维护指南、版本检查命令）与本机安装记录（版本、安装方式、路径、检查状态）的组合；共享部分随 SkillManagerVault 同步，安装记录各机独立。工具程序本身不在同步范围，实际安装由外部 Agent 执行。版本检查命令由 Agent 按工具实际情况编写，软件执行命令并对比版本，不内置按来源类型的解析。
 
+**Host（本机管理服务）**:
+每台安装了 Skill Manager 的电脑上的本机服务：统一操作入口、任务协调、事件、与管理站的密钥对接、以及内置管理 Agent 的运行。Vault、部署、Hermes 目录与 SQLite 仍在这台机器。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
+
+**管理站（统一管理站）**:
+远程入口：一次登录、用设备密钥对接各机 Host、登录后切换设备并打开**当前那一台**的完整 Skill Manager 界面。不持有 Vault，不在同一屏里总览所有设备。发布形态不限定为 Docker。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
+
+**内置管理 Agent（管理 Agent）**:
+Skill Manager 产品内的对话式管理能力，跑在当前设备的 Host 上，经 GUI 或管理站网页使用。不是设置页里的「内置 Agent 名单」（那些是部署目标），也不是把任务复制到软件外的编码 Agent。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
+
 **Maintenance skill（配套维护 Skill）**:
 随 Skill Manager 开发维护的单一技能，内容涵盖库维护规范、CLI（命令行）使用参考与工具安装登记流程；从本项目仓库作为普通上游技能入库与更新，软件生成的维护任务说明引用该技能路径而非内联规范全文。
