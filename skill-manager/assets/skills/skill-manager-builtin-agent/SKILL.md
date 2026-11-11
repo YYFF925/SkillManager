@@ -22,7 +22,7 @@ description: 内置管理 Agent 短说明。两层上下文已注入；细节用
 
 ## 细节用工具
 
-快照不够时用 ACP 工具，经 Host 执行现有 JSON CLI（`skill_list` / `skill_get` / `skill_read` / `skill_set` / 部署与同步等）。不要直打 core。不要为对话发明 002 没有的筛选开关。
+快照不够时用 Host 经 ACP `session/new.mcpServers` 声明的工具（`skill_list` / `skill_get` / `skill_read` / `skill_set` 等），经 Host 执行现有 JSON CLI。不要直打 core，不要用 bash/edit 直写库文件。不要为对话发明 002 没有的筛选开关。
 
 工具失败把错误交回用户，不要编造正文。
 

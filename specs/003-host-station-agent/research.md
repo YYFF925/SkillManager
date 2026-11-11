@@ -84,11 +84,11 @@
 - **Rationale**: FR-015/021 Clarifications 2026-11-11。
 - **Alternatives**: 只给当前页（被拒：不够，用户仍要点名「待更新的那些」）；只给冲突事故（被拒：冲突只是全局事实的一类）；每条消息贴全文（被拒：体积与重复，细节走 CLI）；浏览器把详情 JSON 推给 Host（被拒：易过期，且等于让用户侧拼现场）。
 
-### D14 主动查询走 ACP 工具接现有 CLI；短说明 Skill 只讲规则；第一版不做 MCP
+### D14 主动查询走 ACP 工具接现有 CLI；短说明 Skill 只讲规则；不另做用户向 MCP 产品
 
-- **Decision**: 快照推送不够时，Agent 用 ACP 工具拉取（读正文、列待更新、查部署等），工具 = 经 Host 转发的 002 JSON CLI（含现有 `translation_stale` 等字段）。**不为对话新增 002 筛选开关。** Host 注入与安装 Skill、配套维护 Skill 分开的 `skill-manager-builtin-agent` 短说明，不把维护 Skill 的「每次询问上传」套进来。第一版不实现 MCP 网关（与 D9 一致）。
-- **Rationale**: 查询能力要有；MCP 会与已有 CLI 双协议。配套维护 Skill 面向外部编码 Agent，规则与内置路径冲突。`skill list` JSON 已能表达译文时效，不必为 003 改 002 命令表。
-- **Alternatives**: 只靠快照、不准再查（被拒：不可能把全部正文放进每条消息）；MCP 平行实现（被拒：D9）；把维护 Skill 原文塞给内置 Agent（被拒：FR-020 与 FR-038 不同）；新增 `--translation-stale` 一类 002 flag（被拒：现有 JSON 字段足够，003 不重写 002 契约）。
+- **Decision**: 快照推送不够时，Agent 用 ACP 工具拉取（读正文、列待更新、查部署等），工具 = 经 Host 转发的 002 JSON CLI（含现有 `translation_stale` 等字段）。向真 CLI 声明这些工具必须走 ACP `session/new.mcpServers`（stdio + JSON Schema），不能只塞进 `initialize`。**不为对话新增 002 筛选开关。** Host 注入与安装 Skill、配套维护 Skill 分开的 `skill-manager-builtin-agent` 短说明，不把维护 Skill 的「每次询问上传」套进来。不另做给 GUI/用户用的 MCP 网关；stdio MCP 只是 ACP 声明 Host 工具的协议通道。
+- **Rationale**: 真 CLI 只认协议里的 mcpServers / MCP tools/list。查询能力要有；配套维护 Skill 面向外部编码 Agent，规则与内置路径冲突。`skill list` JSON 已能表达译文时效，不必为 003 改 002 命令表。
+- **Alternatives**: 只靠快照、不准再查（被拒：不可能把全部正文放进每条消息）；只把 descriptors 塞进 initialize（被拒：真 CLI 调不到）；把维护 Skill 原文塞给内置 Agent（被拒：FR-020 与 FR-038 不同）；新增 `--translation-stale` 一类 002 flag（被拒：现有 JSON 字段足够，003 不重写 002 契约）。
 
 ### D15 注入路径、快照边界、取消与模型外发（查漏补缺）
 

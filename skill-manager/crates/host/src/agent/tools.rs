@@ -1,8 +1,9 @@
-//! ACP 工具：映射现有 JSON CLI，经 Host 执行。第一版不做 MCP。
+//! ACP 工具：映射现有 JSON CLI，经 Host 执行。
+//! 向子进程声明的方式是 ACP `session/new.mcpServers`（stdio），不是把清单塞进 initialize。
 
 use std::path::{Path, PathBuf};
 
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::HostRuntime;
 use crate::invoke::{self, InvokeError, InvokeSource};
@@ -63,8 +64,38 @@ pub fn builtin_skill_dir() -> PathBuf {
         .join("../../assets/skills/skill-manager-builtin-agent")
 }
 
-fn canonical_name(name: &str) -> String {
-    name.replace('.', "_")
+pub(crate) fn canonical_name(name: &str) -> String {
+    name.replace('.', "_").replace('-', "_")
+}
+
+/// 去掉 MCP 前缀后看是否在 allowlist。
+pub fn is_allowed(name: &str) -> bool {
+    tool_command_name(name).is_some()
+}
+
+pub fn tool_command_name(name: &str) -> Option<String> {
+    basename(name)
+}
+
+fn basename(name: &str) -> Option<String> {
+    let c = canonical_name(name.trim());
+    if c.is_empty() {
+        return None;
+    }
+    if ALLOWED.contains(&c.as_str()) {
+        return Some(c);
+    }
+    for sep in ["__", "/", ":"] {
+        if let Some((_, rest)) = c.rsplit_once(sep) {
+            if ALLOWED.contains(&rest) {
+                return Some(rest.to_string());
+            }
+        }
+    }
+    ALLOWED
+        .iter()
+        .find(|item| c.ends_with(&format!("_{item}")))
+        .map(|item| (*item).to_string())
 }
 
 /// 把工具调用转到 Host invoke / 现有 JSON CLI。
@@ -74,16 +105,14 @@ pub fn run_tool(
     args: Value,
     session_id: Option<&str>,
 ) -> Result<Value, String> {
-    let command = canonical_name(name);
-    if command == "plans_confirm" || command == "plans.confirm" {
+    let raw = canonical_name(name);
+    if raw.contains("plans_confirm") || name.contains("plans.confirm") {
         return Err("内置管理 Agent 不能代替用户确认破坏性操作。请在界面确认。".to_string());
     }
-    if command == "settings_set_git_auto_push" {
+    if raw.contains("settings_set_git_auto_push") {
         return Err("内置管理 Agent 不能修改自动上传授权；请在设置中开启".to_string());
     }
-    if !ALLOWED.contains(&command.as_str()) {
-        return Err(format!("未知或不允许的管理工具：{command}"));
-    }
+    let command = basename(name).ok_or_else(|| format!("未知或不允许的管理工具：{name}"))?;
     if command == "sync_push" {
         let ctx = runtime.get()?;
         if !ctx.state().git_auto_push().map_err(|err| err.to_string())? {
@@ -92,6 +121,7 @@ pub fn run_tool(
             );
         }
     }
+    let args = normalize_args(&command, args);
     match invoke::invoke(runtime, &command, args, InvokeSource::Agent, session_id) {
         Ok(value) => Ok(value),
         Err(InvokeError::NeedsPlan(plan)) => Err(format!(
@@ -109,13 +139,159 @@ pub fn run_tool(
     }
 }
 
-pub fn tool_descriptors() -> Value {
-    json!(
-        ALLOWED
-            .iter()
-            .map(|name| json!({ "name": name, "description": tool_description(name) }))
-            .collect::<Vec<_>>()
-    )
+/// 快照里常用 `ref` / 单数 `reference`，删除命令要的是 `references[]`。
+pub fn normalize_args(command: &str, args: Value) -> Value {
+    let mut obj = match args {
+        Value::Object(map) => map,
+        other => {
+            let mut map = Map::new();
+            if other.is_string() && command != "skill_list" {
+                map.insert("reference".into(), other);
+                return Value::Object(map);
+            }
+            return other;
+        }
+    };
+    if matches!(
+        command,
+        "skill_get"
+            | "skill_read"
+            | "skill_file_read"
+            | "skill_set"
+            | "skill_translation_get"
+            | "skill_overlay_list"
+            | "skill_overlay_get"
+    ) && !obj.contains_key("reference")
+    {
+        if let Some(r) = obj.get("ref").cloned() {
+            obj.insert("reference".into(), r);
+        } else if let Some(Value::Array(items)) = obj.get("references").cloned() {
+            if let Some(first) = items.first() {
+                obj.insert("reference".into(), first.clone());
+            }
+        }
+    }
+    if command == "skill_delete" && !obj.contains_key("references") {
+        if let Some(r) = obj
+            .get("reference")
+            .cloned()
+            .or_else(|| obj.get("ref").cloned())
+        {
+            match r {
+                Value::Array(_) => {
+                    obj.insert("references".into(), r);
+                }
+                Value::String(_) => {
+                    obj.insert("references".into(), json!([r]));
+                }
+                _ => {}
+            }
+        }
+    }
+    Value::Object(obj)
+}
+
+pub fn mcp_tools() -> Vec<Value> {
+    ALLOWED
+        .iter()
+        .map(|name| {
+            json!({
+                "name": name,
+                "description": tool_description(name),
+                "inputSchema": tool_input_schema(name),
+            })
+        })
+        .collect()
+}
+
+fn str_prop(desc: &str) -> Value {
+    json!({ "type": "string", "description": desc })
+}
+
+fn str_array(desc: &str) -> Value {
+    json!({ "type": "array", "items": { "type": "string" }, "description": desc })
+}
+
+fn tool_input_schema(name: &str) -> Value {
+    let (required, properties): (&[&str], Value) = match name {
+        "skill_list" => (
+            &[],
+            json!({
+                "domain": str_prop("管理域，可空"),
+                "query": str_prop("搜索字"),
+                "category": str_prop("分类"),
+            }),
+        ),
+        "skill_get" | "skill_read" | "skill_set" | "skill_translation_get" => (
+            &["reference"],
+            json!({
+                "reference": str_prop("技能引用，如 code/foo"),
+                "ref": str_prop("reference 的别名"),
+                "comment": str_prop("skill_set：中文注释"),
+                "tags": str_array("skill_set：标签"),
+                "lang": str_prop("skill_read：zh 或 orig"),
+            }),
+        ),
+        "skill_file_read" => (
+            &["reference", "path"],
+            json!({
+                "reference": str_prop("技能引用"),
+                "path": str_prop("技能目录内相对路径"),
+            }),
+        ),
+        "skill_delete" => (
+            &["references"],
+            json!({
+                "references": str_array("要删除的技能引用"),
+                "reference": str_prop("单个引用，与 references 二选一"),
+                "ref": str_prop("单个引用别名"),
+            }),
+        ),
+        "deploy_to" | "deploy_sync" => (
+            &["references"],
+            json!({
+                "references": str_array("技能引用"),
+                "targets": str_array("部署目标"),
+                "overwriteLocal": { "type": "boolean", "description": "覆盖已改动的副本；须界面确认" },
+            }),
+        ),
+        "preset_get" => (
+            &["id"],
+            json!({ "id": str_prop("预设 id"), "domain": str_prop("管理域") }),
+        ),
+        "hermes_read" | "hermes_list" => (
+            &["profile"],
+            json!({
+                "profile": str_prop("Hermes 档案"),
+                "name": str_prop("hermes_read：技能名"),
+            }),
+        ),
+        "tool_get" | "tool_skill_candidates" => {
+            (&["slug"], json!({ "slug": str_prop("工具 slug") }))
+        }
+        "agent_local_skills" => (
+            &["target"],
+            json!({ "target": str_prop("本机 Agent 目标") }),
+        ),
+        "agent_read_local" => (
+            &["target", "name"],
+            json!({
+                "target": str_prop("本机 Agent 目标"),
+                "name": str_prop("技能名"),
+            }),
+        ),
+        "instruction_get" => (&["scope"], json!({ "scope": str_prop("指令范围") })),
+        _ => (&[], json!({})),
+    };
+    let mut schema = json!({
+        "type": "object",
+        "additionalProperties": true,
+        "properties": properties,
+    });
+    if !required.is_empty() {
+        schema["required"] = json!(required);
+    }
+    schema
 }
 
 fn tool_description(name: &str) -> &'static str {
@@ -192,5 +368,54 @@ mod tests {
             Some("agent"),
         );
         assert!(invoke_denied.is_err());
+    }
+
+    #[test]
+    fn descriptors_include_input_schema_for_core_tools() {
+        let tools = mcp_tools();
+        for name in [
+            "skill_list",
+            "skill_get",
+            "skill_read",
+            "skill_set",
+            "skill_delete",
+        ] {
+            let tool = tools
+                .iter()
+                .find(|item| item["name"] == name)
+                .unwrap_or_else(|| panic!("missing {name}"));
+            assert!(
+                tool["inputSchema"]["type"] == "object",
+                "{name} must declare JSON Schema"
+            );
+        }
+        let delete = tools
+            .iter()
+            .find(|item| item["name"] == "skill_delete")
+            .unwrap();
+        assert!(
+            delete["inputSchema"]["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == "references")
+        );
+    }
+
+    #[test]
+    fn skill_delete_accepts_ref_alias() {
+        let out = normalize_args("skill_delete", json!({ "ref": "code/demo" }));
+        assert_eq!(out["references"][0], "code/demo");
+        let out = normalize_args("skill_get", json!({ "ref": "code/demo" }));
+        assert_eq!(out["reference"], "code/demo");
+    }
+
+    #[test]
+    fn mcp_prefixed_names_are_allowed() {
+        assert!(is_allowed("skill_list"));
+        assert!(is_allowed("skill-manager__skill_set"));
+        assert!(is_allowed("mcp_skill-manager_skill_read"));
+        assert!(!is_allowed("bash"));
+        assert!(!is_allowed("plans_confirm"));
     }
 }

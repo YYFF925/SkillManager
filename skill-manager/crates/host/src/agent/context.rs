@@ -179,6 +179,33 @@ pub fn list_messages(runtime: &HostRuntime, session_id: &str) -> Result<Value, S
     Ok(json!({ "sessionId": session_id, "messages": messages }))
 }
 
+/// 同一 Host 对话里、本轮之前的消息，供新 ACP session 回灌。
+pub fn prior_transcript(runtime: &HostRuntime, session_id: &str, current_task_id: &str) -> String {
+    let Ok(list) = list_messages(runtime, session_id) else {
+        return String::new();
+    };
+    let Some(messages) = list.get("messages").and_then(Value::as_array) else {
+        return String::new();
+    };
+    let mut out = String::new();
+    for msg in messages {
+        if msg.get("taskId").and_then(Value::as_str) == Some(current_task_id) {
+            continue;
+        }
+        let role = msg.get("role").and_then(Value::as_str).unwrap_or("user");
+        let text = msg.get("text").and_then(Value::as_str).unwrap_or("");
+        if text.is_empty() {
+            continue;
+        }
+        out.push_str("### ");
+        out.push_str(role);
+        out.push('\n');
+        out.push_str(text);
+        out.push_str("\n\n");
+    }
+    out
+}
+
 fn empty_global(reason: &str) -> Value {
     json!({
         "error": reason,
@@ -785,5 +812,59 @@ mod tests {
         assert!(snap["global"]["newCandidates"].is_array());
         assert!(snap["global"]["pullConflicts"].is_object());
         assert!(snap["global"]["lastCommandFailures"].is_array());
+    }
+
+    #[test]
+    fn prior_transcript_skips_current_task() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = skill_manager_core::AppContext::open(Some(dir.path().to_path_buf())).unwrap();
+        let runtime = HostRuntime::from_context(ctx);
+        remember_session(
+            &runtime,
+            AgentSession {
+                session_id: "s1".into(),
+                view: ViewRef::default(),
+                snapshot: json!({}),
+                created_at: chrono::Utc::now().to_rfc3339(),
+            },
+        )
+        .unwrap();
+        push_message(
+            &runtime,
+            "s1",
+            AgentMessage {
+                role: "user".into(),
+                text: "先改注释".into(),
+                task_id: Some("t1".into()),
+                created_at: chrono::Utc::now().to_rfc3339(),
+            },
+        )
+        .unwrap();
+        push_message(
+            &runtime,
+            "s1",
+            AgentMessage {
+                role: "assistant".into(),
+                text: "已改".into(),
+                task_id: Some("t1".into()),
+                created_at: chrono::Utc::now().to_rfc3339(),
+            },
+        )
+        .unwrap();
+        push_message(
+            &runtime,
+            "s1",
+            AgentMessage {
+                role: "user".into(),
+                text: "再口语一点".into(),
+                task_id: Some("t2".into()),
+                created_at: chrono::Utc::now().to_rfc3339(),
+            },
+        )
+        .unwrap();
+        let text = prior_transcript(&runtime, "s1", "t2");
+        assert!(text.contains("先改注释"));
+        assert!(text.contains("已改"));
+        assert!(!text.contains("再口语一点"));
     }
 }

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 use skill_manager_core::{CliResult, GlobalOptions};
-use skill_manager_host::{serve, service, HostLock, HostRuntime};
+use skill_manager_host::{HostLock, HostRuntime, serve, service};
 
 #[derive(Args, Debug, Clone)]
 pub struct HostCommand {
@@ -27,6 +27,8 @@ pub enum HostAction {
     Pair(PairArgs),
     /// 解除对接，清本机 station_url 与 device_key。
     Unpair,
+    /// ACP 子进程用的 Host 工具通道（stdio）。不占 host.lock，不单独作为用户 MCP 产品。
+    Mcp,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -51,15 +53,28 @@ pub fn run(command: HostCommand, options: &GlobalOptions) -> (CliResult, String)
         HostAction::Serve(args) => serve_cmd(options, args),
         HostAction::Status => status_cmd(options),
         HostAction::InstallService => match service::install(options.state_dir.as_deref()) {
-            Ok(msg) => (CliResult::success(serde_json::json!({ "message": msg })), msg),
+            Ok(msg) => (
+                CliResult::success(serde_json::json!({ "message": msg })),
+                msg,
+            ),
             Err(err) => (CliResult::failed_message(err.clone()), err),
         },
         HostAction::UninstallService => match service::uninstall() {
-            Ok(msg) => (CliResult::success(serde_json::json!({ "message": msg })), msg),
+            Ok(msg) => (
+                CliResult::success(serde_json::json!({ "message": msg })),
+                msg,
+            ),
             Err(err) => (CliResult::failed_message(err.clone()), err),
         },
         HostAction::Pair(args) => pair_cmd(options, args),
         HostAction::Unpair => unpair_cmd(options),
+        HostAction::Mcp => match skill_manager_host::agent::run_mcp_stdio() {
+            Ok(()) => (
+                CliResult::success(serde_json::json!({ "ok": true })),
+                String::new(),
+            ),
+            Err(err) => (CliResult::failed_message(err.clone()), err),
+        },
     }
 }
 
@@ -77,7 +92,10 @@ fn serve_cmd(options: &GlobalOptions, args: ServeArgs) -> (CliResult, String) {
     if let Err(err) = serve::run_blocking(options.state_dir.clone(), bind) {
         return (CliResult::failed_message(err.clone()), err);
     }
-    (CliResult::success(serde_json::json!({ "stopped": true })), "Host 已停止".to_string())
+    (
+        CliResult::success(serde_json::json!({ "stopped": true })),
+        "Host 已停止".to_string(),
+    )
 }
 
 fn status_cmd(options: &GlobalOptions) -> (CliResult, String) {
@@ -137,14 +155,27 @@ fn fetch_status(listen: &str) -> Result<serde_json::Value, String> {
 }
 
 fn status_human(value: &serde_json::Value) -> String {
-    let running = value.get("running").and_then(|v| v.as_bool()).unwrap_or(false);
-    let vault = value.get("vault").and_then(|v| v.as_str()).unwrap_or("未接入");
-    let paired = value.get("paired").and_then(|v| v.as_bool()).unwrap_or(false);
+    let running = value
+        .get("running")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let vault = value
+        .get("vault")
+        .and_then(|v| v.as_str())
+        .unwrap_or("未接入");
+    let paired = value
+        .get("paired")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     format!(
         "Host {}；库 {}；{}",
         if running { "在运行" } else { "未运行" },
         vault,
-        if paired { "已对接管理站" } else { "未对接" }
+        if paired {
+            "已对接管理站"
+        } else {
+            "未对接"
+        }
     )
 }
 
@@ -153,7 +184,8 @@ fn pair_cmd(options: &GlobalOptions, args: PairArgs) -> (CliResult, String) {
         Ok(rt) => rt,
         Err(err) => return (CliResult::failed_message(err.clone()), err),
     };
-    match skill_manager_host::pair::pair(&runtime, &args.station, &args.code, args.name.as_deref()) {
+    match skill_manager_host::pair::pair(&runtime, &args.station, &args.code, args.name.as_deref())
+    {
         Ok(id) => {
             let msg = format!("已对接管理站 {}（设备 {}）", args.station, id.device_id);
             (

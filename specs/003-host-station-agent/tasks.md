@@ -228,3 +228,6 @@ T011 实现 vault clone（core/cli）
 - [X] T062 确认计划识别须带 `needsConfirmation`；无 ConfirmDialog 时拒绝而不是 `window.confirm` per FR-019, T054 (partial)
 - [X] T063 对照 core JSON CLI / GUI 页面补 `assemble_snapshot`：可入库新增、冲突路径与 git 原文、`paused_local_change`、最近命令失败原文；无 skill ref 时 view 按当前页补齐对象。对照表见 `snapshot-inventory.md`。不声称齐全。D9 默认 CLI 锁定不在本任务。 per FR-015, T047 (partial)
 - [X] T064 Linux 云上 `cargo check -p skill-manager-desktop`：`prepare-cli` 为本机 triple 准备 sidecar（本机不传 `--target`）；desktop `build.rs` 缺失时从已构建 CLI 复制，找不到则失败并提示 `npm run prepare:cli` / `npm run check:desktop`，不嵌套 cargo、不提交 `binaries/`、不假装成功。D9 不在本任务。
+- [X] T065 按 ACP 声明 Host 工具：`session/new.mcpServers` stdio（`host mcp`）带 `inputSchema`；initialize 不再塞 `tool_descriptors`；`fs/write*` 不得空成功。D9 任意 CLI 登记不在本任务。 per FR-015, C1
+- [X] T066 同一 Host 对话复用 ACP session；新 session 把 `agent_messages` 回灌 prompt；不要每条消息 initialize+session/new 后 kill。 per US3, C2
+- [X] T067 `session/request_permission` 不得一律放行；CLI 自带 bash/edit 拒绝，Host 工具（skill_set 等）才允许。确认等待不堵死 ACP 读循环（工具经 Host HTTP / 后台线程）。 per FR-001, FR-019, C3, H3

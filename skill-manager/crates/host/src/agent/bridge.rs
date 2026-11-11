@@ -249,46 +249,54 @@ pub fn post_message(runtime: &HostRuntime, body: Value) -> Result<Value, String>
 
     let skill_dir = tools::builtin_skill_dir();
     let skill_text = builtin_skill_text();
+    let history = context::prior_transcript(runtime, &session_id, &task_id);
     let cancel = acp::register_task(&task_id);
-    let proc = match acp::initialize_or_fail(&detected, &skill_dir, &skill_text, &cancel) {
-        Ok(proc) => proc,
-        Err(err) => {
-            acp::forget_task(&task_id);
-            context::push_message(
-                runtime,
-                &session_id,
-                AgentMessage {
-                    role: "assistant".to_string(),
-                    text: err.clone(),
-                    task_id: Some(task_id.clone()),
-                    created_at: now_rfc3339(),
-                },
-            )?;
-            return Ok(json!({
-                "taskId": task_id,
-                "status": "failed",
-                "message": err,
-                "snapshot": snapshot,
-                "cli": detected.cli_id,
-            }));
-        }
-    };
-
-    let prompt = format!(
-        "{skill_text}\n\n# 当前 Host 快照（摘要+计数+引用，不含正文）\n{}\n\n# 用户\n{text}\n\n请用工具读取细节并执行。删除/覆盖必须走确认计划；未开启 git_auto_push 时不要上传。",
-        snapshot
-    );
+    if let Err(err) = acp::ensure_session(
+        &detected,
+        &skill_dir,
+        &skill_text,
+        runtime,
+        &session_id,
+        &cancel,
+    ) {
+        acp::forget_task(&task_id);
+        context::push_message(
+            runtime,
+            &session_id,
+            AgentMessage {
+                role: "assistant".to_string(),
+                text: err.clone(),
+                task_id: Some(task_id.clone()),
+                created_at: now_rfc3339(),
+            },
+        )?;
+        return Ok(json!({
+            "taskId": task_id,
+            "status": "failed",
+            "message": err,
+            "snapshot": snapshot,
+            "cli": detected.cli_id,
+        }));
+    }
     let runtime_bg = runtime.clone();
     let session_bg = session_id.clone();
     let task_bg = task_id.clone();
     let cancel_bg = cancel.clone();
+    let snapshot_bg = snapshot.clone();
+    let detected_bg = detected.clone();
+    let skill_dir_bg = skill_dir.clone();
+    let user_text_bg = text.clone();
     std::thread::spawn(move || {
-        let result = acp::run_prompt(
-            proc,
+        let result = acp::run_turn(
+            &detected_bg,
+            &skill_dir_bg,
+            &skill_text,
             &runtime_bg,
             &session_bg,
             &task_bg,
-            prompt,
+            &snapshot_bg,
+            &history,
+            &user_text_bg,
             cancel_bg.clone(),
         );
         let (role, text) = match result {

@@ -78,11 +78,11 @@ skill-manager --state-dir <state-a> host pair --station <url> --code <code> --na
 
 ## 6. 本轮实施取证（2026-11-11）
 
-在 `cursor/adr-host-management-station-1ec4` 实现 US1–US3 代码后记录。云上补跑（赶工修复 + T063 快照对照）结果如下。**未做** D9 默认 CLI 锁定。
+在 `cursor/adr-host-management-station-1ec4` 实现 US1–US3 代码后记录。云上补跑（赶工修复 + T063 快照对照 + T065–T067 ACP Critical）结果如下。**未做** D9 默认 CLI 锁定。
 
 | 项 | 结果 |
 |---|---|
-| `cargo test -p skill-manager-host -p skill-manager-station` | **通过**（host 9 单测 + git_auto_push / lock / plans；station 6 单测）。含锁双开、确认计划绑 session 且确认后消耗、Agent 不得 `plans_confirm` / 不得写 `git_auto_push`、station 不依赖 core、恢复码登录 `pending_rebind`、station 409 映射、快照含 `newCandidates` / `pullConflicts` / `lastCommandFailures` / 无 ref 时 `view.pageObjects`、未检测到 CLI 不得标 running |
+| `cargo test -p skill-manager-host -p skill-manager-station` | **通过**（host lib 18 单测 + git_auto_push / lock / plans；station 6 单测）。含锁双开、确认计划绑 session 且确认后消耗、Agent 不得 `plans_confirm` / 不得写 `git_auto_push`、station 不依赖 core、恢复码登录 `pending_rebind`、station 409 映射、快照含 `newCandidates` / `pullConflicts` / `lastCommandFailures` / 无 ref 时 `view.pageObjects`、未检测到 CLI 不得标 running、工具 `inputSchema`、`skill_delete` 接受 `ref`、permission 拒绝 bash/edit 且允许 `skill_set`、MCP `tools/list` 有 schema、历史回灌跳过本轮、`fs/write` 不是空成功 |
 | `cargo test -p skill-manager-cli --bin skill-manager coord` | **通过**（preset/agent/tag/archive 写入映射到 Host invoke） |
 | `cargo check -p skill-manager-host -p skill-manager-station -p skill-manager-cli -p skill-manager-core` | **通过** |
 | 前端 `npm test`（vitest） | **23 files / 88 tests 通过**，无未处理异常。含 DeviceBar、LoginPage 恢复码重绑、planConfirm 须 `needsConfirmation`、HttpTransport 在无 `EventSource` 时不抛 |

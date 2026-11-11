@@ -3,10 +3,12 @@
 mod acp;
 mod bridge;
 mod context;
+mod mcp;
 mod tools;
 
 pub use bridge::{cancel_task, detect_and_lock, post_message};
 pub use context::{list_messages, list_sessions, set_context};
+pub use mcp::run_stdio as run_mcp_stdio;
 pub use tools::builtin_skill_dir;
 
 use crate::HostRuntime;
