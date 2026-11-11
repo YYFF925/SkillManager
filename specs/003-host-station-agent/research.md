@@ -68,7 +68,7 @@
 
 ### D11 远程界面复用同一套 React，桌面专属能力按壳关掉
 
-- **Decision**: 管理站登录后下发与桌面相同的前端。`isDesktop()` 为假时走 HttpTransport，隐藏托盘/关窗/应用更新；路径输入按文本（Host 侧校验存在性）。登录页、设备条、对话面板是新界面，必须先改 [设计层](../../design/README.md) 原型再改 React。
+- **Decision**: 管理站登录后下发与桌面相同的前端。`isDesktop()` 为假时走 HttpTransport，隐藏托盘/关窗/应用更新；路径为文本输入，Host 校验存在性，第一版不做 Host 侧目录树。登录页、设备条、对话面板是新界面，必须先改 [设计层](../../design/README.md) 原型再改 React。Host 与管理站可先于对话交付。
 - **Rationale**: FR-012；设计层工作流。
 - **Alternatives**: 为远程另写一套页面（被拒：两套规则）；在浏览器里用 `<input type=file>` 选路径（被拒：那是笔记本磁盘）。
 
