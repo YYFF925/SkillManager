@@ -12,6 +12,8 @@
 
 快照是推送；不够时 Agent **主动**查。查询/写入通道 = Host 经 ACP **向子进程声明的工具**（`session/new.mcpServers` stdio，带 JSON Schema 的 `skill_list` / `skill_get` / `skill_read` / `skill_set` / `skill_delete`（`references[]`）等），映射到现有 `skill-manager` JSON CLI，**经 Host 执行**（与 GUI 同一把锁、同一套确认）。不得直打 `skill-manager-core`。不得把工具清单只塞进 `initialize`。stdio MCP 只是 ACP 声明工具的协议通道，不是给用户用的平行 MCP 产品。CLI 自带 bash/edit 不得绕过 Host 锁与确认计划。同一 Host 对话复用 ACP session，并把 `agent_messages` 回灌新 session。
 
+OpenCode 1.19.5：`session/new.mcpServers` 项若带任意 `type` 字段则当 remote HTTP（要 `url`/`headers`）。stdio 项必须省略 `type`，字段为 `name`、`command`（字符串）、`args`、`env: [{name,value}]`。不要写 `"type": "stdio"` 或 `"type": "local"`（后者是 `opencode.json` 的 `mcp` 配置，不是 ACP 字段）。不要用 `initialize.mcpServers`。
+
 Host 启动该 CLI 时，把 `skill-manager/assets/skills/skill-manager-builtin-agent/`（内置管理说明）注入到 **该 CLI 会搜索的 skills 目录**。OpenCode：`$OPENCODE_CONFIG_DIR/skills/`（Host 写入 `state-dir/agent-runtime/opencode-config/`；实测 `OPENCODE_SKILLS_PATH` 无效）。若无此目录，改为 ACP 初始化文本并作为每条 prompt 前缀。说明两层上下文已在消息里、细节用工具、003 确认与上传规则。该资产**不入库**到用户 SkillManagerVault，不得出现在 `skill list`，不得当作可部署技能。不得注入或改写配套维护 Skill（那条路仍是每次询问上传）。
 
 Agent 可调用的管理工具 = 现有 JSON CLI 的能力（含 `skill list` 已有的 `translation_stale` 等字段）。不为对话新增 002 筛选开关。工具经 Host，与 GUI 串行于同一把锁。调用失败必须把错误交回对话，不得编造正文。

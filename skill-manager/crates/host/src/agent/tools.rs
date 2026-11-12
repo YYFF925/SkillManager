@@ -1,5 +1,5 @@
 //! ACP 工具：映射现有 JSON CLI，经 Host 执行。
-//! 向子进程声明的方式是 ACP `session/new.mcpServers`（stdio），不是把清单塞进 initialize。
+//! 向子进程声明的方式是 ACP `session/new.mcpServers`（stdio，省略 `type`），不是把清单塞进 initialize。
 
 use std::path::{Path, PathBuf};
 

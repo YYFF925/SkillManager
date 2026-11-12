@@ -1635,20 +1635,32 @@ fn mcp_cli_path() -> Result<PathBuf, String> {
     Err("找不到 skill-manager CLI，无法经 ACP 声明 Host 工具。请确认桌面包含 sidecar 或 PATH 中有 skill-manager。".into())
 }
 
-fn mcp_server_spec(runtime: &HostRuntime, host_session: &str) -> Result<Value, String> {
-    let listen = wait_for_listen(runtime)
-        .ok_or_else(|| "Host HTTP 尚未监听，无法向 CLI 声明管理工具".to_string())?;
-    let command = mcp_cli_path()?;
-    Ok(json!({
-        "type": "stdio",
+/// OpenCode 1.19.5 ACP：`session/new.mcpServers` 项若带任意 `type` 字段，
+/// 一律当 remote HTTP（要 `url`/`headers`）。stdio 必须省略 `type`，
+/// 用 `name` + `command`（字符串）+ `args` + `env: [{name,value}]`。
+/// 不要写 `"type": "stdio"` 或 `"type": "local"`——后者是 `opencode.json`
+/// 的 `mcp` 配置，不是 ACP 字段。工具不放进 `initialize.mcpServers`。
+pub(crate) fn acp_stdio_mcp_server(
+    command: impl AsRef<Path>,
+    listen: &str,
+    host_session: &str,
+) -> Value {
+    json!({
         "name": "skill-manager",
-        "command": command,
+        "command": command.as_ref().to_string_lossy(),
         "args": ["host", "mcp"],
         "env": [
             { "name": "SKILL_MANAGER_HOST_LISTEN", "value": listen },
             { "name": "SKILL_MANAGER_AGENT_SESSION", "value": host_session },
         ]
-    }))
+    })
+}
+
+fn mcp_server_spec(runtime: &HostRuntime, host_session: &str) -> Result<Value, String> {
+    let listen = wait_for_listen(runtime)
+        .ok_or_else(|| "Host HTTP 尚未监听，无法向 CLI 声明管理工具".to_string())?;
+    let command = mcp_cli_path()?;
+    Ok(acp_stdio_mcp_server(command, &listen, host_session))
 }
 
 pub(crate) fn initialize_or_fail(
@@ -2360,5 +2372,120 @@ mod tests {
             ]
         });
         assert_eq!(permission_decision(&params)["outcome"]["optionId"], "once");
+    }
+
+    /// OpenCode 1.19.5：`"type" in server` → remote；无 type → local stdio。
+    fn opencode_1_19_5_mcp_from_acp(server: &Value) -> Result<Value, String> {
+        if server.get("type").is_some() {
+            let url = server
+                .get("url")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "remote MCP missing url".to_string())?;
+            let headers = server
+                .get("headers")
+                .and_then(Value::as_array)
+                .ok_or_else(|| "remote MCP missing headers".to_string())?;
+            let mut map = serde_json::Map::new();
+            for header in headers {
+                let name = header
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "header missing name".to_string())?;
+                let value = header
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "header missing value".to_string())?;
+                map.insert(name.to_string(), json!(value));
+            }
+            return Ok(json!({
+                "type": "remote",
+                "url": url,
+                "headers": map,
+            }));
+        }
+        let command = server
+            .get("command")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "local MCP missing command".to_string())?;
+        let args = server
+            .get("args")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "local MCP missing args".to_string())?;
+        let env = server
+            .get("env")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "local MCP missing env".to_string())?;
+        let mut argv = vec![json!(command)];
+        argv.extend(args.iter().cloned());
+        let mut environment = serde_json::Map::new();
+        for entry in env {
+            let name = entry
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "env missing name".to_string())?;
+            let value = entry
+                .get("value")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "env missing value".to_string())?;
+            environment.insert(name.to_string(), json!(value));
+        }
+        Ok(json!({
+            "type": "local",
+            "command": argv,
+            "environment": environment,
+        }))
+    }
+
+    #[test]
+    fn opencode_stdio_mcp_omits_type_so_local_tools_load() {
+        let spec = acp_stdio_mcp_server(
+            Path::new(r"D:\GitHub\SkillManager-qa-pr7\skill-manager\target\release\skill-manager.exe"),
+            "127.0.0.1:63974",
+            "host-sess",
+        );
+        assert!(
+            spec.get("type").is_none(),
+            "OpenCode 1.19.5 treats any type as remote: {spec}"
+        );
+        assert_eq!(spec["name"], "skill-manager");
+        assert_eq!(
+            spec["command"],
+            r"D:\GitHub\SkillManager-qa-pr7\skill-manager\target\release\skill-manager.exe"
+        );
+        assert_eq!(spec["args"], json!(["host", "mcp"]));
+        let env = spec["env"].as_array().expect("env array");
+        assert!(env.iter().any(|item| {
+            item["name"] == "SKILL_MANAGER_HOST_LISTEN" && item["value"] == "127.0.0.1:63974"
+        }));
+        assert!(env.iter().any(|item| {
+            item["name"] == "SKILL_MANAGER_AGENT_SESSION" && item["value"] == "host-sess"
+        }));
+
+        let local = opencode_1_19_5_mcp_from_acp(&spec).expect("local stdio");
+        assert_eq!(local["type"], "local");
+        assert_eq!(
+            local["command"],
+            json!([
+                r"D:\GitHub\SkillManager-qa-pr7\skill-manager\target\release\skill-manager.exe",
+                "host",
+                "mcp"
+            ])
+        );
+        assert_eq!(
+            local["environment"]["SKILL_MANAGER_HOST_LISTEN"],
+            "127.0.0.1:63974"
+        );
+
+        let typed_stdio = json!({
+            "type": "stdio",
+            "name": "skill-manager",
+            "command": spec["command"],
+            "args": spec["args"],
+            "env": spec["env"],
+        });
+        assert!(
+            opencode_1_19_5_mcp_from_acp(&typed_stdio).is_err(),
+            "type=stdio must not be sent: OpenCode maps it to remote and drops Host tools"
+        );
     }
 }
