@@ -236,3 +236,4 @@ T011 实现 vault clone（core/cli）
 - [X] T070 Host 与管理站长连接每 15s WebSocket Ping；在线以仍打开的 LiveLink 为准，不得因无业务流量超过 45s 判离线。套接字关闭或心跳发送失败才移除。 per US2/AC6, FR-010, T021
 - [X] T071 默认管理 CLI 钉死 OpenCode：不扫描厂商 PATH 清单；`host agent-cli` / 对话在未安装时返回 `needsInstall`（`cliId` 仍为 `opencode`，不是 `null`）；软件内 `--install` / `--login` 与对话面板「安装 OpenCode」「打开登录」。装好写入 `agent_runtime`，之后不再重探。不把「没有已登录 CLI」当成测试跳过。 per US3/AC9, FR-017
 - [X] T072 Windows 软件内安装 OpenCode：经 `cmd.exe /C` 启动 `npm.cmd`（CreateProcess 不能直接跑 `.cmd`）；失败不留空的 `agent-runtime/opencode`；对话等 `agent_runtime_get` 返回后再显示「安装 OpenCode」，不得先闪「打开登录」 per US3/AC9, FR-017, T071
+- [X] T073 Windows `cmd /C` 安装参数分开传入，不得预包 `\"路径\"`（否则 argv 转义成 `\"C:\Program Files\nodejs\npm.cmd\"`，cmd 当命令名失败） per T072

@@ -405,20 +405,14 @@ fn try_install_package(dest: &Path, package: &str, bin_name: &str) -> Result<Pat
 }
 
 /// Windows 上 CreateProcess 不跑 `npm.cmd`，必须经 `cmd.exe /C` 解析 PATHEXT。
+///
+/// 参数必须分开传入：不要先把路径包进带引号的整行再交给 `Command`，否则 Windows
+/// argv 转义会变成 `\"C:\Program Files\nodejs\npm.cmd\"`，cmd 当命令名解析就会失败。
 fn npm_install_command(dest: &Path, package: &str) -> Command {
     #[cfg(windows)]
     {
-        let npm = which("npm.cmd")
-            .or_else(|| which("npm"))
-            .unwrap_or_else(|| PathBuf::from("npm"));
-        let cmdline = format!(
-            "\"{}\" install --omit=dev --prefix \"{}\" {}",
-            npm.display(),
-            dest.display(),
-            package
-        );
         let mut cmd = skill_manager_core::process::command("cmd");
-        cmd.args(["/C", &cmdline]);
+        cmd.args(windows_cmd_npm_args(dest, package));
         cmd
     }
     #[cfg(not(windows))]
@@ -429,6 +423,19 @@ fn npm_install_command(dest: &Path, package: &str) -> Command {
             .arg(package);
         cmd
     }
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_cmd_npm_args(dest: &Path, package: &str) -> Vec<std::ffi::OsString> {
+    vec![
+        "/C".into(),
+        "npm".into(),
+        "install".into(),
+        "--omit=dev".into(),
+        "--prefix".into(),
+        dest.as_os_str().to_os_string(),
+        package.into(),
+    ]
 }
 
 fn remove_failed_install(dest: &Path, existed_before: bool) {
@@ -737,7 +744,31 @@ mod tests {
 
     #[test]
     fn npm_install_uses_cmd_shim_on_windows() {
-        let cmd = npm_install_command(Path::new("/tmp/opencode-dest"), "opencode-ai");
+        let dest = Path::new(r"C:\Program Files\qa-host\agent-runtime\opencode");
+        let argv: Vec<String> = windows_cmd_npm_args(dest, "opencode-ai")
+            .into_iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(argv[0], "/C");
+        assert_eq!(argv[1], "npm");
+        assert_eq!(
+            argv,
+            vec![
+                "/C",
+                "npm",
+                "install",
+                "--omit=dev",
+                "--prefix",
+                r"C:\Program Files\qa-host\agent-runtime\opencode",
+                "opencode-ai",
+            ]
+        );
+        assert!(
+            argv.iter().all(|arg| !arg.contains('"')),
+            "do not pre-quote argv; Command/CreateProcess quotes paths with spaces, got {argv:?}"
+        );
+
+        let cmd = npm_install_command(dest, "opencode-ai");
         let program = cmd.get_program().to_string_lossy();
         let args: Vec<String> = cmd
             .get_args()
@@ -749,11 +780,7 @@ mod tests {
                 program.contains("cmd"),
                 "Windows must spawn cmd.exe so PATHEXT can resolve npm.cmd, got {program}"
             );
-            assert_eq!(args.first().map(String::as_str), Some("/C"));
-            let cmdline = args.get(1).cloned().unwrap_or_default();
-            assert!(cmdline.contains("npm"), "{cmdline}");
-            assert!(cmdline.contains("install"), "{cmdline}");
-            assert!(cmdline.contains("opencode-ai"), "{cmdline}");
+            assert_eq!(args, argv);
         }
         #[cfg(not(windows))]
         {
