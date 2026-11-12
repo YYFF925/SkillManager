@@ -1065,6 +1065,7 @@ for line in sys.stdin:
 
     #[test]
     fn user_selected_cli_requires_acp_handshake() {
+        let _lock = test_path_lock();
         let dir = tempfile::tempdir().unwrap();
         let ctx = skill_manager_core::AppContext::open(Some(dir.path().to_path_buf())).unwrap();
         let runtime = HostRuntime::from_context(ctx);
@@ -1087,6 +1088,7 @@ for line in sys.stdin:
 
     #[test]
     fn user_selected_cli_is_persisted_after_handshake() {
+        let _lock = test_path_lock();
         let dir = tempfile::tempdir().unwrap();
         let ctx = skill_manager_core::AppContext::open(Some(dir.path().to_path_buf())).unwrap();
         let runtime = HostRuntime::from_context(ctx);

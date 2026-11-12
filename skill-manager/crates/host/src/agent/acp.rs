@@ -1,7 +1,7 @@
 //! ACP stdio JSON-RPC：拉起当前 ACP 兼容 CLI，按协议声明 Host 工具，支持取消与会话复用。
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -118,6 +118,7 @@ pub(crate) struct AcpProc {
     child: Child,
     stdin: Arc<Mutex<ChildStdin>>,
     stdout: BufReader<std::process::ChildStdout>,
+    stderr: Arc<Mutex<String>>,
 }
 
 /// Windows 上 CreateProcess 不能跑无扩展 Unix `#!/bin/sh` 垫片（os error 193）。
@@ -219,7 +220,10 @@ fn cli_process_command(bin: &Path) -> Command {
     #[cfg(windows)]
     {
         let (program, args) = windows_acp_invocation(bin);
-        let mut cmd = skill_manager_core::process::command(&program);
+        // 不要 CREATE_NO_WINDOW：Bun 编的 opencode.exe 在无控制台时会把管道
+        // stdin 当成已关闭，`acp` 立刻退出（「管理 CLI 已退出」）。ACP 用管道
+        // stdio，不弹登录用的 start 窗口。
+        let mut cmd = Command::new(&program);
         cmd.args(args);
         cmd
     }
@@ -227,6 +231,46 @@ fn cli_process_command(bin: &Path) -> Command {
     {
         Command::new(bin)
     }
+}
+
+fn collect_stderr(child: &mut Child) -> Arc<Mutex<String>> {
+    let collected = Arc::new(Mutex::new(String::new()));
+    if let Some(mut stderr) = child.stderr.take() {
+        let slot = Arc::clone(&collected);
+        std::thread::spawn(move || {
+            let mut buf = String::new();
+            let _ = stderr.read_to_string(&mut buf);
+            if let Ok(mut guard) = slot.lock() {
+                *guard = buf;
+            }
+        });
+    }
+    collected
+}
+
+fn describe_cli_exit(proc: &mut AcpProc) -> String {
+    let status = proc.child.try_wait().ok().flatten();
+    let stderr = proc
+        .stderr
+        .lock()
+        .ok()
+        .map(|guard| guard.trim().to_string())
+        .filter(|text| !text.is_empty());
+    let code = match &status {
+        Some(st) => st
+            .code()
+            .map(|code| code.to_string())
+            .unwrap_or_else(|| st.to_string()),
+        None => "unknown".to_string(),
+    };
+    match stderr {
+        Some(text) => format!("管理 CLI 已退出（exit {code}）：{text}"),
+        None => format!("管理 CLI 已退出（exit {code}）"),
+    }
+}
+
+fn is_cli_exit_error(message: &str) -> bool {
+    message.contains("已退出")
 }
 
 fn spawn_with_args(bin: &Path, args: &[&str], skill_dir: &Path) -> Result<AcpProc, String> {
@@ -257,10 +301,12 @@ fn spawn_with_args(bin: &Path, args: &[&str], skill_dir: &Path) -> Result<AcpPro
         .stdout
         .take()
         .ok_or_else(|| "管理 CLI 没有 stdout".to_string())?;
+    let stderr = collect_stderr(&mut child);
     Ok(AcpProc {
         child,
         stdin: Arc::new(Mutex::new(stdin)),
         stdout: BufReader::new(stdout),
+        stderr,
     })
 }
 
@@ -425,16 +471,18 @@ pub(crate) fn initialize_with_args(
             }
         }
     }
-    if looks_like_auth_failure(&json!(last)) || last.to_lowercase().contains("auth") {
-        Err(
-            "管理 CLI 尚未登录模型。请先在该 CLI 中完成登录，再回来对话。任务不会标成进行中。"
-                .to_string(),
-        )
+    Err(handshake_failure_message(&cli.binary_path, &last))
+}
+
+fn handshake_failure_message(bin: &Path, last: &str) -> String {
+    if looks_like_auth_failure(&json!(last)) && !is_cli_exit_error(last) {
+        "管理 CLI 尚未登录模型。请先在该 CLI 中完成登录，再回来对话。任务不会标成进行中。"
+            .to_string()
     } else {
-        Err(format!(
+        format!(
             "无法与 {bin} 完成 ACP 握手（已试 acp / --acp / 无参）。{last}",
-            bin = cli.binary_path.display()
-        ))
+            bin = bin.display()
+        )
     }
 }
 
@@ -461,20 +509,17 @@ fn write_locked(stdin: &Arc<Mutex<ChildStdin>>, value: &Value) -> Result<(), Str
     write_msg(&mut guard, value)
 }
 
-fn read_msg(
-    stdout: &mut BufReader<std::process::ChildStdout>,
-    until: Instant,
-) -> Result<Value, String> {
+fn read_msg(proc: &mut AcpProc, until: Instant) -> Result<Value, String> {
     loop {
         if Instant::now() > until {
             return Err("等待管理 CLI 响应超时".to_string());
         }
         let mut header = String::new();
-        stdout
+        proc.stdout
             .read_line(&mut header)
             .map_err(|err| format!("读取管理 CLI 失败：{err}"))?;
         if header.is_empty() {
-            return Err("管理 CLI 已退出".to_string());
+            return Err(describe_cli_exit(proc));
         }
         let trimmed = header.trim();
         if trimmed.is_empty() {
@@ -486,12 +531,13 @@ fn read_msg(
                 .parse()
                 .map_err(|_| "无效的 Content-Length".to_string())?;
             let mut blank = String::new();
-            stdout
+            proc.stdout
                 .read_line(&mut blank)
                 .map_err(|err| err.to_string())?;
             let mut buf = vec![0u8; len];
-            use std::io::Read;
-            stdout.read_exact(&mut buf).map_err(|err| err.to_string())?;
+            proc.stdout
+                .read_exact(&mut buf)
+                .map_err(|err| err.to_string())?;
             return serde_json::from_slice(&buf).map_err(|err| err.to_string());
         }
         if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
@@ -542,7 +588,7 @@ fn request(
             );
             return Err("cancelled".to_string());
         }
-        let msg = read_msg(&mut proc.stdout, until)?;
+        let msg = read_msg(proc, until)?;
         if msg.get("id").and_then(Value::as_u64) == Some(id)
             || msg.get("id").and_then(Value::as_i64) == Some(id as i64)
         {
@@ -1050,6 +1096,36 @@ mod tests {
     fn windows_timeout_kills_process_tree() {
         let args = windows_taskkill_args(34160);
         assert_eq!(args, vec!["/PID", "34160", "/T", "/F"]);
+    }
+
+    #[test]
+    fn process_exit_is_not_reported_as_missing_login() {
+        let last = "管理 CLI 已退出（exit 1）：Error: Unknown command acp";
+        let msg = handshake_failure_message(Path::new(r"C:\qa-host-a\opencode.exe"), last);
+        assert!(msg.contains("exit 1"), "{msg}");
+        assert!(msg.contains("Unknown command") || msg.contains("已退出"), "{msg}");
+        assert!(
+            !msg.contains("尚未登录"),
+            "process death must not be blamed on missing login: {msg}"
+        );
+    }
+
+    #[test]
+    fn windows_acp_exe_is_not_spawned_via_cmd_wrapper() {
+        let exe = Path::new(r"C:\qa-host-a\node_modules\opencode-windows-x64\bin\opencode.exe");
+        let (program, args) = windows_acp_invocation(exe);
+        assert_eq!(program, exe.as_os_str());
+        assert!(args.is_empty());
+        let cmd = cli_process_command(exe);
+        let program = cmd.get_program().to_string_lossy();
+        assert!(
+            program.contains("opencode.exe"),
+            "ACP exe must be the program, not cmd.exe, got {program}"
+        );
+        assert!(
+            !program.to_ascii_lowercase().contains("cmd"),
+            "CREATE_NO_WINDOW cmd wrapper makes Bun close stdin, got {program}"
+        );
     }
 
     #[test]

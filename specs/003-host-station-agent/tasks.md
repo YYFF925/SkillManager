@@ -240,3 +240,4 @@ T011 实现 vault clone（core/cli）
 - [X] T074 Windows「打开登录」/`host agent-cli --login` 用 `cmd /c start` 弹出可见交互控制台（不要 `CREATE_NEW_CONSOLE` + 继承 Host 重定向 stdio，也不要 `start /B`），以便完成 Select provider 与浏览器授权 per US3/AC9, T071
 - [X] T075 Windows ACP 握手拉起 `opencode.cmd`（经 `cmd /C`），不得 CreateProcess 无扩展 Unix `#!/bin/sh` 垫片（os error 193）；`ready: true` 表示该路径可在 Windows 拉起；登录仍走 `start` 可见控制台 per US3, T071, T074
 - [X] T076 Windows ACP 优先直接拉起 `opencode.exe`（stdio 接到 CLI，不经 cmd 包装）；超时 `taskkill /T /F` 杀掉整棵进程树，对话必须收到成功或失败，不得一直「发送中」；登录仍用 `start` per T074, T075
+- [X] T077 Windows ACP 拉起原生 `opencode.exe` 不得加 `CREATE_NO_WINDOW`（否则 Bun 把管道 stdin 当已关闭，`acp`/`--acp`/无参都立刻退出）；握手失败须带 exit code 与 stderr，不得把进程退出说成未登录 per T076
