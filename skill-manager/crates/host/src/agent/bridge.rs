@@ -1058,7 +1058,7 @@ args = sys.argv[1:]
 if args == ["acp"]:
     sys.stderr.write("not acp\n")
     sys.exit(2)
-if args != ["--acp"]:
+if args != ["--print-logs", "acp"] and args != ["--acp"]:
     sys.exit(2)
 for line in sys.stdin:
     line = line.strip()
@@ -1116,10 +1116,10 @@ for line in sys.stdin:
         .unwrap();
         assert_eq!(cli.cli_id, "custom-host");
         assert!(cli.user_selected);
-        assert_eq!(cli.acp_args, vec!["--acp"]);
+        assert_eq!(cli.acp_args, vec!["--print-logs", "acp"]);
         let loaded = load_runtime(&runtime).unwrap();
         assert_eq!(loaded.cli_id, "custom-host");
-        assert_eq!(loaded.acp_args, vec!["--acp"]);
+        assert_eq!(loaded.acp_args, vec!["--print-logs", "acp"]);
         assert!(loaded.user_selected);
         let view = runtime_view(&runtime);
         assert_eq!(view["exclusiveVendors"], false);
@@ -1144,10 +1144,7 @@ for line in sys.stdin:
     #[test]
     fn default_args_for_unlisted_cli_try_acp() {
         let sets = acp::default_acp_arg_sets("my-vendor");
-        assert_eq!(
-            sets,
-            vec![&["--print-logs", "acp"][..], &["acp"][..], &["--acp"][..]]
-        );
+        assert_eq!(sets, vec![&["--print-logs", "acp"][..]]);
         assert_eq!(acp::default_acp_arg_sets("opencode"), sets);
     }
 

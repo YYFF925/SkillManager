@@ -1,13 +1,13 @@
-//! Windows ACP spawn：隐藏 ConPTY 给 Bun 控制台，ACP JSON-RPC 走另一套管道。
+//! Windows ACP spawn：隐藏 ConPTY（SW_HIDE）给 Bun 控制台；ACP JSON 走 CreatePseudoConsole 那对管道。
 //!
 //! CREATE_NO_WINDOW：Bun 把管道 stdin 当已关闭。
-//! CREATE_NEW_CONSOLE + 管道：Bun 去读空的隐藏控制台。
-//! 只把 ConPTY 当 stdio：子进程 isatty，OpenCode 打 CSI/OSC TUI，initialize 完不成。
-//! ConPTY（SW_HIDE）+ STARTF_USESTDHANDLES 接到独立管道：Bun 有控制台，stdin 仍是打开的管道。
+//! CREATE_NEW_CONSOLE：Bun 去读空的隐藏控制台。
+//! 另接 STARTF_USESTDHANDLES 管道时 Bun 仍把 stdin/stdout 绑到 ConPTY，initialize 写到空管道会超时。
+//! node-pty：USESTDHANDLES 三个句柄为空 + bInheritHandles FALSE，子进程用 ConPTY；Host 读写 pty_in_w / pty_out_r。
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, Read};
+use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
 use std::path::Path;
@@ -162,7 +162,6 @@ pub(crate) struct HiddenChild {
     pub pid: u32,
     handle: OwnedHandle,
     pub hpcon: Arc<PseudoConsole>,
-    _pty_in: File,
 }
 
 impl HiddenChild {
@@ -198,15 +197,6 @@ pub(crate) fn spawn_hidden(
 ) -> io::Result<HiddenSpawn> {
     let (pty_in_r, pty_in_w) = create_pipe()?;
     let (pty_out_r, pty_out_w) = create_pipe()?;
-    let (stdin_r, stdin_w) = create_pipe()?;
-    let (stdout_r, stdout_w) = create_pipe()?;
-    let (stderr_r, stderr_w) = create_pipe()?;
-    set_inherit(stdin_r.as_raw_handle())?;
-    set_inherit(stdout_w.as_raw_handle())?;
-    set_inherit(stderr_w.as_raw_handle())?;
-    clear_inherit(stdin_w.as_raw_handle())?;
-    clear_inherit(stdout_r.as_raw_handle())?;
-    clear_inherit(stderr_r.as_raw_handle())?;
     clear_inherit(pty_in_r.as_raw_handle())?;
     clear_inherit(pty_in_w.as_raw_handle())?;
     clear_inherit(pty_out_r.as_raw_handle())?;
@@ -271,9 +261,9 @@ pub(crate) fn spawn_hidden(
     si.startup.cb = std::mem::size_of::<StartupInfoExW>() as u32;
     si.startup.dw_flags = dw_flags;
     si.startup.w_show_window = show;
-    si.startup.stdin = stdin_r.as_raw_handle();
-    si.startup.stdout = stdout_w.as_raw_handle();
-    si.startup.stderr = stderr_w.as_raw_handle();
+    si.startup.stdin = ptr::null_mut();
+    si.startup.stdout = ptr::null_mut();
+    si.startup.stderr = ptr::null_mut();
     si.attr_list = attr_ptr;
 
     let mut pi: ProcessInformation = unsafe { std::mem::zeroed() };
@@ -305,14 +295,10 @@ pub(crate) fn spawn_hidden(
     }
     drop(pty_in_r);
     drop(pty_out_w);
-    drop(stdin_r);
-    drop(stdout_w);
-    drop(stderr_w);
     if ok == 0 {
         unsafe { ClosePseudoConsole(hpcon) };
         return Err(io::Error::last_os_error());
     }
-    drain_pty(File::from(pty_out_r));
     unsafe {
         let _ = CloseHandle(pi.thread);
     }
@@ -322,24 +308,17 @@ pub(crate) fn spawn_hidden(
             pid: pi.process_id,
             handle,
             hpcon: PseudoConsole::new(hpcon),
-            _pty_in: File::from(pty_in_w),
         },
-        stdin: File::from(stdin_w),
-        stdout: File::from(stdout_r),
-        stderr: File::from(stderr_r),
+        stdin: File::from(pty_in_w),
+        stdout: File::from(pty_out_r),
+        stderr: eof_pipe()?,
     })
 }
 
-fn drain_pty(mut pty_out: File) {
-    std::thread::spawn(move || {
-        let mut buf = [0u8; 4096];
-        loop {
-            match pty_out.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(_) => {}
-            }
-        }
-    });
+fn eof_pipe() -> io::Result<File> {
+    let (read, write) = create_pipe()?;
+    drop(write);
+    Ok(File::from(read))
 }
 
 fn create_pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
@@ -364,15 +343,6 @@ fn create_pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
 
 fn clear_inherit(handle: RawHandle) -> io::Result<()> {
     let ok = unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0) };
-    if ok == 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
-
-fn set_inherit(handle: RawHandle) -> io::Result<()> {
-    let ok = unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) };
     if ok == 0 {
         Err(io::Error::last_os_error())
     } else {

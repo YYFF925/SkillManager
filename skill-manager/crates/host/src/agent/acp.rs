@@ -1,6 +1,6 @@
 //! ACP stdio JSON-RPC：拉起当前 ACP 兼容 CLI，按协议声明 Host 工具，支持取消与会话复用。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
@@ -37,8 +37,8 @@ pub(crate) const ACP_EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ACP_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// ConPTY 只给 Bun 一个隐藏控制台（避免 CREATE_NO_WINDOW 把 stdin 当已关闭）。
-/// ACP JSON-RPC 必须走另一套管道：三个 std handle 都要有效，空 stdin/stdout 会 0xC0000142。
+/// ConPTY + `STARTF_USESTDHANDLES` 且 stdin/stdout/stderr 为空：子进程用伪控制台，
+/// 不继承 Host 重定向句柄（microsoft/terminal#15814）。ACP JSON 走 CreatePseudoConsole 那对管道。
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn windows_acp_create_flags() -> (u32, u16, u32) {
     (
@@ -48,9 +48,9 @@ pub(crate) fn windows_acp_create_flags() -> (u32, u16, u32) {
     )
 }
 
-/// 子进程要继承 ACP 的 stdin/stdout/stderr 管道。ConPTY 句柄本身不继承。
+/// ConPTY 子进程不继承 Host 句柄；ACP 管道是 HPCON 自己的。
 #[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) const ACP_CONPTY_INHERIT_HANDLES: i32 = 1;
+pub(crate) const ACP_CONPTY_INHERIT_HANDLES: i32 = 0;
 
 const INIT_TIMEOUT: Duration = Duration::from_secs(12);
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -197,6 +197,7 @@ pub(crate) struct AcpProc {
     stdin: Arc<Mutex<Box<dyn Write + Send>>>,
     stdout_rx: mpsc::Receiver<std::io::Result<String>>,
     stderr: Arc<Mutex<String>>,
+    pending: VecDeque<String>,
     timed_out: Arc<AtomicBool>,
     started: Instant,
 }
@@ -316,10 +317,18 @@ fn collect_stderr_reader(mut stderr: impl Read + Send + 'static) -> Arc<Mutex<St
     let collected = Arc::new(Mutex::new(String::new()));
     let slot = Arc::clone(&collected);
     std::thread::spawn(move || {
-        let mut buf = String::new();
-        let _ = stderr.read_to_string(&mut buf);
-        if let Ok(mut guard) = slot.lock() {
-            *guard = strip_ansi(&buf);
+        let mut buf = [0u8; 1024];
+        loop {
+            match stderr.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    let chunk = strip_ansi(&String::from_utf8_lossy(&buf[..n]));
+                    if let Ok(mut guard) = slot.lock() {
+                        guard.push_str(&chunk);
+                    }
+                    host_log(&chunk);
+                }
+            }
         }
     });
     collected
@@ -346,7 +355,6 @@ fn format_cli_exit(
     elapsed: Duration,
     code: Option<i32>,
     pid: u32,
-    stderr: Option<&str>,
 ) -> String {
     let code_text = match code {
         Some(code) => format_exit_code(code),
@@ -364,11 +372,14 @@ fn format_cli_exit(
     } else {
         format!("已退出（exit {code_text}）")
     };
-    match stderr {
-        Some(text) if !text.is_empty() => {
-            format!("管理 CLI {cause}：{}", strip_ansi(text))
-        }
-        _ => format!("管理 CLI {cause}"),
+    format!("管理 CLI {cause}")
+}
+
+fn host_log(message: &str) {
+    let cleaned = strip_ansi(message);
+    let cleaned = cleaned.trim();
+    if !cleaned.is_empty() {
+        eprintln!("[host acp] {cleaned}");
     }
 }
 
@@ -444,12 +455,14 @@ fn format_exit_code(code: i32) -> String {
 fn describe_cli_exit(proc: &mut AcpProc) -> String {
     let code = proc.child.wait_exit(Duration::from_millis(800));
     let stderr = take_stderr(proc);
+    if let Some(text) = stderr.as_deref() {
+        host_log(text);
+    }
     format_cli_exit(
         proc.timed_out.load(Ordering::SeqCst),
         proc.started.elapsed(),
         code,
         proc.child.id(),
-        stderr.as_deref(),
     )
 }
 
@@ -513,6 +526,7 @@ fn acp_proc(
         stdin: Arc::new(Mutex::new(stdin)),
         stdout_rx: spawn_stdout_reader(stdout),
         stderr,
+        pending: VecDeque::new(),
         timed_out,
         started,
     }
@@ -610,10 +624,9 @@ fn candidate_arg_sets(cli: &DetectedCli) -> Vec<Vec<String>> {
     sets
 }
 
-/// OpenCode 文档是 `opencode --print-logs acp`。无参会进 TUI 并拉起 `npm list -g`，不要试。
-/// `--acp` 只给别的 CLI；握手超时或 TUI 输出后不再试下一组。
+/// OpenCode 1.19.5 文档是 `opencode --print-logs acp`。只试这一组。
 pub(crate) fn default_acp_arg_sets(_cli_id: &str) -> Vec<&'static [&'static str]> {
-    vec![&["--print-logs", "acp"], &["acp"], &["--acp"]]
+    vec![&["--print-logs", "acp"]]
 }
 
 fn should_retry_next_args(err: &str) -> bool {
@@ -749,12 +762,75 @@ fn request_bounded(
     result
 }
 
+fn append_stderr(proc: &AcpProc, text: &str) {
+    let cleaned = strip_ansi(text);
+    let cleaned = cleaned.trim();
+    if cleaned.is_empty() {
+        return;
+    }
+    if let Ok(mut guard) = proc.stderr.lock() {
+        if !guard.is_empty() && !guard.ends_with('\n') {
+            guard.push('\n');
+        }
+        guard.push_str(cleaned);
+        guard.push('\n');
+    }
+}
+
+fn stderr_contains(proc: &AcpProc, needle: &str) -> bool {
+    proc.stderr
+        .lock()
+        .ok()
+        .is_some_and(|guard| guard.contains(needle))
+}
+
+/// Bun 在 ConPTY 上要等 `process.stdin.resume()`（日志里的 setup connection）才读 ACP。
+/// 提前写入会被 cooked TTY 丢掉。Unix 假 CLI 没有这段日志，400ms 无输出就发 initialize。
+fn wait_for_acp_ready(proc: &mut AcpProc) -> Result<(), String> {
+    let until = Instant::now() + Duration::from_secs(5);
+    let started = Instant::now();
+    let mut saw_output = false;
+    while Instant::now() < until {
+        if stderr_contains(proc, "setup connection") {
+            return Ok(());
+        }
+        match proc.stdout_rx.recv_timeout(Duration::from_millis(100)) {
+            Ok(Ok(line)) => {
+                saw_output = true;
+                let cleaned = strip_ansi(&line);
+                host_log(&cleaned);
+                if cleaned.contains("setup connection") {
+                    append_stderr(proc, &cleaned);
+                    return Ok(());
+                }
+                if cleaned.trim().starts_with('{') {
+                    proc.pending.push_back(cleaned);
+                } else {
+                    append_stderr(proc, &cleaned);
+                }
+            }
+            Ok(Err(err)) => return Err(format!("读取管理 CLI 失败：{err}")),
+            Err(RecvTimeoutError::Disconnected) => return Err(describe_cli_exit(proc)),
+            Err(RecvTimeoutError::Timeout) => {
+                if proc.child.wait_exit(Duration::ZERO).is_some() {
+                    return Err(describe_cli_exit(proc));
+                }
+                if !saw_output && started.elapsed() > Duration::from_millis(400) {
+                    return Ok(());
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn handshake_initialize(
     proc: &mut AcpProc,
     skill_dir: &Path,
     skill_text: &str,
     cancel: &AtomicBool,
 ) -> Result<(), String> {
+    wait_for_acp_ready(proc)?;
     let init = request_bounded(
         proc,
         "initialize",
@@ -845,7 +921,8 @@ pub(crate) fn probe_acp(cli: &DetectedCli, skill_dir: &Path) -> Result<Vec<Strin
 }
 
 fn write_msg(stdin: &mut dyn Write, value: &Value) -> Result<(), String> {
-    let line = format!("{value}\n");
+    // ConPTY 默认 cooked：只有 CR/LF 才把一行交给 Bun；只写 \n 会停在输入缓冲里。
+    let line = format!("{value}\r\n");
     stdin
         .write_all(line.as_bytes())
         .and_then(|_| stdin.flush())
@@ -860,6 +937,9 @@ fn write_locked(stdin: &Arc<Mutex<Box<dyn Write + Send>>>, value: &Value) -> Res
 }
 
 fn recv_line(proc: &mut AcpProc, until: Instant) -> Result<String, String> {
+    if let Some(line) = proc.pending.pop_front() {
+        return Ok(line);
+    }
     loop {
         if Instant::now() > until {
             proc.timed_out.store(true, Ordering::SeqCst);
@@ -1523,12 +1603,12 @@ mod tests {
         assert_eq!(
             dw_flags & ACP_STARTF_USESTDHANDLES,
             ACP_STARTF_USESTDHANDLES,
-            "ACP NDJSON must use pipes; ConPTY as stdio makes OpenCode emit TUI"
+            "USESTDHANDLES with NULL isolates parent handles so the child uses ConPTY"
         );
         assert_eq!(
             ACP_CONPTY_INHERIT_HANDLES,
-            1,
-            "child must inherit the ACP std pipes"
+            0,
+            "NULL std handles + inherit FALSE so the child uses ConPTY; ACP JSON is on the PTY pipes"
         );
         assert_eq!(
             creation & ACP_CREATE_NO_WINDOW,
@@ -1564,6 +1644,10 @@ mod tests {
             candidate_arg_sets(&cli)[0],
             vec!["--print-logs", "acp"]
         );
+        assert_eq!(
+            default_acp_arg_sets("opencode"),
+            vec![&["--print-logs", "acp"][..]]
+        );
     }
 
     #[test]
@@ -1584,7 +1668,7 @@ mod tests {
 
     #[test]
     fn handshake_timeout_reports_watchdog_not_unknown() {
-        let last = format_cli_exit(true, INIT_TIMEOUT, Some(1), 34160, None);
+        let last = format_cli_exit(true, INIT_TIMEOUT, Some(1), 34160);
         assert!(last.contains("握手超时"), "{last}");
         assert!(last.contains("taskkill"), "{last}");
         assert!(last.contains("exit 1"), "{last}");
@@ -1630,13 +1714,7 @@ mod tests {
 
     #[test]
     fn dll_init_failure_is_not_unknown_or_login() {
-        let last = format_cli_exit(
-            false,
-            Duration::from_millis(80),
-            Some(-1073741502),
-            9,
-            None,
-        );
+        let last = format_cli_exit(false, Duration::from_millis(80), Some(-1073741502), 9);
         assert!(last.contains("0xC0000142"), "{last}");
         assert!(last.contains("STATUS_DLL_INIT_FAILED"), "{last}");
         assert!(last.contains("立即"), "{last}");
@@ -1652,17 +1730,13 @@ mod tests {
     }
 
     #[test]
-    fn immediate_exit_reports_code_and_stderr() {
-        let last = format_cli_exit(
-            false,
-            Duration::from_millis(80),
-            Some(1),
-            9,
-            Some("Error: Unknown command acp"),
-        );
+    fn immediate_exit_reports_code_without_verbose_logs() {
+        let last = format_cli_exit(false, Duration::from_millis(80), Some(1), 9);
         assert!(last.contains("立即"), "{last}");
         assert!(last.contains("exit 1"), "{last}");
-        assert!(last.contains("Unknown command"), "{last}");
+        assert!(!last.contains("INFO"), "{last}");
+        assert!(!last.contains("bootstrapping"), "{last}");
+        assert!(!last.contains("Unknown command"), "{last}");
         assert!(!last.contains("unknown"), "{last}");
         assert!(is_cli_exit_error(&last));
         let msg = handshake_failure_message(
@@ -1674,11 +1748,12 @@ mod tests {
             !msg.contains("尚未登录"),
             "immediate exit must not be blamed on missing login: {msg}"
         );
+        assert!(!msg.contains("bootstrapping"), "{msg}");
     }
 
     #[test]
     fn still_running_after_eof_is_not_unknown() {
-        let last = format_cli_exit(false, Duration::from_secs(12), None, 34160, None);
+        let last = format_cli_exit(false, Duration::from_secs(12), None, 34160);
         assert!(last.contains("34160"), "{last}");
         assert!(last.contains("仍在运行"), "{last}");
         assert!(!last.contains("unknown"), "{last}");
