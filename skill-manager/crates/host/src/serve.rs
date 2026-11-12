@@ -36,10 +36,10 @@ pub fn run_blocking(
     runtime.acquire_lock()?;
     let _ = runtime.watch_vault();
     runtime.spawn_scheduler();
-    crate::pair::resume_if_paired(&runtime);
 
     let rt = tokio::runtime::Runtime::new().map_err(|err| err.to_string())?;
     rt.block_on(async {
+        crate::pair::resume_if_paired(&runtime);
         let listener = tokio::net::TcpListener::bind(bind)
             .await
             .map_err(|err| err.to_string())?;

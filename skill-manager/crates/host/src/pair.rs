@@ -126,6 +126,14 @@ fn persist(runtime: &HostRuntime, identity: HostIdentity) -> Result<(), String> 
 }
 
 fn spawn_link(runtime: HostRuntime, station_url: String, device_id: String, device_key: String) {
+    // 已在 `host serve` 的运行时里时，把出站长连接挂在同一执行器上，
+    // 不要再 `Runtime::new()`：双运行时上 `tokio::spawn` 的 invoke 任务可能永不被轮询。
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        handle.spawn(async move {
+            link_loop(runtime, station_url, device_id, device_key).await;
+        });
+        return;
+    }
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Runtime::new() {
             Ok(rt) => rt,
@@ -213,15 +221,18 @@ async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> 
     let mut events = runtime.sse().subscribe();
     let mut heartbeat = tokio::time::interval(WS_HEARTBEAT);
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    heartbeat.tick().await;
     loop {
         tokio::select! {
+            biased;
             incoming = stream.next() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
                         let runtime = runtime.clone();
                         let out_tx = out_tx.clone();
-                        tokio::spawn(async move {
-                            dispatch_station_invoke(runtime, out_tx, text.to_string()).await;
+                        let payload = text.to_string();
+                        std::thread::spawn(move || {
+                            dispatch_station_invoke(runtime, out_tx, payload);
                         });
                     }
                     Some(Ok(Message::Ping(data))) => {
@@ -230,6 +241,14 @@ async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> 
                     Some(Ok(Message::Close(_))) | None => return Ok(()),
                     Some(Err(err)) => return Err(err.to_string()),
                     _ => {}
+                }
+            }
+            outgoing = out_rx.recv() => {
+                let Some(message) = outgoing else {
+                    return Err("管理站出站通道已关闭".to_string());
+                };
+                if sink.send(message).await.is_err() {
+                    return Err("管理站长连接已断开".to_string());
                 }
             }
             event = events.recv() => {
@@ -242,14 +261,6 @@ async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> 
                     let _ = out_tx.send(Message::Text(payload.to_string().into()));
                 }
             }
-            outgoing = out_rx.recv() => {
-                let Some(message) = outgoing else {
-                    return Ok(());
-                };
-                if sink.send(message).await.is_err() {
-                    return Err("管理站长连接已断开".to_string());
-                }
-            }
             _ = heartbeat.tick() => {
                 if out_tx.send(Message::Ping(Default::default())).is_err() {
                     return Err("管理站心跳发送失败".to_string());
@@ -259,7 +270,7 @@ async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> 
     }
 }
 
-async fn dispatch_station_invoke(
+fn dispatch_station_invoke(
     runtime: HostRuntime,
     out_tx: tokio::sync::mpsc::UnboundedSender<tokio_tungstenite::tungstenite::Message>,
     text: String,
@@ -269,7 +280,17 @@ async fn dispatch_station_invoke(
 
     let value: serde_json::Value = match serde_json::from_str(&text) {
         Ok(v) => v,
-        Err(_) => return,
+        Err(err) => {
+            let reply = json!({
+                "type": "invoke_result",
+                "id": "",
+                "ok": false,
+                "status": 400,
+                "body": { "error": format!("无法解析管理站请求：{err}") },
+            });
+            let _ = out_tx.send(Message::Text(reply.to_string().into()));
+            return;
+        }
     };
     if value.get("type").and_then(|v| v.as_str()) != Some("invoke") {
         return;
@@ -289,23 +310,19 @@ async fn dispatch_station_invoke(
         .get("sessionId")
         .and_then(|v| v.as_str())
         .map(str::to_string);
-    let result = tokio::task::spawn_blocking(move || {
-        invoke::invoke(
-            &runtime,
-            &command,
-            body,
-            InvokeSource::Gui,
-            session.as_deref(),
-        )
-    })
-    .await;
+    let result = invoke::invoke(
+        &runtime,
+        &command,
+        body,
+        InvokeSource::Gui,
+        session.as_deref(),
+    );
     let (ok, status, payload) = match result {
-        Ok(Ok(v)) => (true, 200u16, v),
-        Ok(Err(err)) => {
+        Ok(v) => (true, 200u16, v),
+        Err(err) => {
             let (status, body) = err.status_and_body();
             (false, status, body)
         }
-        Err(err) => (false, 500, json!({ "error": err.to_string() })),
     };
     let reply = json!({
         "type": "invoke_result",
@@ -320,10 +337,40 @@ async fn dispatch_station_invoke(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio_tungstenite::tungstenite::Message;
 
     #[test]
     fn host_ws_heartbeat_is_shorter_than_former_idle_ttl() {
         assert!(WS_HEARTBEAT < Duration::from_secs(45));
         assert_eq!(WS_HEARTBEAT, Duration::from_secs(15));
+    }
+
+    #[test]
+    fn station_invoke_replies_on_the_outbox_without_tokio_spawn() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = skill_manager_core::AppContext::open(Some(dir.path().to_path_buf())).unwrap();
+        let runtime = HostRuntime::from_context(ctx);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        dispatch_station_invoke(
+            runtime,
+            tx,
+            json!({
+                "type": "invoke",
+                "id": "req-1",
+                "command": "agent_runtime_get",
+                "sessionId": "gui-session",
+                "body": {},
+            })
+            .to_string(),
+        );
+        let Message::Text(text) = rx.try_recv().expect("invoke_result") else {
+            panic!("expected text reply");
+        };
+        let reply: serde_json::Value = serde_json::from_str(text.as_str()).unwrap();
+        assert_eq!(reply["type"], "invoke_result");
+        assert_eq!(reply["id"], "req-1");
+        assert_eq!(reply["ok"], true);
+        assert_eq!(reply["status"], 200);
+        assert_eq!(reply["body"]["cliId"], "opencode");
     }
 }
