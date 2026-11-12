@@ -132,8 +132,67 @@ pub(crate) struct AcpProc {
     stdout: BufReader<std::process::ChildStdout>,
 }
 
+/// Windows 上 CreateProcess 不能跑无扩展 Unix `#!/bin/sh` 垫片（os error 193）。
+/// 同目录有 `.cmd` / `.exe` 时用那个；只有垫片则视为不可拉起。
+pub(crate) fn spawnable_cli_path(path: &Path) -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        windows_spawnable_cli_path(path)
+    }
+    #[cfg(not(windows))]
+    {
+        path.is_file().then(|| path.to_path_buf())
+    }
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn windows_spawnable_cli_path(path: &Path) -> Option<PathBuf> {
+    let ext = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if matches!(ext.as_str(), "cmd" | "bat" | "exe" | "com") {
+        return path.is_file().then(|| path.to_path_buf());
+    }
+    let cmd = path.with_extension("cmd");
+    if cmd.is_file() {
+        return Some(cmd);
+    }
+    let exe = path.with_extension("exe");
+    if exe.is_file() {
+        return Some(exe);
+    }
+    None
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_acp_cmd_args(bin: &Path) -> Vec<std::ffi::OsString> {
+    vec!["/C".into(), bin.as_os_str().to_os_string()]
+}
+
+fn cli_process_command(bin: &Path) -> Command {
+    #[cfg(windows)]
+    {
+        // ACP 需要管道 JSON-RPC，不能用 start / CREATE_NEW_CONSOLE（那是登录窗口）。
+        let mut cmd = skill_manager_core::process::command("cmd");
+        cmd.args(windows_acp_cmd_args(bin));
+        cmd
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new(bin)
+    }
+}
+
 fn spawn_with_args(bin: &Path, args: &[&str], skill_dir: &Path) -> Result<AcpProc, String> {
-    let mut cmd = Command::new(bin);
+    let bin = spawnable_cli_path(bin).ok_or_else(|| {
+        format!(
+            "无法启动管理 CLI：{} 不是可在本机拉起的程序（Windows 上应使用 .cmd，不能是无扩展 Unix 垫片）",
+            bin.display()
+        )
+    })?;
+    let mut cmd = cli_process_command(&bin);
     cmd.args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -842,6 +901,43 @@ pub(crate) fn run_turn(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_prefers_cmd_shim_over_unix_bin() {
+        let dir = tempfile::tempdir().unwrap();
+        let unix = dir.path().join("opencode");
+        let cmd = dir.path().join("opencode.cmd");
+        std::fs::write(&unix, b"#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::write(&cmd, b"@echo off\n").unwrap();
+        assert_eq!(windows_spawnable_cli_path(&unix).as_deref(), Some(cmd.as_path()));
+        assert_eq!(windows_spawnable_cli_path(&cmd).as_deref(), Some(cmd.as_path()));
+        assert_eq!(windows_spawnable_cli_path(&unix).unwrap().extension().unwrap(), "cmd");
+    }
+
+    #[test]
+    fn windows_unix_shim_alone_is_not_spawnable() {
+        let dir = tempfile::tempdir().unwrap();
+        let unix = dir.path().join("opencode");
+        std::fs::write(&unix, b"#!/bin/sh\nexit 0\n").unwrap();
+        assert_eq!(windows_spawnable_cli_path(&unix), None);
+    }
+
+    #[test]
+    fn windows_acp_launch_uses_cmd_not_start() {
+        let bin = Path::new(
+            r"C:\qa-host-a\agent-runtime\opencode\node_modules\.bin\opencode.cmd",
+        );
+        let argv: Vec<String> = windows_acp_cmd_args(bin)
+            .into_iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(argv, vec!["/C", bin.to_str().unwrap()]);
+        assert!(
+            !argv.iter().any(|arg| arg.eq_ignore_ascii_case("start")),
+            "ACP handshake must keep piped stdio; start is only for login, got {argv:?}"
+        );
+        assert!(argv.iter().all(|arg| !arg.contains('"')));
+    }
 
     #[test]
     fn auth_error_text_is_detected() {

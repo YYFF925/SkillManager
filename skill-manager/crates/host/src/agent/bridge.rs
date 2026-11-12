@@ -119,28 +119,41 @@ fn ready_status(cli: DetectedCli) -> ResolvedRuntime {
     }
 }
 
+fn pin_spawnable(
+    runtime: Option<&HostRuntime>,
+    mut cli: DetectedCli,
+    persist: bool,
+) -> Option<ResolvedRuntime> {
+    let path = acp::spawnable_cli_path(&cli.binary_path)?;
+    let changed = path != cli.binary_path;
+    cli.binary_path = path;
+    if persist || changed {
+        if let Some(runtime) = runtime {
+            let _ = persist_runtime(runtime, &cli);
+        }
+    }
+    Some(ready_status(cli))
+}
+
 fn resolve_runtime(runtime: Option<&HostRuntime>) -> ResolvedRuntime {
     if let Some(cli) = from_env() {
-        if cli.binary_path.is_file() {
-            if let Some(runtime) = runtime {
-                let _ = persist_runtime(runtime, &cli);
-            }
-            return ready_status(cli);
+        if let Some(ready) = pin_spawnable(runtime, cli.clone(), true) {
+            return ready;
         }
         return ResolvedRuntime {
             cli: None,
             needs_install: false,
             needs_login: false,
             message: format!(
-                "环境变量 SKILL_MANAGER_AGENT_CLI 指向的命令行不存在：{}",
+                "环境变量 SKILL_MANAGER_AGENT_CLI 指向的命令行无法在本机拉起：{}",
                 cli.binary_path.display()
             ),
         };
     }
     if let Some(runtime) = runtime {
         if let Some(stored) = load_runtime(runtime) {
-            if stored.binary_path.is_file() {
-                return ready_status(stored);
+            if let Some(ready) = pin_spawnable(Some(runtime), stored, false) {
+                return ready;
             }
         }
         if let Some(cli) = look_for_app_install(runtime) {
@@ -149,7 +162,7 @@ fn resolve_runtime(runtime: Option<&HostRuntime>) -> ResolvedRuntime {
         }
     }
     // 只认钉死的默认名，不扫 claude / codex / gemini / hermes 等清单。
-    if let Some(path) = which(DEFAULT_BIN) {
+    if let Some(path) = which(DEFAULT_BIN).and_then(|path| acp::spawnable_cli_path(&path)) {
         let cli = default_detected(path, false, false);
         if let Some(runtime) = runtime {
             let _ = persist_runtime(runtime, &cli);
@@ -237,15 +250,7 @@ fn from_env() -> Option<DetectedCli> {
 fn look_for_app_install(runtime: &HostRuntime) -> Option<DetectedCli> {
     let dest = install_dir(runtime).join(DEFAULT_CLI_ID).join("node_modules").join(".bin");
     let unix = dest.join(DEFAULT_BIN);
-    let windows = dest.join(format!("{DEFAULT_BIN}.cmd"));
-    let path = if unix.is_file() {
-        unix
-    } else if windows.is_file() {
-        windows
-    } else {
-        return None;
-    };
-    Some(default_detected(path, true, false))
+    acp::spawnable_cli_path(&unix).map(|path| default_detected(path, true, false))
 }
 
 fn infer_cli_id(path: &Path) -> String {
@@ -260,9 +265,9 @@ fn infer_cli_id(path: &Path) -> String {
 fn resolve_bin(bin: &str) -> Option<PathBuf> {
     let as_path = PathBuf::from(bin);
     if as_path.is_file() {
-        return Some(as_path);
+        return acp::spawnable_cli_path(&as_path);
     }
-    which(bin)
+    which(bin).and_then(|path| acp::spawnable_cli_path(&path))
 }
 
 fn ensure_executable(path: &Path) -> Result<(), String> {
@@ -410,17 +415,7 @@ fn try_install_package(dest: &Path, package: &str, bin_name: &str) -> Result<Pat
         return Err(format!("npm install {package} 失败"));
     }
     let unix = dest.join("node_modules").join(".bin").join(bin_name);
-    let windows = dest
-        .join("node_modules")
-        .join(".bin")
-        .join(format!("{bin_name}.cmd"));
-    if unix.is_file() {
-        Ok(unix)
-    } else if windows.is_file() {
-        Ok(windows)
-    } else {
-        Err(format!("安装后未找到 {bin_name}"))
-    }
+    acp::spawnable_cli_path(&unix).ok_or_else(|| format!("安装后未找到 {bin_name}"))
 }
 
 /// Windows 上 CreateProcess 不跑 `npm.cmd`，必须经 `cmd.exe /C` 解析 PATHEXT。
@@ -921,6 +916,8 @@ mod tests {
         let fake = bin_dir.join("opencode");
         std::fs::write(&fake, b"#!/bin/sh\nexit 0\n").unwrap();
         chmod_exec(&fake);
+        let cmd_shim = bin_dir.join("opencode.cmd");
+        std::fs::write(&cmd_shim, b"@echo off\n").unwrap();
         let view = runtime_view(&runtime);
         assert_eq!(view["cliId"], "opencode");
         assert_eq!(view["needsInstall"], false);
@@ -929,7 +926,57 @@ mod tests {
         assert_eq!(view["installedByApp"], true);
         let loaded = load_runtime(&runtime).unwrap();
         assert_eq!(loaded.cli_id, "opencode");
+        #[cfg(windows)]
+        assert!(
+            loaded.binary_path.ends_with("opencode.cmd"),
+            "{}",
+            loaded.binary_path.display()
+        );
+        #[cfg(not(windows))]
         assert!(loaded.binary_path.ends_with("opencode"));
+    }
+
+    #[test]
+    fn unix_shim_without_cmd_is_not_ready_on_windows() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = skill_manager_core::AppContext::open(Some(dir.path().to_path_buf())).unwrap();
+        let runtime = HostRuntime::from_context(ctx);
+        let _path = IsolatedPath::empty();
+        let _env = IsolatedEnv::unset("SKILL_MANAGER_AGENT_CLI");
+        let bin_dir = dir
+            .path()
+            .join("agent-runtime")
+            .join("opencode")
+            .join("node_modules")
+            .join(".bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        let fake = bin_dir.join("opencode");
+        std::fs::write(&fake, b"#!/bin/sh\nexit 0\n").unwrap();
+        chmod_exec(&fake);
+        persist_runtime(
+            &runtime,
+            &DetectedCli {
+                cli_id: "opencode".into(),
+                binary_path: fake,
+                installed_by_app: true,
+                acp_args: vec!["acp".into()],
+                user_selected: false,
+            },
+        )
+        .unwrap();
+        let view = runtime_view(&runtime);
+        #[cfg(windows)]
+        {
+            assert_eq!(
+                view["ready"], false,
+                "ready must not be true for a Unix shim that CreateProcess cannot launch"
+            );
+            assert_eq!(view["needsInstall"], true);
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(view["ready"], true);
+        }
     }
 
     #[test]
