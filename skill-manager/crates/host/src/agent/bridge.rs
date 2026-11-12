@@ -18,7 +18,7 @@ const DEFAULT_CLI_ID: &str = "opencode";
 const DEFAULT_CLI_NAME: &str = "OpenCode";
 const DEFAULT_BIN: &str = "opencode";
 const DEFAULT_PACKAGE: &str = "opencode-ai";
-const DEFAULT_ACP_ARGS: &[&str] = &["acp"];
+const DEFAULT_ACP_ARGS: &[&str] = &["--print-logs", "acp"];
 const DEFAULT_LOGIN_ARGS: &[&str] = &["auth", "login"];
 
 const INSTALL_HINT: &str = "尚未安装默认管理 CLI OpenCode。请在对话面板点「安装 OpenCode」，或执行 host agent-cli --install。装到本机 Host 目录，不打进 Skill Manager 安装包。对话不可用，不会假装已经改库。";
@@ -294,35 +294,49 @@ fn ensure_executable(path: &Path) -> Result<(), String> {
 
 fn load_runtime(runtime: &HostRuntime) -> Option<DetectedCli> {
     let ctx = runtime.get().ok()?;
-    ctx.state()
+    let loaded = ctx
+        .state()
         .connection()
         .query_row(
             "SELECT cli_id, binary_path, installed_by_app, acp_args, user_selected
              FROM agent_runtime WHERE id = 1",
             [],
             |row| {
-                let acp_args = row
+                let stored = row
                     .get::<_, Option<String>>(3)?
-                    .and_then(|raw| serde_json::from_str(&raw).ok())
+                    .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
                     .unwrap_or_default();
-                Ok(DetectedCli {
-                    cli_id: row.get::<_, Option<String>>(0)?.unwrap_or_default(),
-                    binary_path: PathBuf::from(
-                        row.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                    ),
-                    installed_by_app: row.get::<_, i64>(2).unwrap_or(0) != 0,
-                    acp_args,
-                    user_selected: row.get::<_, i64>(4).unwrap_or(0) != 0,
-                })
+                let acp_args = acp::normalize_acp_args(&stored);
+                Ok((
+                    DetectedCli {
+                        cli_id: row.get::<_, Option<String>>(0)?.unwrap_or_default(),
+                        binary_path: PathBuf::from(
+                            row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                        ),
+                        installed_by_app: row.get::<_, i64>(2).unwrap_or(0) != 0,
+                        acp_args,
+                        user_selected: row.get::<_, i64>(4).unwrap_or(0) != 0,
+                    },
+                    stored,
+                ))
             },
         )
-        .ok()
-        .filter(|cli| !cli.cli_id.is_empty() && !cli.binary_path.as_os_str().is_empty())
+        .ok();
+    drop(ctx);
+    let (cli, stored) = loaded?;
+    if cli.cli_id.is_empty() || cli.binary_path.as_os_str().is_empty() {
+        return None;
+    }
+    if cli.acp_args != stored {
+        let _ = persist_runtime(runtime, &cli);
+    }
+    Some(cli)
 }
 
 fn persist_runtime(runtime: &HostRuntime, cli: &DetectedCli) -> Result<(), String> {
     let ctx = runtime.get()?;
-    let args = serde_json::to_string(&cli.acp_args).unwrap_or_else(|_| "[]".into());
+    let args = serde_json::to_string(&acp::normalize_acp_args(&cli.acp_args))
+        .unwrap_or_else(|_| "[]".into());
     ctx.state()
         .connection()
         .execute(
@@ -752,7 +766,7 @@ mod tests {
     fn default_cli_is_opencode_not_a_vendor_list() {
         assert_eq!(DEFAULT_CLI_ID, "opencode");
         assert_eq!(DEFAULT_PACKAGE, "opencode-ai");
-        assert_eq!(DEFAULT_ACP_ARGS, &["acp"]);
+        assert_eq!(DEFAULT_ACP_ARGS, &["--print-logs", "acp"]);
         assert_eq!(DEFAULT_LOGIN_ARGS, &["auth", "login"]);
     }
 
@@ -1130,7 +1144,59 @@ for line in sys.stdin:
     #[test]
     fn default_args_for_unlisted_cli_try_acp() {
         let sets = acp::default_acp_arg_sets("my-vendor");
-        assert_eq!(sets, vec![&["acp"][..], &["--acp"][..], &[][..]]);
+        assert_eq!(
+            sets,
+            vec![&["--print-logs", "acp"][..], &["acp"][..], &["--acp"][..], &[][..]]
+        );
         assert_eq!(acp::default_acp_arg_sets("opencode"), sets);
+    }
+
+    #[test]
+    fn stored_acp_args_upgrade_to_print_logs() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = skill_manager_core::AppContext::open(Some(dir.path().to_path_buf())).unwrap();
+        let runtime = HostRuntime::from_context(ctx);
+        let _path = IsolatedPath::empty();
+        let _env = IsolatedEnv::unset("SKILL_MANAGER_AGENT_CLI");
+        let fake = dir.path().join("opencode");
+        std::fs::write(&fake, b"#!/bin/sh\nexit 0\n").unwrap();
+        chmod_exec(&fake);
+        persist_runtime(
+            &runtime,
+            &DetectedCli {
+                cli_id: "opencode".into(),
+                binary_path: fake,
+                installed_by_app: true,
+                acp_args: vec!["acp".into()],
+                user_selected: false,
+            },
+        )
+        .unwrap();
+        runtime
+            .get()
+            .unwrap()
+            .state()
+            .connection()
+            .execute(
+                "UPDATE agent_runtime SET acp_args = ?1 WHERE id = 1",
+                ["[\"acp\"]"],
+            )
+            .unwrap();
+        let loaded = load_runtime(&runtime).unwrap();
+        assert_eq!(loaded.acp_args, vec!["--print-logs", "acp"]);
+        let view = runtime_view(&runtime);
+        assert_eq!(view["acpArgs"], json!(["--print-logs", "acp"]));
+        let stored: String = runtime
+            .get()
+            .unwrap()
+            .state()
+            .connection()
+            .query_row(
+                "SELECT acp_args FROM agent_runtime WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, r#"["--print-logs","acp"]"#);
     }
 }

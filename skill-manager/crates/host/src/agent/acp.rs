@@ -7,6 +7,7 @@ use std::process::{Child, Command};
 #[cfg(not(windows))]
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -188,7 +189,7 @@ impl CliChild {
 pub(crate) struct AcpProc {
     child: CliChild,
     stdin: Arc<Mutex<Box<dyn Write + Send>>>,
-    stdout: BufReader<Box<dyn Read + Send>>,
+    stdout_rx: mpsc::Receiver<std::io::Result<String>>,
     stderr: Arc<Mutex<String>>,
     timed_out: Arc<AtomicBool>,
     started: Instant,
@@ -394,6 +395,34 @@ fn skill_env(skill_dir: &Path) -> Vec<(&str, &Path)> {
     }
 }
 
+fn spawn_stdout_reader(
+    stdout: Box<dyn Read + Send>,
+) -> mpsc::Receiver<std::io::Result<String>> {
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                Ok(0) => {
+                    let _ = tx.send(Ok(String::new()));
+                    break;
+                }
+                Ok(_) => {
+                    if tx.send(Ok(line)).is_err() {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    let _ = tx.send(Err(err));
+                    break;
+                }
+            }
+        }
+    });
+    rx
+}
+
 fn acp_proc(
     child: CliChild,
     stdin: Box<dyn Write + Send>,
@@ -405,7 +434,7 @@ fn acp_proc(
     AcpProc {
         child,
         stdin: Arc::new(Mutex::new(stdin)),
-        stdout: BufReader::new(stdout),
+        stdout_rx: spawn_stdout_reader(stdout),
         stderr,
         timed_out,
         started,
@@ -478,10 +507,19 @@ fn spawn_with_args(bin: &Path, args: &[&str], skill_dir: &Path) -> Result<AcpPro
     ))
 }
 
+pub(crate) fn normalize_acp_args(args: &[String]) -> Vec<String> {
+    if args.is_empty() || args == ["acp"] {
+        vec!["--print-logs".into(), "acp".into()]
+    } else {
+        args.to_vec()
+    }
+}
+
 fn candidate_arg_sets(cli: &DetectedCli) -> Vec<Vec<String>> {
     let mut sets = Vec::new();
-    if !cli.acp_args.is_empty() {
-        sets.push(cli.acp_args.clone());
+    let stored = normalize_acp_args(&cli.acp_args);
+    if !stored.is_empty() {
+        sets.push(stored);
     }
     for set in default_acp_arg_sets(&cli.cli_id) {
         let owned: Vec<String> = set.iter().map(|s| (*s).to_string()).collect();
@@ -542,8 +580,16 @@ fn kill_pid(pid: u32) {
     }
 }
 
-fn kill_child(child: &mut CliChild) {
+fn interrupt_child(child: &CliChild) {
+    #[cfg(windows)]
+    if let CliChild::Hidden(child) = child {
+        child.hpcon.close();
+    }
     kill_pid(child.id());
+}
+
+fn kill_child(child: &mut CliChild) {
+    interrupt_child(child);
     match child {
         CliChild::Std(child) => {
             let _ = child.kill();
@@ -554,13 +600,19 @@ fn kill_child(child: &mut CliChild) {
     let _ = child.wait_exit(Duration::from_millis(800));
 }
 
-/// `read_line` 在子进程活着但不说话时会一直堵；握手必须能超时杀掉再试下一组参数。
+/// `read_line` 在 ConPTY/conhost 仍活着时会一直堵；超时必须先关 PTY 再 taskkill，读线程才能收到 EOF。
 fn arm_handshake_watchdog(
-    pid: u32,
+    child: &CliChild,
     timed_out: Arc<AtomicBool>,
 ) -> (Arc<AtomicBool>, std::thread::JoinHandle<()>) {
     let stop = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&stop);
+    let pid = child.id();
+    #[cfg(windows)]
+    let pty = match child {
+        CliChild::Hidden(child) => Some(Arc::clone(&child.hpcon)),
+        CliChild::Std(_) => None,
+    };
     let handle = std::thread::spawn(move || {
         let deadline = Instant::now() + INIT_TIMEOUT;
         while Instant::now() < deadline {
@@ -571,6 +623,10 @@ fn arm_handshake_watchdog(
         }
         if !flag.load(Ordering::SeqCst) {
             timed_out.store(true, Ordering::SeqCst);
+            #[cfg(windows)]
+            if let Some(pty) = pty {
+                pty.close();
+            }
             kill_pid(pid);
         }
     });
@@ -586,7 +642,7 @@ fn request_bounded(
     host_session: Option<&str>,
     acp_session: Option<&str>,
 ) -> Result<Value, String> {
-    let (stop, watchdog) = arm_handshake_watchdog(proc.child.id(), Arc::clone(&proc.timed_out));
+    let (stop, watchdog) = arm_handshake_watchdog(&proc.child, Arc::clone(&proc.timed_out));
     let result = request(
         proc,
         method,
@@ -666,7 +722,7 @@ fn handshake_failure_message(bin: &Path, last: &str) -> String {
             .to_string()
     } else {
         format!(
-            "无法与 {bin} 完成 ACP 握手（已试 acp / --acp / 无参）。{last}",
+            "无法与 {bin} 完成 ACP 握手（已试 --print-logs acp / acp / --acp / 无参）。{last}",
             bin = bin.display()
         )
     }
@@ -695,15 +751,28 @@ fn write_locked(stdin: &Arc<Mutex<Box<dyn Write + Send>>>, value: &Value) -> Res
     write_msg(&mut **guard, value)
 }
 
-fn read_msg(proc: &mut AcpProc, until: Instant) -> Result<Value, String> {
+fn recv_line(proc: &mut AcpProc, until: Instant) -> Result<String, String> {
     loop {
         if Instant::now() > until {
-            return Err("等待管理 CLI 响应超时".to_string());
+            proc.timed_out.store(true, Ordering::SeqCst);
+            kill_child(&mut proc.child);
+            return Err(describe_cli_exit(proc));
         }
-        let mut header = String::new();
-        proc.stdout
-            .read_line(&mut header)
-            .map_err(|err| format!("读取管理 CLI 失败：{err}"))?;
+        let wait = until
+            .saturating_duration_since(Instant::now())
+            .min(Duration::from_millis(200));
+        match proc.stdout_rx.recv_timeout(wait) {
+            Ok(Ok(line)) => return Ok(line),
+            Ok(Err(err)) => return Err(format!("读取管理 CLI 失败：{err}")),
+            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Disconnected) => return Err(describe_cli_exit(proc)),
+        }
+    }
+}
+
+fn read_msg(proc: &mut AcpProc, until: Instant) -> Result<Value, String> {
+    loop {
+        let header = recv_line(proc, until)?;
         if header.is_empty() {
             return Err(describe_cli_exit(proc));
         }
@@ -716,15 +785,13 @@ fn read_msg(proc: &mut AcpProc, until: Instant) -> Result<Value, String> {
                 .trim()
                 .parse()
                 .map_err(|_| "无效的 Content-Length".to_string())?;
-            let mut blank = String::new();
-            proc.stdout
-                .read_line(&mut blank)
-                .map_err(|err| err.to_string())?;
-            let mut buf = vec![0u8; len];
-            proc.stdout
-                .read_exact(&mut buf)
-                .map_err(|err| err.to_string())?;
-            return serde_json::from_slice(&buf).map_err(|err| err.to_string());
+            let blank = recv_line(proc, until)?;
+            let _ = blank;
+            let mut body = String::new();
+            while body.len() < len {
+                body.push_str(&recv_line(proc, until)?);
+            }
+            return serde_json::from_str(body.trim()).map_err(|err| err.to_string());
         }
         if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
             return Ok(value);
@@ -1353,6 +1420,25 @@ mod tests {
             creation & ACP_EXTENDED_STARTUPINFO_PRESENT,
             ACP_EXTENDED_STARTUPINFO_PRESENT,
             "ConPTY needs STARTUPINFOEX"
+        );
+    }
+
+    #[test]
+    fn stored_acp_args_are_print_logs_acp() {
+        assert_eq!(
+            normalize_acp_args(&["acp".into()]),
+            vec!["--print-logs", "acp"]
+        );
+        let cli = DetectedCli {
+            cli_id: "opencode".into(),
+            binary_path: PathBuf::from("opencode"),
+            installed_by_app: true,
+            acp_args: vec!["acp".into()],
+            user_selected: false,
+        };
+        assert_eq!(
+            candidate_arg_sets(&cli)[0],
+            vec!["--print-logs", "acp"]
         );
     }
 

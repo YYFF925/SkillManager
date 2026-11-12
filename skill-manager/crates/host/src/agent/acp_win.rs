@@ -11,8 +11,10 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
 use std::path::Path;
 use std::ptr;
+use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::Arc;
 
-use super::{ACP_CREATE_NO_WINDOW, windows_acp_create_flags};
+use super::{ACP_CREATE_NEW_CONSOLE, ACP_CREATE_NO_WINDOW, windows_acp_create_flags};
 
 const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
 const WAIT_OBJECT_0: u32 = 0;
@@ -118,24 +120,38 @@ unsafe extern "system" {
     fn DeleteProcThreadAttributeList(list: *mut core::ffi::c_void);
 }
 
-struct PseudoConsole(RawHandle);
+pub(crate) struct PseudoConsole {
+    raw: AtomicPtr<core::ffi::c_void>,
+}
 
 unsafe impl Send for PseudoConsole {}
 unsafe impl Sync for PseudoConsole {}
 
+impl PseudoConsole {
+    fn new(handle: RawHandle) -> Arc<Self> {
+        Arc::new(Self {
+            raw: AtomicPtr::new(handle),
+        })
+    }
+
+    pub(crate) fn close(&self) {
+        let handle = self.raw.swap(ptr::null_mut(), Ordering::SeqCst);
+        if !handle.is_null() {
+            unsafe { ClosePseudoConsole(handle) };
+        }
+    }
+}
+
 impl Drop for PseudoConsole {
     fn drop(&mut self) {
-        if !self.0.is_null() {
-            unsafe { ClosePseudoConsole(self.0) };
-            self.0 = ptr::null_mut();
-        }
+        self.close();
     }
 }
 
 pub(crate) struct HiddenChild {
     pub pid: u32,
     handle: OwnedHandle,
-    hpcon: PseudoConsole,
+    pub hpcon: Arc<PseudoConsole>,
 }
 
 impl HiddenChild {
@@ -230,6 +246,7 @@ pub(crate) fn spawn_hidden(
         .map(|(_, path)| wide_nul(path.as_os_str()));
     let (dw_flags, show, creation) = windows_acp_create_flags();
     debug_assert_eq!(creation & ACP_CREATE_NO_WINDOW, 0);
+    debug_assert_eq!(creation & ACP_CREATE_NEW_CONSOLE, 0);
 
     let mut si: StartupInfoExW = unsafe { std::mem::zeroed() };
     si.startup.cb = std::mem::size_of::<StartupInfoExW>() as u32;
@@ -278,7 +295,7 @@ pub(crate) fn spawn_hidden(
         child: HiddenChild {
             pid: pi.process_id,
             handle,
-            hpcon: PseudoConsole(hpcon),
+            hpcon: PseudoConsole::new(hpcon),
         },
         stdin: File::from(stdin_w),
         stdout: File::from(stdout_r),

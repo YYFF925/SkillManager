@@ -243,3 +243,4 @@ T011 实现 vault clone（core/cli）
 - [X] T077 Windows ACP 拉起原生 `opencode.exe` 不得加 `CREATE_NO_WINDOW`（否则 Bun 把管道 stdin 当已关闭，`acp`/`--acp`/无参都立刻退出）；握手失败须带 exit code 与 stderr，不得把进程退出说成未登录 per T076
 - [X] T078 Windows ACP 探测/握手用 `STARTF_USESHOWWINDOW|SW_HIDE` 隐藏控制台（仍不用 `CREATE_NO_WINDOW`）；`taskkill` 后等待真实 exit code 与 stderr，超时/立即退出/仍在运行分开报告，不得写 `exit unknown`；登录仍用 `cmd /c start` 可见控制台 per T074, T077
 - [X] T079 Windows ACP 用隐藏 ConPTY 把 stdin/stdout 接到 `opencode.exe`（`CREATE_NEW_CONSOLE` 会让 Bun 读空控制台，握手一直超时）；`--print-logs acp` 优先，超时不再试 `--acp`/无参；失败须带 stderr/非 JSON 输出；initialize 列出 `authMethods` 不得当成未登录 per T078
+- [X] T080 Windows ACP 超时必须先 `ClosePseudoConsole` 再 `taskkill /T /F`，stdout 用超时 recv 不得堵死「发送中」；杀掉 ConPTY 留下的 headless conhost；已钉 `["acp"]` 按 `--print-logs acp` 拉起并反映到 runtime.acpArgs per T076, T079
