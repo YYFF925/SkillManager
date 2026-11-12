@@ -864,6 +864,20 @@ pub(crate) fn extract_json_value(buffer: &mut String) -> Option<Value> {
     None
 }
 
+fn session_id_from_created_log(text: &str) -> Option<String> {
+    let marker = "created session ";
+    let idx = text.rfind(marker)?;
+    let rest = text[idx + marker.len()..].trim_start();
+    let id = rest
+        .split(|c: char| c.is_whitespace() || c == '"' || c == '\'')
+        .next()?;
+    if id.starts_with("ses_") && id.len() > 4 {
+        Some(id.to_string())
+    } else {
+        None
+    }
+}
+
 fn ingest_stdout(proc: &mut AcpProc, chunk: &str) {
     let cleaned = strip_ansi(chunk);
     host_log(&cleaned);
@@ -873,6 +887,10 @@ fn ingest_stdout(proc: &mut AcpProc, chunk: &str) {
     proc.scan.push_str(&cleaned);
     while let Some(value) = extract_json_value(&mut proc.scan) {
         proc.pending_json.push_back(value);
+    }
+    // OpenCode 1.19.5 可能只打 INFO「created session ses_…」而不再刷 JSON-RPC result。
+    if let Some(sid) = session_id_from_created_log(&cleaned) {
+        proc.pending_json.push_back(json!({ "sessionId": sid }));
     }
 }
 
@@ -922,8 +940,36 @@ fn is_echoed_client_request(msg: &Value) -> bool {
     msg.get("result").is_none() && msg.get("error").is_none() && is_client_to_agent_method(method)
 }
 
+fn session_id_in(msg: &Value) -> Option<String> {
+    if msg.get("error").is_some() || msg.get("method").is_some() {
+        return None;
+    }
+    msg.get("sessionId")
+        .or_else(|| msg.get("result").and_then(|result| result.get("sessionId")))
+        .and_then(Value::as_str)
+        .filter(|sid| !sid.is_empty())
+        .map(str::to_string)
+}
+
+/// OpenCode 对未知 notification 的 -32601 不是当前请求的结果；对上会吞掉 session/new。
+fn is_unsolicited_rpc_error(msg: &Value, waiting_id: u64) -> bool {
+    let Some(error) = msg.get("error") else {
+        return false;
+    };
+    let text = error.to_string();
+    let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
+    if method.starts_with("notifications/")
+        || method == "initialized"
+        || text.contains("notifications/initialized")
+        || (text.contains("Method not found") && text.contains("initialized"))
+    {
+        return true;
+    }
+    msg.get("id").is_some() && !json_id_matches(msg, waiting_id)
+}
+
 fn rpc_payload(msg: &Value, id: u64, method: &str) -> Option<Result<Value, String>> {
-    if is_rpc_echo(msg, id) || is_echoed_client_request(msg) {
+    if is_rpc_echo(msg, id) || is_echoed_client_request(msg) || is_unsolicited_rpc_error(msg, id) {
         return None;
     }
     if json_id_matches(msg, id) {
@@ -940,6 +986,14 @@ fn rpc_payload(msg: &Value, id: u64, method: &str) -> Option<Result<Value, Strin
             if result.get("protocolVersion").is_some() {
                 return Some(Ok(result.clone()));
             }
+        }
+    }
+    if method == "session/new" {
+        if let Some(sid) = session_id_in(msg) {
+            if let Some(result) = msg.get("result") {
+                return Some(Ok(result.clone()));
+            }
+            return Some(Ok(json!({ "sessionId": sid })));
         }
     }
     None
@@ -1004,18 +1058,9 @@ fn handshake_initialize(
                 .to_string(),
         );
     }
-    notify_initialized(proc)?;
+    // OpenCode 1.19.5 ACP 没有 notifications/initialized（那是 MCP）。
+    // 发出去会 -32601 Method not found，session/new 的 JSON-RPC 结果不再写出。
     Ok(())
-}
-
-fn notify_initialized(proc: &mut AcpProc) -> Result<(), String> {
-    write_locked(
-        &proc.stdin,
-        &json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-        }),
-    )
 }
 
 /// 进程能 spawn 不算成功：每组参数都要 ACP initialize 握手，失败再试下一组。
@@ -1091,6 +1136,15 @@ pub(crate) fn probe_acp(cli: &DetectedCli, skill_dir: &Path) -> Result<Vec<Strin
 
 fn write_msg(stdin: &mut dyn Write, value: &Value) -> Result<(), String> {
     // ConPTY 默认 cooked：只有 CR/LF 才把一行交给 Bun；只写 \n 会停在输入缓冲里。
+    let method = value
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or("result");
+    let id = value
+        .get("id")
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "-".into());
+    host_log(&format!("acp → {method} id={id}"));
     let line = format!("{value}\r\n");
     stdin
         .write_all(line.as_bytes())
@@ -1194,7 +1248,7 @@ fn request(
             return Err("cancelled".to_string());
         }
         let msg = read_msg(proc, until)?;
-        if is_echoed_client_request(&msg) {
+        if is_echoed_client_request(&msg) || is_unsolicited_rpc_error(&msg, id) {
             continue;
         }
         if let Some(outcome) = rpc_payload(&msg, id, method) {
@@ -1993,7 +2047,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn echoed_client_methods_are_not_unknown_method_errors() {
         let echo_new = json!({
             "jsonrpc": "2.0",
@@ -2018,6 +2071,52 @@ mod tests {
         assert!(!is_echoed_client_request(&our_poison));
     }
 
+    #[test]
+    fn session_new_result_survives_initialized_method_not_found() {
+        let notification_err = json!({
+            "jsonrpc": "2.0",
+            "error": { "code": -32601, "message": "Method not found" },
+            "method": "notifications/initialized"
+        });
+        assert!(is_unsolicited_rpc_error(&notification_err, 2));
+        assert!(rpc_payload(&notification_err, 2, "session/new").is_none());
+
+        let stray = json!({ "code": -32601, "message": "Method not found" });
+        assert!(rpc_payload(&stray, 2, "session/new").is_none());
+
+        let mut mixed = String::from(
+            "ERROR  Error handling notification code -32601 \"Method not found\": notifications/initialized\n\
+             INFO  created session ses_e30524520ffejRezFgcl2quFUa\n",
+        );
+        let result = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": { "sessionId": "ses_e30524520ffejRezFgcl2quFUa" }
+        });
+        mixed.push_str(&serde_json::to_string(&result).unwrap());
+        mixed.push('\n');
+        let parsed = extract_json_value(&mut mixed).expect("session/new result in mixed stream");
+        let payload = rpc_payload(&parsed, 2, "session/new")
+            .expect("session/new result")
+            .expect("ok");
+        assert_eq!(payload["sessionId"], "ses_e30524520ffejRezFgcl2quFUa");
+
+        let bare = json!({ "sessionId": "ses_e30524520ffejRezFgcl2quFUa" });
+        assert_eq!(
+            rpc_payload(&bare, 9, "session/new").unwrap().unwrap()["sessionId"],
+            "ses_e30524520ffejRezFgcl2quFUa"
+        );
+        assert!(rpc_payload(&bare, 9, "session/prompt").is_none());
+        assert_eq!(
+            session_id_from_created_log(
+                "INFO  created session ses_e30524520ffejRezFgcl2quFUa"
+            )
+            .as_deref(),
+            Some("ses_e30524520ffejRezFgcl2quFUa")
+        );
+    }
+
+    #[test]
     fn auth_error_text_is_detected() {
         assert!(looks_like_auth_failure(
             &json!({"error": "unauthenticated"})

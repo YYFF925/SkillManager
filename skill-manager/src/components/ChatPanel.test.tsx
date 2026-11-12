@@ -120,8 +120,11 @@ it("enables send after a ready runtime check", async () => {
         displayName: "OpenCode",
         ready: true,
         installed: true,
+        installedByApp: true,
+        userSelected: false,
         needsInstall: false,
         needsLogin: false,
+        acpArgs: ["--print-logs", "acp"],
       };
     }
     return { messages: [] };
@@ -130,6 +133,8 @@ it("enables send after a ready runtime check", async () => {
   const box = await screen.findByPlaceholderText(/完善中文注释/);
   await waitFor(() => expect(box).toBeEnabled());
   expect(screen.queryByText("正在检查管理 CLI…")).toBeNull();
+  expect(screen.queryByRole("button", { name: "打开登录" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "我已完成登录" })).toBeNull();
   fireEvent.change(box, { target: { value: "完善中文注释" } });
   expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
 });

@@ -21,14 +21,19 @@ export function isDesktopShell(): boolean {
 
 const SESSION_KEY = "sm-host-session";
 const INVOKE_TIMEOUT_MS = 15_000;
+const AGENT_POST_TIMEOUT_MS = 10 * 60 * 1000;
 
-function timeoutError(action: string): Error {
-  return new Error(`${action}超时（${INVOKE_TIMEOUT_MS / 1000}s），请检查本机 Host 是否在线。`);
+function invokeTimeoutMs(command: string): number {
+  return command === "agent_post_message" ? AGENT_POST_TIMEOUT_MS : INVOKE_TIMEOUT_MS;
+}
+
+function timeoutError(action: string, ms: number): Error {
+  return new Error(`${action}超时（${ms / 1000}s），请检查本机 Host 是否在线。`);
 }
 
 function withTimeout<T>(promise: Promise<T>, action: string, ms = INVOKE_TIMEOUT_MS): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(timeoutError(action)), ms);
+    const timer = window.setTimeout(() => reject(timeoutError(action, ms)), ms);
     promise.then(
       (value) => {
         window.clearTimeout(timer);
@@ -46,16 +51,17 @@ async function fetchJson(
   url: string,
   init: RequestInit,
   action: string,
+  ms = INVOKE_TIMEOUT_MS,
 ): Promise<{ response: Response; body: unknown }> {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), INVOKE_TIMEOUT_MS);
+  const timer = window.setTimeout(() => controller.abort(), ms);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
     const body = await response.json().catch(() => null);
     return { response, body };
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw timeoutError(action);
+      throw timeoutError(action, ms);
     }
     throw err;
   } finally {
@@ -137,6 +143,7 @@ class TauriTransport implements Transport {
         sessionId,
       }),
       command,
+      invokeTimeoutMs(command),
     );
     const status = wrapped?.status ?? (wrapped?.ok === false ? 400 : 200);
     const data = (wrapped && "data" in wrapped ? wrapped.data : wrapped) as T;
@@ -189,6 +196,7 @@ class HttpTransport implements Transport {
         body: JSON.stringify({ ...args, sessionId }),
       },
       command,
+      invokeTimeoutMs(command),
     );
     if (response.status === 409 && isHostPlan(body)) {
       return handlePlan(

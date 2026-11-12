@@ -51,10 +51,6 @@ function viewLabel(view: ChatViewRef): string {
   return view.selection?.ref || view.selection?.refs?.[0] || view.page || "当前界面";
 }
 
-function readLoginAck(): boolean {
-  return sessionStorage.getItem(LOGIN_ACK_KEY) === "1";
-}
-
 /** 对话只上报页面与选中引用，正文由 Host 组装。 */
 export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
   const [sessionId] = useState(() => sessionStorage.getItem("sm-agent-session") ?? crypto.randomUUID());
@@ -66,7 +62,6 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
   const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
   const [runtimeChecked, setRuntimeChecked] = useState(false);
   const [setupBusy, setSetupBusy] = useState<"install" | "login" | null>(null);
-  const [loginAck, setLoginAck] = useState(readLoginAck);
 
   useEffect(() => {
     sessionStorage.setItem("sm-agent-session", sessionId);
@@ -119,12 +114,9 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
   const runtimeLoaded = runtimeChecked;
   const needsInstall = !!runtime?.needsInstall;
   const needsLogin = !!runtime?.needsLogin;
-  const installed = !!runtime?.installed || !!runtime?.binaryPath;
   const name = runtime?.displayName || "OpenCode";
-  const mustAckLogin = installed && !runtime?.userSelected && runtime?.installedByApp && !loginAck;
-  const canSend = runtimeLoaded && !!runtime?.ready && !needsInstall && !needsLogin && !mustAckLogin;
-  const showSetup =
-    runtimeLoaded && (needsInstall || needsLogin || mustAckLogin);
+  const canSend = runtimeLoaded && !!runtime?.ready && !needsInstall && !needsLogin;
+  const showSetup = runtimeLoaded && (needsInstall || needsLogin);
 
   async function refreshRuntime() {
     try {
@@ -146,7 +138,6 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
     try {
       const next = await getTransport().invoke<AgentRuntime>("agent_runtime_install");
       setRuntime({ ...next, needsLogin: true, ready: false });
-      setLoginAck(false);
       sessionStorage.removeItem(LOGIN_ACK_KEY);
     } catch (err) {
       setError(String(err));
@@ -175,7 +166,6 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
 
   function ackLogin() {
     sessionStorage.setItem(LOGIN_ACK_KEY, "1");
-    setLoginAck(true);
     void refreshRuntime();
   }
 
@@ -204,7 +194,6 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
         }));
         if (result.needsLogin) {
           sessionStorage.removeItem(LOGIN_ACK_KEY);
-          setLoginAck(false);
         }
       }
       if (status === "cancelled") {
@@ -331,7 +320,7 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
                   {setupBusy === "install" ? "正在安装…" : "安装 OpenCode"}
                 </Button>
               )}
-              {!needsInstall && (needsLogin || mustAckLogin) && (
+              {!needsInstall && needsLogin && (
                 <>
                   <Button
                     kind="primary"
