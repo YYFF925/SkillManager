@@ -61,6 +61,36 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
+it("does not flash login before runtime status arrives", async () => {
+  let finish: (value: unknown) => void = () => undefined;
+  const pending = new Promise((resolve) => {
+    finish = resolve;
+  });
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      return pending;
+    }
+    return { messages: [] };
+  });
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  expect(screen.getByText("正在检查管理 CLI…")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "打开登录" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "我已完成登录" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "安装 OpenCode" })).toBeNull();
+  finish({
+    cliId: "opencode",
+    displayName: "OpenCode",
+    ready: false,
+    installed: false,
+    needsInstall: true,
+    needsLogin: false,
+    loginCommand: "opencode auth login",
+  });
+  expect(await screen.findByRole("button", { name: "安装 OpenCode" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: "打开登录" })).toBeNull();
+  expect(screen.queryByText("正在检查管理 CLI…")).toBeNull();
+});
+
 it("shows in-product OpenCode install instead of treating a missing CLI as a skip", async () => {
   render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
   expect(await screen.findByRole("button", { name: "安装 OpenCode" })).toBeEnabled();

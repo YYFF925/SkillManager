@@ -99,13 +99,15 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
       .catch(() => undefined);
   }, [open, sessionId, viewKey, view]);
 
+  const runtimeLoaded = runtime !== null;
   const needsInstall = !!runtime?.needsInstall;
   const needsLogin = !!runtime?.needsLogin;
   const installed = !!runtime?.installed || !!runtime?.binaryPath;
   const name = runtime?.displayName || "OpenCode";
   const mustAckLogin = installed && !runtime?.userSelected && runtime?.installedByApp && !loginAck;
-  const canSend = !!runtime?.ready && !needsInstall && !needsLogin && !mustAckLogin;
-  const showSetup = !runtime || needsInstall || needsLogin || mustAckLogin || !canSend;
+  const canSend = runtimeLoaded && !!runtime?.ready && !needsInstall && !needsLogin && !mustAckLogin;
+  const showSetup =
+    runtimeLoaded && (needsInstall || needsLogin || mustAckLogin);
 
   async function refreshRuntime() {
     const next = await getTransport().invoke<AgentRuntime>("agent_runtime_get");
@@ -279,6 +281,9 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
+        {!runtimeLoaded && (
+          <p className="text-[12px] text-muted">正在检查管理 CLI…</p>
+        )}
         {showSetup && (
           <div className="chat-cli-setup notice">
             <h3>先接入管理 CLI</h3>
@@ -302,7 +307,7 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
                   {setupBusy === "install" ? "正在安装…" : "安装 OpenCode"}
                 </Button>
               )}
-              {!needsInstall && (
+              {!needsInstall && (needsLogin || mustAckLogin) && (
                 <>
                   <Button
                     kind="primary"

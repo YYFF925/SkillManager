@@ -352,7 +352,10 @@ fn spawn_login(cli: &DetectedCli) -> Result<(), String> {
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
-        Command::new(&cli.binary_path)
+        // CreateProcess 不能直接跑 .cmd；经 cmd.exe 解析 PATHEXT。
+        Command::new("cmd")
+            .arg("/C")
+            .arg(&cli.binary_path)
             .args(DEFAULT_LOGIN_ARGS)
             .creation_flags(CREATE_NEW_CONSOLE)
             .spawn()
@@ -370,11 +373,18 @@ fn spawn_login(cli: &DetectedCli) -> Result<(), String> {
 }
 
 fn install_package(dest: &Path, package: &str, bin_name: &str) -> Result<PathBuf, String> {
-    std::fs::create_dir_all(dest).map_err(|err| err.to_string())?;
-    let status = Command::new("npm")
-        .args(["install", "--omit=dev", "--prefix"])
-        .arg(dest)
-        .arg(package)
+    let existed = dest.exists();
+    match try_install_package(dest, package, bin_name) {
+        Ok(path) => Ok(path),
+        Err(err) => {
+            remove_failed_install(dest, existed);
+            Err(err)
+        }
+    }
+}
+
+fn try_install_package(dest: &Path, package: &str, bin_name: &str) -> Result<PathBuf, String> {
+    let status = npm_install_command(dest, package)
         .status()
         .map_err(|err| format!("无法在软件内安装 {package}：{err}"))?;
     if !status.success() {
@@ -391,6 +401,50 @@ fn install_package(dest: &Path, package: &str, bin_name: &str) -> Result<PathBuf
         Ok(windows)
     } else {
         Err(format!("安装后未找到 {bin_name}"))
+    }
+}
+
+/// Windows 上 CreateProcess 不跑 `npm.cmd`，必须经 `cmd.exe /C` 解析 PATHEXT。
+fn npm_install_command(dest: &Path, package: &str) -> Command {
+    #[cfg(windows)]
+    {
+        let npm = which("npm.cmd")
+            .or_else(|| which("npm"))
+            .unwrap_or_else(|| PathBuf::from("npm"));
+        let cmdline = format!(
+            "\"{}\" install --omit=dev --prefix \"{}\" {}",
+            npm.display(),
+            dest.display(),
+            package
+        );
+        let mut cmd = skill_manager_core::process::command("cmd");
+        cmd.args(["/C", &cmdline]);
+        cmd
+    }
+    #[cfg(not(windows))]
+    {
+        let mut cmd = Command::new("npm");
+        cmd.args(["install", "--omit=dev", "--prefix"])
+            .arg(dest)
+            .arg(package);
+        cmd
+    }
+}
+
+fn remove_failed_install(dest: &Path, existed_before: bool) {
+    if !dest.exists() {
+        return;
+    }
+    if !existed_before {
+        let _ = std::fs::remove_dir_all(dest);
+        return;
+    }
+    if dest
+        .read_dir()
+        .ok()
+        .is_some_and(|mut entries| entries.next().is_none())
+    {
+        let _ = std::fs::remove_dir(dest);
     }
 }
 
@@ -679,6 +733,50 @@ mod tests {
         assert_eq!(DEFAULT_PACKAGE, "opencode-ai");
         assert_eq!(DEFAULT_ACP_ARGS, &["acp"]);
         assert_eq!(DEFAULT_LOGIN_ARGS, &["auth", "login"]);
+    }
+
+    #[test]
+    fn npm_install_uses_cmd_shim_on_windows() {
+        let cmd = npm_install_command(Path::new("/tmp/opencode-dest"), "opencode-ai");
+        let program = cmd.get_program().to_string_lossy();
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        #[cfg(windows)]
+        {
+            assert!(
+                program.contains("cmd"),
+                "Windows must spawn cmd.exe so PATHEXT can resolve npm.cmd, got {program}"
+            );
+            assert_eq!(args.first().map(String::as_str), Some("/C"));
+            let cmdline = args.get(1).cloned().unwrap_or_default();
+            assert!(cmdline.contains("npm"), "{cmdline}");
+            assert!(cmdline.contains("install"), "{cmdline}");
+            assert!(cmdline.contains("opencode-ai"), "{cmdline}");
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(program, "npm");
+            assert!(args.contains(&"install".to_string()));
+            assert!(args.contains(&"opencode-ai".to_string()));
+        }
+    }
+
+    #[test]
+    fn failed_install_does_not_leave_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("opencode");
+        let err = install_package(
+            &dest,
+            "skill-manager-npm-package-does-not-exist",
+            "opencode",
+        );
+        assert!(err.is_err(), "{err:?}");
+        assert!(
+            !dest.exists(),
+            "failed install must not leave an empty agent-runtime/opencode"
+        );
     }
 
     #[test]
