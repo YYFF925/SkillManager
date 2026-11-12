@@ -891,8 +891,39 @@ fn is_rpc_echo(msg: &Value, id: u64) -> bool {
         && msg.get("error").is_none()
 }
 
+/// ConPTY 会把 Host 刚写入的 JSON-RPC 请求原样打回 stdout。
+/// 那些是 Client→Agent 方法（initialize / session/new 等），不是 Agent 在问我们。
+fn is_client_to_agent_method(method: &str) -> bool {
+    matches!(
+        method,
+        "initialize"
+            | "authenticate"
+            | "session/new"
+            | "session/load"
+            | "session/prompt"
+            | "session/cancel"
+            | "session/list"
+            | "session/resume"
+            | "session/fork"
+            | "session/close"
+            | "session/delete"
+            | "session/set_mode"
+            | "session/set_model"
+            | "session/set_config_option"
+            | "notifications/initialized"
+            | "initialized"
+    ) || method.starts_with("notifications/")
+}
+
+fn is_echoed_client_request(msg: &Value) -> bool {
+    let Some(method) = msg.get("method").and_then(Value::as_str) else {
+        return false;
+    };
+    msg.get("result").is_none() && msg.get("error").is_none() && is_client_to_agent_method(method)
+}
+
 fn rpc_payload(msg: &Value, id: u64, method: &str) -> Option<Result<Value, String>> {
-    if is_rpc_echo(msg, id) {
+    if is_rpc_echo(msg, id) || is_echoed_client_request(msg) {
         return None;
     }
     if json_id_matches(msg, id) {
@@ -973,7 +1004,18 @@ fn handshake_initialize(
                 .to_string(),
         );
     }
+    notify_initialized(proc)?;
     Ok(())
+}
+
+fn notify_initialized(proc: &mut AcpProc) -> Result<(), String> {
+    write_locked(
+        &proc.stdin,
+        &json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+        }),
+    )
 }
 
 /// 进程能 spawn 不算成功：每组参数都要 ACP initialize 握手，失败再试下一组。
@@ -1152,6 +1194,9 @@ fn request(
             return Err("cancelled".to_string());
         }
         let msg = read_msg(proc, until)?;
+        if is_echoed_client_request(&msg) {
+            continue;
+        }
         if let Some(outcome) = rpc_payload(&msg, id, method) {
             return outcome;
         }
@@ -1239,15 +1284,9 @@ fn handle_incoming(
                 }),
             )?;
         }
+        other if is_client_to_agent_method(other) => {}
         other => {
-            write_locked(
-                &proc.stdin,
-                &json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "error": { "code": -32601, "message": format!("未知方法：{other}") }
-                }),
-            )?;
+            host_log(&format!("忽略 Agent 未处理的 ACP 方法 {other}"));
         }
     }
     Ok(())
@@ -1456,6 +1495,23 @@ fn child_alive(child: &mut CliChild) -> bool {
     child.wait_exit(Duration::ZERO).is_none()
 }
 
+/// OpenCode 要求 session/new.cwd 为绝对路径；相对路径会 invalid params。
+fn acp_session_cwd(runtime: &HostRuntime) -> String {
+    let from_vault = runtime.get().ok().and_then(|ctx| {
+        ctx.vault_opt()
+            .map(|vault| vault.root().to_path_buf())
+    });
+    let mut cwd = from_vault
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| runtime.state_dir().to_path_buf());
+    if !cwd.is_absolute() {
+        if let Ok(base) = std::env::current_dir() {
+            cwd = base.join(&cwd);
+        }
+    }
+    cwd.to_string_lossy().into_owned()
+}
+
 /// 握手在标 running 之前完成：未登录或无法声明工具则失败。已有活 session 则跳过。
 /// 返回是否新建了 ACP session（新建才回灌 Host 历史）。
 pub(crate) fn ensure_session(
@@ -1482,7 +1538,7 @@ pub(crate) fn ensure_session(
             return Err(err);
         }
     };
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let cwd = acp_session_cwd(runtime);
     let new_session = request_bounded(
         &mut proc,
         "session/new",
@@ -1906,6 +1962,20 @@ mod tests {
             "params": {}
         });
         assert!(rpc_payload(&echo, 1, "initialize").is_none());
+        assert!(is_echoed_client_request(&echo));
+        assert!(is_client_to_agent_method("session/new"));
+        assert!(is_echoed_client_request(&json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "session/new",
+            "params": { "cwd": "C:/vault", "mcpServers": [] }
+        })));
+        assert!(!is_echoed_client_request(&json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": { "sessionId": "ses_1" }
+        })));
+        assert!(!is_client_to_agent_method("session/request_permission"));
         let string_id = json!({
             "jsonrpc": "2.0",
             "id": "1",
@@ -1923,6 +1993,31 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn echoed_client_methods_are_not_unknown_method_errors() {
+        let echo_new = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "session/new",
+            "params": {}
+        });
+        assert!(rpc_payload(&echo_new, 2, "session/new").is_none());
+        let our_poison = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "error": { "code": -32601, "message": "未知方法：session/new" }
+        });
+        let err = rpc_payload(&our_poison, 2, "session/new")
+            .unwrap()
+            .unwrap_err();
+        assert!(
+            err.contains("未知方法"),
+            "poisoned echo still looks like a result: {err}"
+        );
+        assert!(is_echoed_client_request(&echo_new));
+        assert!(!is_echoed_client_request(&our_poison));
+    }
+
     fn auth_error_text_is_detected() {
         assert!(looks_like_auth_failure(
             &json!({"error": "unauthenticated"})
