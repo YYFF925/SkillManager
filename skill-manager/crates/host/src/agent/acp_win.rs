@@ -118,19 +118,24 @@ unsafe extern "system" {
     fn DeleteProcThreadAttributeList(list: *mut core::ffi::c_void);
 }
 
+struct PseudoConsole(RawHandle);
+
+unsafe impl Send for PseudoConsole {}
+unsafe impl Sync for PseudoConsole {}
+
+impl Drop for PseudoConsole {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe { ClosePseudoConsole(self.0) };
+            self.0 = ptr::null_mut();
+        }
+    }
+}
+
 pub(crate) struct HiddenChild {
     pub pid: u32,
     handle: OwnedHandle,
-    hpcon: RawHandle,
-}
-
-impl Drop for HiddenChild {
-    fn drop(&mut self) {
-        if !self.hpcon.is_null() {
-            unsafe { ClosePseudoConsole(self.hpcon) };
-            self.hpcon = ptr::null_mut();
-        }
-    }
+    hpcon: PseudoConsole,
 }
 
 impl HiddenChild {
@@ -273,7 +278,7 @@ pub(crate) fn spawn_hidden(
         child: HiddenChild {
             pid: pi.process_id,
             handle,
-            hpcon,
+            hpcon: PseudoConsole(hpcon),
         },
         stdin: File::from(stdin_w),
         stdout: File::from(stdout_r),
