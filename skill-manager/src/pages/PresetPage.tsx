@@ -593,7 +593,7 @@ export function PresetPage({
             <div className="flex min-h-0 flex-1 items-stretch gap-4">
               <CategoryRail
                 domain={domain}
-                total={all?.total ?? 0}
+                total={all?.total ?? null}
                 namedCounts={railCategories.namedCounts}
                 uncategorizedCount={railCategories.uncategorized}
                 selected={category}

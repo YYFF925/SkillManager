@@ -98,6 +98,42 @@ it("shows in-product OpenCode install instead of treating a missing CLI as a ski
   expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
 });
 
+it("ends the CLI check with a real error when agent_runtime_get fails", async () => {
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      throw new Error("agent_runtime_get超时（15s），请检查本机 Host 是否在线。");
+    }
+    return { messages: [] };
+  });
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  expect(await screen.findByText(/agent_runtime_get超时/)).toBeTruthy();
+  expect(screen.queryByText("正在检查管理 CLI…")).toBeNull();
+  expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  expect(screen.getByPlaceholderText(/完善中文注释/)).toBeDisabled();
+});
+
+it("enables send after a ready runtime check", async () => {
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    return { messages: [] };
+  });
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  const box = await screen.findByPlaceholderText(/完善中文注释/);
+  await waitFor(() => expect(box).toBeEnabled());
+  expect(screen.queryByText("正在检查管理 CLI…")).toBeNull();
+  fireEvent.change(box, { target: { value: "完善中文注释" } });
+  expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
+});
+
 it("shows a handshake failure once in the transcript, not also as a notice", async () => {
   const failure =
     "无法与 C:\\\\opencode.exe 完成 ACP 握手（已试 --print-logs acp）。管理 CLI 握手超时（12s 看门狗已 taskkill，exit 1）";

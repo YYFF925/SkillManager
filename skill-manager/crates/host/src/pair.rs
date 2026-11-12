@@ -209,6 +209,7 @@ async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> 
         .await
         .map_err(|err| err.to_string())?;
     let (mut sink, mut stream) = ws.split();
+    let (out_tx, mut out_rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
     let mut events = runtime.sse().subscribe();
     let mut heartbeat = tokio::time::interval(WS_HEARTBEAT);
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -217,10 +218,14 @@ async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> 
             incoming = stream.next() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
-                        handle_station_message(runtime, &mut sink, &text).await;
+                        let runtime = runtime.clone();
+                        let out_tx = out_tx.clone();
+                        tokio::spawn(async move {
+                            dispatch_station_invoke(runtime, out_tx, text.to_string()).await;
+                        });
                     }
                     Some(Ok(Message::Ping(data))) => {
-                        let _ = sink.send(Message::Pong(data)).await;
+                        let _ = out_tx.send(Message::Pong(data));
                     }
                     Some(Ok(Message::Close(_))) | None => return Ok(()),
                     Some(Err(err)) => return Err(err.to_string()),
@@ -234,11 +239,19 @@ async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> 
                         "event": event.name,
                         "data": event.payload,
                     });
-                    let _ = sink.send(Message::Text(payload.to_string().into())).await;
+                    let _ = out_tx.send(Message::Text(payload.to_string().into()));
+                }
+            }
+            outgoing = out_rx.recv() => {
+                let Some(message) = outgoing else {
+                    return Ok(());
+                };
+                if sink.send(message).await.is_err() {
+                    return Err("管理站长连接已断开".to_string());
                 }
             }
             _ = heartbeat.tick() => {
-                if sink.send(Message::Ping(Default::default())).await.is_err() {
+                if out_tx.send(Message::Ping(Default::default())).is_err() {
                     return Err("管理站心跳发送失败".to_string());
                 }
             }
@@ -246,15 +259,15 @@ async fn connect_once(runtime: &HostRuntime, ws_url: &str, device_key: &str) -> 
     }
 }
 
-async fn handle_station_message<S>(runtime: &HostRuntime, sink: &mut S, text: &str)
-where
-    S: futures_util::Sink<tokio_tungstenite::tungstenite::Message> + Unpin,
-{
+async fn dispatch_station_invoke(
+    runtime: HostRuntime,
+    out_tx: tokio::sync::mpsc::UnboundedSender<tokio_tungstenite::tungstenite::Message>,
+    text: String,
+) {
     use crate::invoke::{self, InvokeSource};
-    use futures_util::SinkExt;
     use tokio_tungstenite::tungstenite::Message;
 
-    let value: serde_json::Value = match serde_json::from_str(text) {
+    let value: serde_json::Value = match serde_json::from_str(&text) {
         Ok(v) => v,
         Err(_) => return,
     };
@@ -276,7 +289,6 @@ where
         .get("sessionId")
         .and_then(|v| v.as_str())
         .map(str::to_string);
-    let runtime = runtime.clone();
     let result = tokio::task::spawn_blocking(move || {
         invoke::invoke(
             &runtime,
@@ -302,7 +314,7 @@ where
         "status": status,
         "body": payload,
     });
-    let _ = sink.send(Message::Text(reply.to_string().into())).await;
+    let _ = out_tx.send(Message::Text(reply.to_string().into()));
 }
 
 #[cfg(test)]

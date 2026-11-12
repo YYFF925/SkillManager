@@ -20,15 +20,60 @@ export function isDesktopShell(): boolean {
 }
 
 const SESSION_KEY = "sm-host-session";
+const INVOKE_TIMEOUT_MS = 15_000;
+
+function timeoutError(action: string): Error {
+  return new Error(`${action}超时（${INVOKE_TIMEOUT_MS / 1000}s），请检查本机 Host 是否在线。`);
+}
+
+function withTimeout<T>(promise: Promise<T>, action: string, ms = INVOKE_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(timeoutError(action)), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        window.clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+async function fetchJson(
+  url: string,
+  init: RequestInit,
+  action: string,
+): Promise<{ response: Response; body: unknown }> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), INVOKE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const body = await response.json().catch(() => null);
+    return { response, body };
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw timeoutError(action);
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 async function hostSession(): Promise<string> {
   const existing = sessionStorage.getItem(SESSION_KEY);
   if (existing) return existing;
   if (isDesktopShell()) {
-    const wrapped = await invoke<HostInvokeResult>("host_invoke", {
-      command: "__session__",
-      args: {},
-    });
+    const wrapped = await withTimeout(
+      invoke<HostInvokeResult>("host_invoke", {
+        command: "__session__",
+        args: {},
+      }),
+      "读取会话",
+    );
     const id =
       wrapped && typeof wrapped === "object" && wrapped.data && typeof wrapped.data === "object"
         ? String((wrapped.data as { sessionId?: string }).sessionId ?? crypto.randomUUID())
@@ -36,9 +81,13 @@ async function hostSession(): Promise<string> {
     sessionStorage.setItem(SESSION_KEY, id);
     return id;
   }
-  const response = await fetch("/current/session", { method: "POST", credentials: "include" });
-  const body = (await response.json().catch(() => ({}))) as { sessionId?: string };
-  const id = body.sessionId ?? crypto.randomUUID();
+  const { body } = await fetchJson(
+    "/current/session",
+    { method: "POST", credentials: "include" },
+    "读取会话",
+  );
+  const parsed = (body ?? {}) as { sessionId?: string };
+  const id = parsed.sessionId ?? crypto.randomUUID();
   sessionStorage.setItem(SESSION_KEY, id);
   return id;
 }
@@ -81,11 +130,14 @@ async function handlePlan<T>(
 class TauriTransport implements Transport {
   async invoke<T>(command: string, args: InvokeArgs = {}): Promise<T> {
     const sessionId = await hostSession();
-    const wrapped = await invoke<HostInvokeResult>("host_invoke", {
+    const wrapped = await withTimeout(
+      invoke<HostInvokeResult>("host_invoke", {
+        command,
+        args,
+        sessionId,
+      }),
       command,
-      args,
-      sessionId,
-    });
+    );
     const status = wrapped?.status ?? (wrapped?.ok === false ? 400 : 200);
     const data = (wrapped && "data" in wrapped ? wrapped.data : wrapped) as T;
     if (status === 409 && isHostPlan(data)) {
@@ -107,11 +159,14 @@ class TauriTransport implements Transport {
 
   async confirmPlan(planId: string): Promise<void> {
     const sessionId = await hostSession();
-    const wrapped = await invoke<HostInvokeResult>("host_invoke", {
-      command: "plans_confirm",
-      args: { planId, sessionId },
-      sessionId,
-    });
+    const wrapped = await withTimeout(
+      invoke<HostInvokeResult>("host_invoke", {
+        command: "plans_confirm",
+        args: { planId, sessionId },
+        sessionId,
+      }),
+      "plans_confirm",
+    );
     if (wrapped && wrapped.ok === false) {
       throw new Error(errorMessage(wrapped.data, "确认计划失败"));
     }
@@ -121,17 +176,20 @@ class TauriTransport implements Transport {
 class HttpTransport implements Transport {
   async invoke<T>(command: string, args: InvokeArgs = {}): Promise<T> {
     const sessionId = await hostSession();
-    const response = await fetch(`/current/invoke/${command}`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        "x-skill-manager-session": sessionId,
-        "x-skill-manager-source": "gui",
+    const { response, body } = await fetchJson(
+      `/current/invoke/${command}`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "x-skill-manager-session": sessionId,
+          "x-skill-manager-source": "gui",
+        },
+        body: JSON.stringify({ ...args, sessionId }),
       },
-      body: JSON.stringify({ ...args, sessionId }),
-    });
-    const body = await response.json().catch(() => null);
+      command,
+    );
     if (response.status === 409 && isHostPlan(body)) {
       return handlePlan(
         body,
@@ -169,14 +227,17 @@ class HttpTransport implements Transport {
 
   async confirmPlan(planId: string): Promise<void> {
     const sessionId = await hostSession();
-    const response = await fetch(`/current/plans/${planId}/confirm`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId }),
-    });
+    const { response, body } = await fetchJson(
+      `/current/plans/${planId}/confirm`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      },
+      "plans_confirm",
+    );
     if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
       throw new Error(errorMessage(body, "确认计划失败"));
     }
   }

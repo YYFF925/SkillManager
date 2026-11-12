@@ -64,6 +64,7 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
+  const [runtimeChecked, setRuntimeChecked] = useState(false);
   const [setupBusy, setSetupBusy] = useState<"install" | "login" | null>(null);
   const [loginAck, setLoginAck] = useState(readLoginAck);
 
@@ -75,7 +76,9 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
 
   useEffect(() => {
     if (!open) return;
+    let cancelled = false;
     const transport = getTransport();
+    setRuntimeChecked(false);
     void transport.invoke("agent_set_context", { sessionId, view }).catch(() => undefined);
     void transport
       .invoke<{ messages?: Array<{ role: string; text: string; taskId?: string | null }> }>(
@@ -83,6 +86,7 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
         { sessionId },
       )
       .then((result) => {
+        if (cancelled) return;
         const rows = result.messages ?? [];
         setMessages(
           rows.map((row) => ({
@@ -95,11 +99,24 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
       .catch(() => undefined);
     void transport
       .invoke<AgentRuntime>("agent_runtime_get")
-      .then((result) => setRuntime(result))
-      .catch(() => undefined);
+      .then((result) => {
+        if (cancelled) return;
+        setRuntime(result);
+        setError(null);
+        setRuntimeChecked(true);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setRuntime(null);
+        setRuntimeChecked(true);
+        setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, sessionId, viewKey, view]);
 
-  const runtimeLoaded = runtime !== null;
+  const runtimeLoaded = runtimeChecked;
   const needsInstall = !!runtime?.needsInstall;
   const needsLogin = !!runtime?.needsLogin;
   const installed = !!runtime?.installed || !!runtime?.binaryPath;
@@ -110,9 +127,17 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
     runtimeLoaded && (needsInstall || needsLogin || mustAckLogin);
 
   async function refreshRuntime() {
-    const next = await getTransport().invoke<AgentRuntime>("agent_runtime_get");
-    setRuntime(next);
-    return next;
+    try {
+      const next = await getTransport().invoke<AgentRuntime>("agent_runtime_get");
+      setRuntime(next);
+      setError(null);
+      setRuntimeChecked(true);
+      return next;
+    } catch (err) {
+      setRuntimeChecked(true);
+      setError(err instanceof Error ? err.message : String(err));
+      throw err;
+    }
   }
 
   async function installCli() {

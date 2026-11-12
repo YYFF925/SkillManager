@@ -253,10 +253,6 @@ pub fn skill_list(
         None => None,
     };
 
-    let ctx = runtime.get()?;
-    let root = root_of(&ctx)?;
-    let index = SkillIndex::build(&root).map_err(|err| err.to_string())?;
-
     let domain = match &domain {
         Some(raw) => Some(raw.parse::<Domain>().map_err(|err| err.to_string())?),
         None => None,
@@ -269,27 +265,41 @@ pub fn skill_list(
             None => CategoryFilter::All,
         }
     };
-    let agent = match &agent {
-        Some(key) => {
-            let entry = ctx
-                .catalog()
-                .get(key)
-                .ok_or_else(|| format!("{key} 不在内置 Agent 名单中"))?;
-            Some(AgentSupport {
-                key: key.clone(),
-                domain: entry.reference_domain,
-            })
-        }
-        None => None,
-    };
 
+    let root;
+    let agent_support;
+    let deploy_records;
+    {
+        let ctx = runtime.get()?;
+        root = root_of(&ctx)?;
+        agent_support = match &agent {
+            Some(key) => {
+                let entry = ctx
+                    .catalog()
+                    .get(key)
+                    .ok_or_else(|| format!("{key} 不在内置 Agent 名单中"))?;
+                Some(AgentSupport {
+                    key: key.clone(),
+                    domain: entry.reference_domain,
+                })
+            }
+            None => None,
+        };
+        deploy_records = if deployed_target.is_some() {
+            Some(ctx.state().deployments().map_err(|err| err.to_string())?)
+        } else {
+            None
+        };
+    }
+
+    let index = SkillIndex::build(&root).map_err(|err| err.to_string())?;
     let search = SearchQuery {
         domain,
         query,
         category: category.clone(),
         tags: tags.unwrap_or_default(),
         require_untagged: no_tag.unwrap_or(false),
-        agent,
+        agent: agent_support,
         preset,
     };
     let mut skills: Vec<SkillSummary> = index
@@ -297,9 +307,8 @@ pub fn skill_list(
         .iter()
         .map(|entry| entry.to_summary())
         .collect();
-    if let Some(target) = &deployed_target {
+    if let (Some(target), Some(records)) = (&deployed_target, deploy_records.as_ref()) {
         let target = target.as_str();
-        let records = ctx.state().deployments().map_err(|err| err.to_string())?;
         skills.retain(|summary| {
             records.iter().any(|record| {
                 record.target == target

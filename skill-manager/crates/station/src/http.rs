@@ -637,17 +637,10 @@ async fn current_session(
         Ok(id) => id,
         Err(err) => return err.into_response(),
     };
-    let device = match current_device(&state, &session) {
-        Ok(id) => id,
-        Err(err) => return err.into_response(),
-    };
-    match proxy::invoke(&state.live, &device, "__session__", json!({}), None).await {
-        Ok(reply) => invoke_response(reply),
-        Err(_) => {
-            // Host 没有 __session__ 命令时，由本站生成并让后续 invoke 带上。
-            Json(json!({ "sessionId": uuid::Uuid::new_v4().to_string() })).into_response()
-        }
+    if let Err(err) = current_device(&state, &session) {
+        return err.into_response();
     }
+    Json(json!({ "sessionId": uuid::Uuid::new_v4().to_string() })).into_response()
 }
 
 #[derive(Deserialize)]

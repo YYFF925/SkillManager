@@ -293,9 +293,21 @@ export async function currentVault(): Promise<VaultInfo | null> {
   return invoke<VaultInfo | null>("vault_current");
 }
 
+function isSkillListResult(value: unknown): value is SkillListResult {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const row = value as Partial<SkillListResult>;
+  return Array.isArray(row.skills) && typeof row.total === "number";
+}
+
 /** 组合筛选列出技能。 */
 export async function listSkills(query: SkillListQuery = {}): Promise<SkillListResult> {
-  return invoke<SkillListResult>("skill_list", { ...query });
+  const result = await invoke<SkillListResult>("skill_list", { ...query });
+  if (!isSkillListResult(result)) {
+    throw new Error("技能列表格式无效，未更新技能库计数。");
+  }
+  return result;
 }
 
 /** 技能详情：正文、资料、来源、文件树、库内路径与部署位置。 */

@@ -5,7 +5,7 @@
  * 部署状态筛选、部署/撤销、删除与共享目录路径设置接入本机真实记录；检查全部、更新、
  * 新增、入库等后续里程碑入口不出现或明确标注。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   CheckSquare,
@@ -146,6 +146,7 @@ export function LibraryPage({
   const [multi, setMulti] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [all, setAll] = useState<SkillListResult | null>(null);
+  const lastTotalRef = useRef<number | null>(null);
   const [filtered, setFiltered] = useState<SkillListResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -215,6 +216,7 @@ export function LibraryPage({
         setPresets(presetList);
         setFiltered(result);
         setError(null);
+        lastTotalRef.current = base.total;
         onCount(base.total);
       } catch (err) {
         if (!cancelled) {
@@ -840,7 +842,7 @@ export function LibraryPage({
       <div className="flex min-h-0 flex-1 items-stretch gap-4">
         <CategoryRail
           domain={domain}
-          total={all?.total ?? 0}
+          total={all?.total ?? lastTotalRef.current}
           namedCounts={railCategories.namedCounts}
           uncategorizedCount={railCategories.uncategorized}
           selected={category}

@@ -17,7 +17,7 @@ const UNCATEGORIZED = "__none";
 
 export interface CategoryRailProps {
   domain: Domain;
-  total: number;
+  total: number | null;
   /** 真实分类名 → 技能数。 */
   namedCounts: Map<string, number>;
   uncategorizedCount: number;
@@ -181,7 +181,7 @@ export function CategoryRail({
         >
           全部分类
           <span className="grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
-            {total}
+            {total === null ? "…" : total}
           </span>
         </button>
         {editable && (

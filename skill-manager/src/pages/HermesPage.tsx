@@ -141,8 +141,10 @@ export function HermesPage({
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    onCount(base?.total ?? 0);
-  }, [base?.total, onCount]);
+    if (base) {
+      onCount(base.total);
+    }
+  }, [base, onCount]);
 
   useEffect(() => {
     let cancelled = false;
@@ -643,7 +645,7 @@ export function HermesPage({
       <div className="flex min-h-0 flex-1 items-stretch gap-4">
         <CategoryRail
           domain="lobster"
-          total={base?.total ?? 0}
+          total={base?.total ?? null}
           namedCounts={railCategories.namedCounts}
           uncategorizedCount={railCategories.uncategorized}
           selected={category}

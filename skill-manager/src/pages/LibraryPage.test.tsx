@@ -172,6 +172,36 @@ it("renames categories inline without a dialog", async () => {
   await waitFor(() => expect(renameCategory).toHaveBeenCalledWith("code", "家庭运维", "脚本"));
 });
 
+it("keeps skill counts when a later skill_list fails", async () => {
+  const onCount = vi.fn();
+  vi.mocked(listSkills)
+    .mockResolvedValueOnce({
+      skills: [summary("alpha", "家庭运维")],
+      total: 54,
+      tag_candidates: [],
+      categories: ["家庭运维"],
+    })
+    .mockRejectedValueOnce(new Error("skill_list超时（15s），请检查本机 Host 是否在线。"));
+  const { rerender } = render(
+    <LibraryPage domain="code" os="macos" agents={[]} reloadToken={0} onCount={onCount} />,
+  );
+  await waitFor(() => expect(onCount).toHaveBeenCalledWith(54));
+  expect(screen.getByRole("button", { name: /全部分类/ }).textContent).toContain("54");
+  rerender(<LibraryPage domain="code" os="macos" agents={[]} reloadToken={1} onCount={onCount} />);
+  expect(await screen.findByText(/skill_list超时/)).toBeTruthy();
+  expect(onCount).not.toHaveBeenCalledWith(0);
+  expect(screen.getByRole("button", { name: /全部分类/ }).textContent).toContain("54");
+});
+
+it("does not treat a missing skill list as zero skills", async () => {
+  const onCount = vi.fn();
+  vi.mocked(listSkills).mockRejectedValue(new Error("设备离线，无法操作"));
+  render(<LibraryPage domain="code" os="macos" agents={[]} reloadToken={0} onCount={onCount} />);
+  expect(await screen.findByText(/设备离线/)).toBeTruthy();
+  expect(onCount).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: /全部分类/ }).textContent).not.toContain("0");
+});
+
 it("pins the category rail and only scrolls it when categories overflow", async () => {
   vi.mocked(listSkills).mockResolvedValue({
     skills: [summary("alpha", "家庭运维"), summary("beta", null)],
