@@ -3,16 +3,43 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::tools;
-use crate::HostRuntime;
 use crate::invoke::InvokeSource;
+use crate::HostRuntime;
+
+#[cfg(windows)]
+#[path = "acp_win.rs"]
+mod acp_win;
+
+/// Windows ACP CreateProcess：隐藏窗口但给 Bun 一个控制台（不用 CREATE_NO_WINDOW）。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_SW_HIDE: u16 = 0;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_STARTF_USESHOWWINDOW: u32 = 0x0000_0001;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_STARTF_USESTDHANDLES: u32 = 0x0000_0100;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_CREATE_UNICODE_ENVIRONMENT: u32 = 0x0000_0400;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn windows_acp_create_flags() -> (u32, u16, u32) {
+    (
+        ACP_STARTF_USESHOWWINDOW | ACP_STARTF_USESTDHANDLES,
+        ACP_SW_HIDE,
+        ACP_CREATE_NEW_CONSOLE | ACP_CREATE_UNICODE_ENVIRONMENT,
+    )
+}
 
 const INIT_TIMEOUT: Duration = Duration::from_secs(12);
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -114,11 +141,53 @@ fn next_id() -> u64 {
     ID.fetch_add(1, Ordering::Relaxed)
 }
 
+enum CliChild {
+    Std(Child),
+    #[cfg(windows)]
+    Hidden(acp_win::HiddenChild),
+}
+
+impl CliChild {
+    fn id(&self) -> u32 {
+        match self {
+            CliChild::Std(child) => child.id(),
+            #[cfg(windows)]
+            CliChild::Hidden(child) => child.pid,
+        }
+    }
+
+    fn wait_exit(&mut self, timeout: Duration) -> Option<i32> {
+        match self {
+            #[cfg(windows)]
+            CliChild::Hidden(child) => {
+                let ms = timeout.as_millis().min(u32::MAX as u128) as u32;
+                child.try_exit_code(ms).map(|code| code as i32)
+            }
+            CliChild::Std(child) => {
+                let deadline = Instant::now() + timeout;
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(status)) => return status.code(),
+                        Ok(None) => {}
+                        Err(_) => return None,
+                    }
+                    if Instant::now() >= deadline {
+                        return None;
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            }
+        }
+    }
+}
+
 pub(crate) struct AcpProc {
-    child: Child,
-    stdin: Arc<Mutex<ChildStdin>>,
-    stdout: BufReader<std::process::ChildStdout>,
+    child: CliChild,
+    stdin: Arc<Mutex<Box<dyn Write + Send>>>,
+    stdout: BufReader<Box<dyn Read + Send>>,
     stderr: Arc<Mutex<String>>,
+    timed_out: Arc<AtomicBool>,
+    started: Instant,
 }
 
 /// Windows 上 CreateProcess 不能跑无扩展 Unix `#!/bin/sh` 垫片（os error 193）。
@@ -220,9 +289,8 @@ fn cli_process_command(bin: &Path) -> Command {
     #[cfg(windows)]
     {
         let (program, args) = windows_acp_invocation(bin);
-        // 不要 CREATE_NO_WINDOW：Bun 编的 opencode.exe 在无控制台时会把管道
-        // stdin 当成已关闭，`acp` 立刻退出（「管理 CLI 已退出」）。ACP 用管道
-        // stdio，不弹登录用的 start 窗口。
+        // 测试/探测用 Command：不要 CREATE_NO_WINDOW。真握手走 CreateProcessW +
+        // SW_HIDE（见 acp_win），给 Bun 控制台但窗口隐藏；登录仍用 start。
         let mut cmd = Command::new(&program);
         cmd.args(args);
         cmd
@@ -233,46 +301,138 @@ fn cli_process_command(bin: &Path) -> Command {
     }
 }
 
-fn collect_stderr(child: &mut Child) -> Arc<Mutex<String>> {
+fn collect_stderr_reader(mut stderr: impl Read + Send + 'static) -> Arc<Mutex<String>> {
     let collected = Arc::new(Mutex::new(String::new()));
-    if let Some(mut stderr) = child.stderr.take() {
-        let slot = Arc::clone(&collected);
-        std::thread::spawn(move || {
-            let mut buf = String::new();
-            let _ = stderr.read_to_string(&mut buf);
-            if let Ok(mut guard) = slot.lock() {
-                *guard = buf;
-            }
-        });
-    }
+    let slot = Arc::clone(&collected);
+    std::thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = stderr.read_to_string(&mut buf);
+        if let Ok(mut guard) = slot.lock() {
+            *guard = buf;
+        }
+    });
     collected
 }
 
-fn describe_cli_exit(proc: &mut AcpProc) -> String {
-    let status = proc.child.try_wait().ok().flatten();
-    let stderr = proc
-        .stderr
-        .lock()
-        .ok()
-        .map(|guard| guard.trim().to_string())
-        .filter(|text| !text.is_empty());
-    let code = match &status {
-        Some(st) => st
-            .code()
-            .map(|code| code.to_string())
-            .unwrap_or_else(|| st.to_string()),
-        None => "unknown".to_string(),
+fn take_stderr(proc: &AcpProc) -> Option<String> {
+    for _ in 0..20 {
+        let text = proc
+            .stderr
+            .lock()
+            .ok()
+            .map(|guard| guard.trim().to_string())
+            .filter(|text| !text.is_empty());
+        if text.is_some() {
+            return text;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    None
+}
+
+fn format_cli_exit(
+    timed_out: bool,
+    elapsed: Duration,
+    code: Option<i32>,
+    pid: u32,
+    stderr: Option<&str>,
+) -> String {
+    let code_text = match code {
+        Some(code) => code.to_string(),
+        None => format!("still-running pid {pid}"),
+    };
+    let cause = if timed_out {
+        format!(
+            "握手超时（{}s 看门狗已 taskkill 进程树，exit {code_text}）",
+            INIT_TIMEOUT.as_secs()
+        )
+    } else if elapsed < Duration::from_secs(2) && code.is_some() {
+        format!("已立即退出（exit {code_text}）")
+    } else if code.is_none() {
+        format!("已停止输出但仍在运行（pid {pid}）")
+    } else {
+        format!("已退出（exit {code_text}）")
     };
     match stderr {
-        Some(text) => format!("管理 CLI 已退出（exit {code}）：{text}"),
-        None => format!("管理 CLI 已退出（exit {code}）"),
+        Some(text) if !text.is_empty() => format!("管理 CLI {cause}：{text}"),
+        _ => format!("管理 CLI {cause}"),
     }
+}
+
+fn describe_cli_exit(proc: &mut AcpProc) -> String {
+    let code = proc.child.wait_exit(Duration::from_millis(800));
+    let stderr = take_stderr(proc);
+    format_cli_exit(
+        proc.timed_out.load(Ordering::SeqCst),
+        proc.started.elapsed(),
+        code,
+        proc.child.id(),
+        stderr.as_deref(),
+    )
 }
 
 fn is_cli_exit_error(message: &str) -> bool {
     message.contains("已退出")
+        || message.contains("立即退出")
+        || message.contains("握手超时")
+        || message.contains("仍在运行")
 }
 
+fn skill_env(skill_dir: &Path) -> Vec<(&str, &Path)> {
+    if skill_dir.is_dir() {
+        vec![
+            ("SKILL_MANAGER_BUILTIN_SKILLS", skill_dir),
+            // OpenCode 1.x 实测认 OPENCODE_CONFIG_DIR/skills/，不认 OPENCODE_SKILLS_PATH。
+            ("OPENCODE_CONFIG_DIR", skill_dir),
+        ]
+    } else {
+        Vec::new()
+    }
+}
+
+fn acp_proc(
+    child: CliChild,
+    stdin: Box<dyn Write + Send>,
+    stdout: Box<dyn Read + Send>,
+    stderr: Arc<Mutex<String>>,
+    timed_out: Arc<AtomicBool>,
+    started: Instant,
+) -> AcpProc {
+    AcpProc {
+        child,
+        stdin: Arc::new(Mutex::new(stdin)),
+        stdout: BufReader::new(stdout),
+        stderr,
+        timed_out,
+        started,
+    }
+}
+
+#[cfg(windows)]
+fn spawn_with_args(bin: &Path, args: &[&str], skill_dir: &Path) -> Result<AcpProc, String> {
+    let bin = spawnable_cli_path(bin).ok_or_else(|| {
+        format!(
+            "无法启动管理 CLI：{} 不是可在本机拉起的程序（Windows 上应使用 .cmd，不能是无扩展 Unix 垫片）",
+            bin.display()
+        )
+    })?;
+    let (program, mut prefix) = windows_acp_invocation(&bin);
+    prefix.extend(args.iter().map(|arg| std::ffi::OsString::from(*arg)));
+    let extra = skill_env(skill_dir);
+    let spawned = acp_win::spawn_hidden(&program, &prefix, &extra)
+        .map_err(|err| format!("无法启动管理 CLI：{err}"))?;
+    let stderr = collect_stderr_reader(spawned.stderr);
+    Ok(acp_proc(
+        CliChild::Hidden(spawned.child),
+        Box::new(spawned.stdin),
+        Box::new(spawned.stdout),
+        stderr,
+        Arc::new(AtomicBool::new(false)),
+        Instant::now(),
+    ))
+}
+
+#[cfg(not(windows))]
 fn spawn_with_args(bin: &Path, args: &[&str], skill_dir: &Path) -> Result<AcpProc, String> {
     let bin = spawnable_cli_path(bin).ok_or_else(|| {
         format!(
@@ -285,10 +445,8 @@ fn spawn_with_args(bin: &Path, args: &[&str], skill_dir: &Path) -> Result<AcpPro
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if skill_dir.is_dir() {
-        cmd.env("SKILL_MANAGER_BUILTIN_SKILLS", skill_dir);
-        // OpenCode 1.x 实测认 OPENCODE_CONFIG_DIR/skills/，不认 OPENCODE_SKILLS_PATH。
-        cmd.env("OPENCODE_CONFIG_DIR", skill_dir);
+    for (key, value) in skill_env(skill_dir) {
+        cmd.env(key, value);
     }
     let mut child = cmd
         .spawn()
@@ -301,13 +459,19 @@ fn spawn_with_args(bin: &Path, args: &[&str], skill_dir: &Path) -> Result<AcpPro
         .stdout
         .take()
         .ok_or_else(|| "管理 CLI 没有 stdout".to_string())?;
-    let stderr = collect_stderr(&mut child);
-    Ok(AcpProc {
-        child,
-        stdin: Arc::new(Mutex::new(stdin)),
-        stdout: BufReader::new(stdout),
+    let stderr = child
+        .stderr
+        .take()
+        .map(collect_stderr_reader)
+        .unwrap_or_else(|| Arc::new(Mutex::new(String::new())));
+    Ok(acp_proc(
+        CliChild::Std(child),
+        Box::new(stdin),
+        Box::new(stdout),
         stderr,
-    })
+        Arc::new(AtomicBool::new(false)),
+        Instant::now(),
+    ))
 }
 
 fn candidate_arg_sets(cli: &DetectedCli) -> Vec<Vec<String>> {
@@ -363,20 +527,30 @@ fn kill_pid(pid: u32) {
     }
     #[cfg(windows)]
     {
-        let _ = Command::new("taskkill")
+        // taskkill 本身可 CREATE_NO_WINDOW；ACP CLI 不能。
+        let _ = skill_manager_core::process::command("taskkill")
             .args(windows_taskkill_args(pid))
             .status();
     }
 }
 
-fn kill_child(child: &mut Child) {
+fn kill_child(child: &mut CliChild) {
     kill_pid(child.id());
-    let _ = child.kill();
-    let _ = child.try_wait();
+    match child {
+        CliChild::Std(child) => {
+            let _ = child.kill();
+        }
+        #[cfg(windows)]
+        CliChild::Hidden(_) => {}
+    }
+    let _ = child.wait_exit(Duration::from_millis(800));
 }
 
 /// `read_line` 在子进程活着但不说话时会一直堵；握手必须能超时杀掉再试下一组参数。
-fn arm_handshake_watchdog(pid: u32) -> (Arc<AtomicBool>, std::thread::JoinHandle<()>) {
+fn arm_handshake_watchdog(
+    pid: u32,
+    timed_out: Arc<AtomicBool>,
+) -> (Arc<AtomicBool>, std::thread::JoinHandle<()>) {
     let stop = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&stop);
     let handle = std::thread::spawn(move || {
@@ -388,6 +562,7 @@ fn arm_handshake_watchdog(pid: u32) -> (Arc<AtomicBool>, std::thread::JoinHandle
             std::thread::sleep(Duration::from_millis(50));
         }
         if !flag.load(Ordering::SeqCst) {
+            timed_out.store(true, Ordering::SeqCst);
             kill_pid(pid);
         }
     });
@@ -403,12 +578,12 @@ fn request_bounded(
     host_session: Option<&str>,
     acp_session: Option<&str>,
 ) -> Result<Value, String> {
-    let (stop, watchdog) = arm_handshake_watchdog(proc.child.id());
+    let (stop, watchdog) = arm_handshake_watchdog(proc.child.id(), Arc::clone(&proc.timed_out));
     let result = request(
         proc,
         method,
         params,
-        Instant::now() + INIT_TIMEOUT,
+        Instant::now() + INIT_TIMEOUT + Duration::from_secs(2),
         cancel,
         runtime,
         host_session,
@@ -494,7 +669,7 @@ pub(crate) fn probe_acp(cli: &DetectedCli, skill_dir: &Path) -> Result<Vec<Strin
     Ok(args)
 }
 
-fn write_msg(stdin: &mut ChildStdin, value: &Value) -> Result<(), String> {
+fn write_msg(stdin: &mut dyn Write, value: &Value) -> Result<(), String> {
     let line = format!("{value}\n");
     stdin
         .write_all(line.as_bytes())
@@ -502,11 +677,11 @@ fn write_msg(stdin: &mut ChildStdin, value: &Value) -> Result<(), String> {
         .map_err(|err| format!("写入管理 CLI 失败：{err}"))
 }
 
-fn write_locked(stdin: &Arc<Mutex<ChildStdin>>, value: &Value) -> Result<(), String> {
+fn write_locked(stdin: &Arc<Mutex<Box<dyn Write + Send>>>, value: &Value) -> Result<(), String> {
     let mut guard = stdin
         .lock()
         .map_err(|_| "管理 CLI stdin 锁已损坏".to_string())?;
-    write_msg(&mut guard, value)
+    write_msg(&mut **guard, value)
 }
 
 fn read_msg(proc: &mut AcpProc, until: Instant) -> Result<Value, String> {
@@ -894,8 +1069,8 @@ pub(crate) fn initialize_or_fail(
     Ok(initialize_with_args(cli, skill_dir, skill_text, cancel)?.0)
 }
 
-fn child_alive(child: &mut Child) -> bool {
-    matches!(child.try_wait(), Ok(None))
+fn child_alive(child: &mut CliChild) -> bool {
+    child.wait_exit(Duration::ZERO).is_none()
 }
 
 /// 握手在标 running 之前完成：未登录或无法声明工具则失败。已有活 session 则跳过。
@@ -1126,6 +1301,76 @@ mod tests {
             !program.to_ascii_lowercase().contains("cmd"),
             "CREATE_NO_WINDOW cmd wrapper makes Bun close stdin, got {program}"
         );
+    }
+
+    #[test]
+    fn windows_acp_hides_console_without_create_no_window() {
+        let (dw_flags, show, creation) = windows_acp_create_flags();
+        assert_eq!(show, ACP_SW_HIDE);
+        assert_eq!(
+            dw_flags & ACP_STARTF_USESHOWWINDOW,
+            ACP_STARTF_USESHOWWINDOW
+        );
+        assert_eq!(
+            dw_flags & ACP_STARTF_USESTDHANDLES,
+            ACP_STARTF_USESTDHANDLES
+        );
+        assert_eq!(
+            creation & ACP_CREATE_NO_WINDOW,
+            0,
+            "CREATE_NO_WINDOW makes Bun close ACP stdin"
+        );
+        assert_eq!(
+            creation & ACP_CREATE_NEW_CONSOLE,
+            ACP_CREATE_NEW_CONSOLE,
+            "Bun needs a console; hide it with SW_HIDE instead of omitting one"
+        );
+    }
+
+    #[test]
+    fn handshake_timeout_reports_watchdog_not_unknown() {
+        let last = format_cli_exit(true, INIT_TIMEOUT, Some(1), 34160, None);
+        assert!(last.contains("握手超时"), "{last}");
+        assert!(last.contains("taskkill"), "{last}");
+        assert!(last.contains("exit 1"), "{last}");
+        assert!(!last.contains("unknown"), "{last}");
+        let msg = handshake_failure_message(Path::new(r"C:\qa-host-a\opencode.exe"), &last);
+        assert!(msg.contains("握手超时"), "{msg}");
+        assert!(
+            !msg.contains("尚未登录"),
+            "timeout must not be blamed on missing login: {msg}"
+        );
+        assert!(is_cli_exit_error(&last));
+    }
+
+    #[test]
+    fn immediate_exit_reports_code_and_stderr() {
+        let last = format_cli_exit(
+            false,
+            Duration::from_millis(80),
+            Some(1),
+            9,
+            Some("Error: Unknown command acp"),
+        );
+        assert!(last.contains("立即"), "{last}");
+        assert!(last.contains("exit 1"), "{last}");
+        assert!(last.contains("Unknown command"), "{last}");
+        assert!(!last.contains("unknown"), "{last}");
+        assert!(is_cli_exit_error(&last));
+        let msg = handshake_failure_message(Path::new(r"C:\qa-host-a\opencode.exe"), &last);
+        assert!(
+            !msg.contains("尚未登录"),
+            "immediate exit must not be blamed on missing login: {msg}"
+        );
+    }
+
+    #[test]
+    fn still_running_after_eof_is_not_unknown() {
+        let last = format_cli_exit(false, Duration::from_secs(12), None, 34160, None);
+        assert!(last.contains("34160"), "{last}");
+        assert!(last.contains("仍在运行"), "{last}");
+        assert!(!last.contains("unknown"), "{last}");
+        assert!(is_cli_exit_error(&last));
     }
 
     #[test]
