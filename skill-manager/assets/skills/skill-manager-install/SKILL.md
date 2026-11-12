@@ -60,27 +60,34 @@ skill-manager --state-dir <state-dir> host unpair
 
 码过期、已用或填错则失败，且不得改已对接设备。对接失败不得说成「库没 clone」。解除后清本机 `station_url` 与 `device_key`。
 
-## 三、登录所用 ACP CLI（任意兼容命令行）
+## 三、接入默认管理 CLI（OpenCode）
 
-内置管理 Agent 经 ACP 拉起**用户已登录的任意兼容 CLI**，模型由该 CLI 决定。不要把 OpenCode / Codex / Gemini 当成唯一选项。D9 探测只说明：本机完全没有兼容 CLI 时，Host 可以安装引导宿主 OpenCode（`opencode acp`）。用户随时可改成别的已登录 CLI。
+内置管理对话**默认钉死 OpenCode**（`opencode acp`）。不要扫描 PATH 上的 claude / codex / hermes 等名字来凑一台。模型由当前 CLI 决定。用户要换别的 ACP 兼容 CLI 时再登记覆盖。
 
-**只在 Host 已能 `host status` 之后**做登录或登记：
+**只在 Host 已能 `host status` 之后**安装或登录：
 
-1. 若本机已有要用的 CLI：在它自己的终端完成模型登录（例如 `opencode auth login`、`gemini` 的 Google / API key、其它厂商的 `login`）。密钥留在该 CLI，不得写入 Vault、Host SQLite 或本说明。
-2. 若 PATH 上已有该 CLI 且它讲 ACP，Host 对话时会检测到。若检测不到、或要用清单外的 CLI，登记到本机：
+1. 打开 Skill Manager「管理对话」，点「安装 OpenCode」，或执行：
+
+```text
+skill-manager --state-dir <state-dir> host agent-cli --install
+```
+
+装到该机 Host 目录 `<state-dir>/agent-runtime/opencode`，不打进 Skill Manager 安装包。装好后写入 `agent_runtime`，之后对话固定用它。
+
+2. 点「打开登录」，或执行 `host agent-cli --login`。在本机浏览器完成 OpenCode 授权。密钥留在该 CLI，不得写入 Vault、Host SQLite 或本说明。完成后点「我已完成登录」。
+
+3. 若要用其它已登录的 ACP CLI 覆盖默认：
 
 ```text
 skill-manager --state-dir <state-dir> host agent-cli --bin <绝对路径或 PATH 名> [--args acp] [--id <标识>]
-skill-manager --state-dir <state-dir> host agent-cli
 skill-manager --state-dir <state-dir> host agent-cli --clear
 ```
 
 也可设环境变量 `SKILL_MANAGER_AGENT_CLI`（可选 `SKILL_MANAGER_AGENT_ACP_ARGS`），或 `PUT /agent/runtime` `{ "binaryPath", "acpArgs", "cliId" }`。
 
-该 CLI 必须能以 ACP stdio JSON-RPC 子进程运行（常见参数：`acp`、`--acp`，或二进制本身就是 ACP 宿主）。原生 `codex` 没有 ACP：要用 Codex 模型时登记 `codex-acp` 一类适配器，不要把 `codex app-server` 当成 ACP。
+该 CLI 必须能以 ACP stdio JSON-RPC 子进程运行（常见参数：`acp`、`--acp`，或二进制本身就是 ACP 宿主）。原生 `codex` 没有 ACP：要用 Codex 模型时登记 `codex-acp` 一类适配器，不要把 `codex app-server` 当成 ACP。不要把 PATH 上的 `claude` / `codex` npm 包装器登记进默认探测。
 
-3. 若本机没有任何兼容 CLI：不要打进 Skill Manager 安装包。Host 首次对话时可把引导宿主 OpenCode 装到 `<state-dir>/agent-runtime/opencode`（`npm install --omit=dev --prefix … opencode-ai`）。然后 `opencode auth login`。也可按 OpenCode 官方非交互方式自行安装。
-4. 回到 Skill Manager 打开「管理对话」。未登录且该 CLI 不能调用任何模型时，只应看到无法执行的说明，库文件不变。
+4. 回到 Skill Manager 打开「管理对话」。未安装或未登录时，面板给出安装/登录步骤，库文件不变。
 5. 不要把配套维护 Skill 注入该 CLI；不要把内置管理说明拷进用户 `skill list`。OpenCode 的注入目录是 Host 管理的 `$OPENCODE_CONFIG_DIR/skills/skill-manager-builtin-agent/`。其它 CLI 若无 skills 目录，Host 用 ACP 初始化文本和每条消息前缀。
 
 若用户只要无窗口 Host、暂不对话：做到第二节即可，不要强迫登录模型。

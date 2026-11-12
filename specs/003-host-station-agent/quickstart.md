@@ -90,7 +90,7 @@ skill-manager --state-dir <state-a> host pair --station <url> --code <code> --na
 | 快照对照表 | 已写入 [snapshot-inventory.md](snapshot-inventory.md)。只读事实有快照字段或工具命令；**不声称齐全**（部分写入对内置 Agent 未开放） |
 | `vault clone` + 真机 `host serve` 互斥与开机项 | **未取证**：Cloud Agent 环境无用户级 launchd/systemd 登录项、无第二台真机 |
 | 管理站双 state-dir 浏览器登录/切换/3 分钟改注释（SC-001） | **未取证**：无图形浏览器连到已配对 Host |
-| 对话「完善中文注释」、切页不串、取消不得成功 | **未取证**完整 GUI 对话。D9 探测：OpenCode 1.19.5 ACP 会话/流式/取消/工具/注入通过；原生 Codex 非 ACP；Gemini 未登录不能 `session/new`。产品不锁死三家：`host agent-cli` 可登记任意兼容 CLI |
+| 对话「完善中文注释」、切页不串、取消不得成功 | **未取证**完整 GUI 对话。默认管理 CLI 钉死 OpenCode：未安装时 `host agent-cli --json` 的 `cliId` 为 `opencode` 且 `needsInstall=true`，不是 `null`。对话面板提供安装与登录。覆盖其它 ACP CLI 仍用 `--bin` |
 | 清单外 CLI 登记 | `set_user_cli` 单测写入 `agent_runtime.user_selected`；`exclusiveVendors=false` |
 | 管理站不可用时桌面改库（SC-005） | 代码路径：桌面内嵌 Host，station crate 不在桌面依赖链；**真机未取证** |
 | 002 CLI Host 在场/不在场回归 | **未取证**本轮未对着真实 Vault 跑 list/set/deploy |

@@ -29,7 +29,7 @@ pub enum HostAction {
     Unpair,
     /// ACP 子进程用的 Host 工具通道（stdio）。不占 host.lock，不单独作为用户 MCP 产品。
     Mcp,
-    /// 查看或登记内置管理 Agent 所用的 ACP CLI（任意兼容命令行，不限三家）。
+    /// 查看、安装、登录或登记内置管理 Agent 所用的 ACP CLI。默认钉死 OpenCode。
     AgentCli(AgentCliArgs),
 }
 
@@ -44,9 +44,15 @@ pub struct AgentCliArgs {
     /// 写入 agent_runtime 的标识，默认取文件名。
     #[arg(long)]
     pub id: Option<String>,
-    /// 清除用户指定，下次按环境变量 / PATH / 引导宿主解析。
+    /// 清除用户指定，下次按钉死的默认 OpenCode（已安装或 PATH 上的 opencode）解析。
     #[arg(long)]
     pub clear: bool,
+    /// 安装默认管理 CLI OpenCode 到本机 Host 目录并钉死，不打进 Skill Manager 安装包。
+    #[arg(long)]
+    pub install: bool,
+    /// 打开默认（或已登记）管理 CLI 的本机登录/授权。
+    #[arg(long)]
+    pub login: bool,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -209,8 +215,30 @@ fn agent_cli_cmd(options: &GlobalOptions, args: AgentCliArgs) -> (CliResult, Str
                 let view = skill_manager_host::agent::runtime_view(&runtime);
                 (
                     CliResult::success(view.clone()),
-                    "已清除指定的管理 CLI；下次按环境变量、PATH 或引导宿主解析。".to_string(),
+                    "已清除指定的管理 CLI；下次使用钉死的默认 OpenCode（已安装或 PATH 上的 opencode）。".to_string(),
                 )
+            }
+            Err(err) => (CliResult::failed_message(err.clone()), err),
+        };
+    }
+    if args.install {
+        return match skill_manager_host::agent::install_default_cli(&runtime) {
+            Ok(view) => (
+                CliResult::success(view.clone()),
+                "已安装并钉死默认管理 CLI OpenCode。请执行 host agent-cli --login 完成本机授权。".to_string(),
+            ),
+            Err(err) => (CliResult::failed_message(err.clone()), err),
+        };
+    }
+    if args.login {
+        return match skill_manager_host::agent::launch_login(&runtime) {
+            Ok(view) => {
+                let msg = view
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("已打开管理 CLI 登录")
+                    .to_string();
+                (CliResult::success(view), msg)
             }
             Err(err) => (CliResult::failed_message(err.clone()), err),
         };
@@ -245,16 +273,19 @@ fn agent_cli_cmd(options: &GlobalOptions, args: AgentCliArgs) -> (CliResult, Str
         };
     }
     let view = skill_manager_host::agent::runtime_view(&runtime);
-    let human = if let Some(id) = view.get("cliId").and_then(|v| v.as_str()) {
+    let human = if view.get("ready").and_then(|v| v.as_bool()) == Some(true) {
         format!(
-            "当前管理 CLI {}（{}）。可改：host agent-cli --bin <路径> [--args acp]。",
-            id,
+            "当前管理 CLI {}（{}）。之后对话使用这一家，不再扫描命令行清单。可改：host agent-cli --bin <路径> [--args acp]。",
+            view.get("displayName").and_then(|v| v.as_str()).unwrap_or("OpenCode"),
             view.get("binaryPath").and_then(|v| v.as_str()).unwrap_or("")
         )
+    } else if view.get("needsInstall").and_then(|v| v.as_bool()) == Some(true) {
+        "尚未安装默认管理 CLI OpenCode。请执行 host agent-cli --install，或在对话面板点「安装 OpenCode」。".to_string()
     } else {
         view.get("error")
             .and_then(|v| v.as_str())
-            .unwrap_or("尚未登记管理 CLI")
+            .or_else(|| view.get("installHint").and_then(|v| v.as_str()))
+            .unwrap_or("默认管理 CLI OpenCode 尚未就绪")
             .to_string()
     };
     (CliResult::success(view), human)

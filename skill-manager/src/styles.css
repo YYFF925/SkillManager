@@ -488,3 +488,40 @@ textarea:focus-visible {
 }
 .device-bar select { color: inherit; }
 .chat-panel { background: var(--c-surface); }
+.chat-cli-setup {
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--c-line-soft);
+  border-radius: 8px;
+  background: var(--c-bg);
+}
+.chat-cli-setup h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.chat-cli-setup p,
+.chat-cli-setup li {
+  font-size: 12px;
+  color: var(--c-muted);
+  line-height: 1.5;
+}
+.chat-cli-setup ol {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+.chat-cli-setup code {
+  display: block;
+  margin: 8px 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  background: var(--c-bg-subtle);
+  border-radius: 6px;
+  word-break: break-all;
+}
+.chat-cli-setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}

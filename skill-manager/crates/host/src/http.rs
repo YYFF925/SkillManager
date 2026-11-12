@@ -53,6 +53,8 @@ pub fn router(runtime: HostRuntime) -> Router {
         .route("/agent/sessions", get(agent_sessions))
         .route("/agent/sessions/{id}/messages", get(agent_messages))
         .route("/agent/runtime", get(agent_runtime_get).put(agent_runtime_put))
+        .route("/agent/runtime/install", post(agent_runtime_install))
+        .route("/agent/runtime/login", post(agent_runtime_login))
         .with_state(App { runtime })
 }
 
@@ -185,6 +187,20 @@ async fn agent_cancel(
 
 async fn agent_runtime_get(State(app): State<App>) -> Json<Value> {
     Json(crate::agent::runtime_view(&app.runtime))
+}
+
+async fn agent_runtime_install(State(app): State<App>) -> impl IntoResponse {
+    match crate::agent::install_default_cli(&app.runtime) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response(),
+    }
+}
+
+async fn agent_runtime_login(State(app): State<App>) -> impl IntoResponse {
+    match crate::agent::launch_login(&app.runtime) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response(),
+    }
 }
 
 async fn agent_runtime_put(

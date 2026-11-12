@@ -46,6 +46,8 @@ GET  /agent/sessions
 GET  /agent/sessions/:id/messages
 GET  /agent/runtime
 PUT  /agent/runtime   { binaryPath, acpArgs?, cliId? } | { clear: true }
+POST /agent/runtime/install
+POST /agent/runtime/login
 ```
 
 `view` 只含页面身份与选中引用，例如 `{ page, domain, selection: { refs, category, presetId, profile, toolId, agentKey } }`，**不含**技能正文、注释全文、文件树或报错原文。
@@ -57,7 +59,7 @@ Host 在 `POST /agent/messages` 时从 core 组装两层并钉死到该条任务
 
 后续 `PUT /agent/context` 只更新界面层引用，只影响之后的新消息。`POST /agent/tasks/:id/cancel` 停止该任务继续写库，已取消不得标成成功。不得要求用户粘贴报错、清单或技能正文。
 
-`GET/PUT /agent/runtime` 登记当前 ACP 宿主：任意兼容 CLI，不是三家许可名单。`binaryPath` 为可执行文件；`acpArgs` 为启动参数数组。清单外 CLI 用这条接入。环境变量 `SKILL_MANAGER_AGENT_CLI` 优先于库内登记。
+`GET /agent/runtime` 报告钉死的默认 OpenCode 与当前覆盖：含 `cliId`、`defaultCliId`、`ready`、`needsInstall`、`needsLogin`、`loginCommand`。缺省未安装时 `cliId` 仍为 `opencode`，`needsInstall` 为真，不得只给 `cliId: null`。`POST /agent/runtime/install` 安装并钉死默认 CLI；`POST /agent/runtime/login` 打开本机授权。`PUT /agent/runtime` 把其它 ACP CLI 登记为覆盖。环境变量 `SKILL_MANAGER_AGENT_CLI` 优先于库内登记。同名 invoke：`agent_runtime_get` / `agent_runtime_install` / `agent_runtime_login`。
 
 ## 本机状态
 

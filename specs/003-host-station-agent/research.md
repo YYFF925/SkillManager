@@ -56,7 +56,7 @@
 
 ### D9 ACP 优先；任意已登录的兼容 CLI；探测清单只找引导宿主
 
-- **Decision**: Host 以 ACP（stdio JSON-RPC）拉起**用户已登录的任意兼容 Agent CLI**。工具接到 Host 的第一路径是现有 `skill-manager` JSON CLI（经 Host 转发），不先做 MCP 平行实现。**模型由该 CLI 决定**，Skill Manager 不自建模型层，也不把 OpenCode / Codex / Gemini 写成唯一选项。D9 探测清单（OpenCode → Codex CLI → Gemini CLI：会话、流式、取消、工具调用、stdio、注入路径）只用来找**第一家可跑的 ACP 引导宿主**：本机没有任何兼容 CLI 时，才可按需安装该引导宿主（探测记录：OpenCode `opencode-ai` 1.19.5）。用户随时可改指向其它已登录 CLI。探测不是产品功能，失败如实说明，不静默降级成「已能管理」。
+- **Decision**: Host 以 ACP（stdio JSON-RPC）拉起当前管理 CLI。**产品默认钉死 OpenCode**（D9 第一家通过者：`opencode-ai` 1.19.5，`opencode acp`），由 Skill Manager 提供安装与登录引导，并写入 `agent_runtime` 供之后对话使用。**不扫描** PATH 上的厂商清单。**模型由当前 CLI 决定**，Skill Manager 不自建模型层。用户可用 `--bin` / `PUT /agent/runtime` / `SKILL_MANAGER_AGENT_CLI` 覆盖为任意 ACP 兼容 CLI。没有默认 CLI 时对话返回 `needsInstall`，不得把「未检测到已登录 CLI」当成跳过。探测清单只是当时找引导宿主的实验记录，不是产品功能。
 - **Rationale**: 用户纠正（2026-11-11）：内置管理 Agent 必须能接任意第三方模型。三家只是当时便于实测 ACP 的候选，不是许可名单。认证与模型密钥仍归那家 CLI。
 - **Alternatives**: 把运行时编进 core（被拒）；打包第三方 CLI（被拒）；先做 MCP 网关（被拒：002 CLI 已覆盖业务，双协议第一版过重）；把默认锁死为三家之一且不可改（被拒：2026-11-11 用户纠正）。
 

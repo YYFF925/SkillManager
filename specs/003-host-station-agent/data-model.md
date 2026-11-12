@@ -46,11 +46,11 @@
 
 | 列 | 说明 |
 |---|---|
-| cli_id | 当前 ACP 宿主标识（用户指定或探测到的名字，如 `opencode`、`custom-host`）。不是三家许可名单 |
+| cli_id | 当前 ACP 宿主标识。默认钉死 `opencode`；用户覆盖时为其它名字。不是厂商许可名单 |
 | binary_path | 本机可执行文件，不进安装包 |
 | acp_args | JSON 数组，ACP 启动参数；空则按常见约定尝试 `acp` / `--acp` |
-| user_selected | 用户经 `host agent-cli` / `PUT /agent/runtime` / 环境变量登记则为 1 |
-| detected_at / installed_by_app | 检测或由软件安装引导宿主 |
+| user_selected | 用户经 `host agent-cli --bin` / `PUT /agent/runtime` / 环境变量覆盖则为 1 |
+| detected_at / installed_by_app | 由软件安装默认 OpenCode，或钉死 PATH 上的 `opencode` |
 
 模型密钥不出现在此表，不出现在管理站。
 

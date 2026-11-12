@@ -7,7 +7,8 @@ mod mcp;
 mod tools;
 
 pub use bridge::{
-    cancel_task, clear_user_cli, detect_and_lock, post_message, runtime_view, set_user_cli,
+    cancel_task, clear_user_cli, detect_and_lock, install_default_cli, launch_login, post_message,
+    runtime_view, set_user_cli,
 };
 pub use context::{list_messages, list_sessions, set_context};
 pub use mcp::run_stdio as run_mcp_stdio;

@@ -16,6 +16,8 @@ host pair --station <url> --code <pairing-code> [--name <display>]
 host unpair
 host status
 host agent-cli
+host agent-cli --install
+host agent-cli --login
 host agent-cli --bin <path-or-name> [--args acp] [--id <cli-id>]
 host agent-cli --clear
 ```
@@ -24,7 +26,7 @@ host agent-cli --clear
 - `install-service`：登记开机自启，不唤醒休眠。
 - `pair`：出站对接管理站；码错误/过期/已用则失败，不影响其它设备。
 - `status`：是否在跑、Vault 路径、是否已对接、锁是否被占。
-- `agent-cli`：查看或登记内置管理 Agent 所用的 ACP CLI。任意兼容命令行，模型由该 CLI 决定，不限 OpenCode / Codex / Gemini。`--bin` 为绝对路径或 PATH 名；`--args` 为 ACP 启动参数（省略则按常见约定尝试）。`--clear` 取消用户指定。与 002 的 `agent` 子命令（部署目标名单）不是一回事。
+- `agent-cli`：查看、安装、登录或登记内置管理 Agent 所用的 ACP CLI。**默认钉死 OpenCode**，不扫描厂商清单。无参数时输出当前状态（`cliId`/`needsInstall`/`needsLogin`/`ready`），缺省 CLI 时 `cliId` 仍为 `opencode` 而不是 `null`。`--install` 把 OpenCode 装到本机 Host 目录并写入 `agent_runtime`。`--login` 打开该 CLI 的本机授权。`--bin` 覆盖为任意兼容命令行；`--args` 为 ACP 启动参数（省略则按常见约定尝试）。`--clear` 取消用户指定，回到默认 OpenCode。与 002 的 `agent` 子命令（部署目标名单）不是一回事。
 
 ## station — 统一管理站
 

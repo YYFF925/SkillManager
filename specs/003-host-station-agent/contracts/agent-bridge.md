@@ -4,7 +4,7 @@
 
 ## 进程
 
-Host 按顺序解析当前 ACP CLI：**环境变量 `SKILL_MANAGER_AGENT_CLI`** → **用户登记的 `agent_runtime`（`user_selected`）** → PATH 上已知示例宿主 → 仍没有则安装引导宿主 OpenCode（D9 第一家通过者，不打进 Skill Manager 安装包）。**不是** OpenCode / Codex / Gemini 许可名单。模型由该 CLI 决定。用 ACP stdio 拉起。该 CLI 自己的登录失败时，对话只能报告无法执行，不得生成「已改库」结果。
+默认管理 CLI **钉死为 OpenCode**（`opencode acp`，包 `opencode-ai`）。Host 按顺序解析当前 ACP CLI：**环境变量 `SKILL_MANAGER_AGENT_CLI`** → **用户登记或上次钉死的 `agent_runtime`** → 软件已安装到 `state-dir/agent-runtime/opencode` 的副本 → PATH 上名为 `opencode` 的命令（只认这一个名字）。都没有则 **不自动安装、不扫描厂商清单**；`GET /agent/runtime` 与对话返回 `needsInstall: true`，由用户在对话面板或 `host agent-cli --install` 安装并钉死。随后 `host agent-cli --login` / `POST /agent/runtime/login` 打开本机授权。模型由该 CLI 决定。用 ACP stdio 拉起。该 CLI 自己的登录失败时，对话只能报告无法执行并给出登录步骤，不得生成「已改库」结果。
 
 清单外 CLI：用户执行 `host agent-cli --bin <路径> [--args …]` 或 `PUT /agent/runtime`。启动参数缺省时依次试 `acp` / `--acp` / 无参数；**进程能 spawn 不算成功**，须 ACP `initialize` 握手通过才采用该组参数，失败再试下一组。登记不只看文件存在，握手失败不得写入 `agent_runtime`。原生 Codex 不是 ACP，须登记适配器。
 
