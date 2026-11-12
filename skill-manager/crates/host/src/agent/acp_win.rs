@@ -54,7 +54,7 @@ struct ProcessInformation {
 }
 
 #[link(name = "kernel32")]
-extern "system" {
+unsafe extern "system" {
     fn CreatePipe(
         read: *mut RawHandle,
         write: *mut RawHandle,
