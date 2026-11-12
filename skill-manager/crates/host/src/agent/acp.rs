@@ -864,18 +864,27 @@ pub(crate) fn extract_json_value(buffer: &mut String) -> Option<Value> {
     None
 }
 
-fn session_id_from_created_log(text: &str) -> Option<String> {
-    let marker = "created session ";
-    let idx = text.rfind(marker)?;
-    let rest = text[idx + marker.len()..].trim_start();
+fn take_ses_id(rest: &str) -> Option<String> {
     let id = rest
-        .split(|c: char| c.is_whitespace() || c == '"' || c == '\'')
+        .trim_start()
+        .split(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ',' || c == '}')
         .next()?;
     if id.starts_with("ses_") && id.len() > 4 {
         Some(id.to_string())
     } else {
         None
     }
+}
+
+/// OpenCode 1.19.5 `--print-logs`：`message=created id=ses_…`（不是 `created session ses_`）。
+fn session_id_from_created_log(text: &str) -> Option<String> {
+    if let Some(idx) = text.rfind("created id=") {
+        return take_ses_id(&text[idx + "created id=".len()..]);
+    }
+    if let Some(idx) = text.rfind("created session ") {
+        return take_ses_id(&text[idx + "created session ".len()..]);
+    }
+    None
 }
 
 fn ingest_stdout(proc: &mut AcpProc, chunk: &str) {
@@ -888,7 +897,7 @@ fn ingest_stdout(proc: &mut AcpProc, chunk: &str) {
     while let Some(value) = extract_json_value(&mut proc.scan) {
         proc.pending_json.push_back(value);
     }
-    // OpenCode 1.19.5 可能只打 INFO「created session ses_…」而不再刷 JSON-RPC result。
+    // OpenCode 1.19.5 可能只打 INFO `message=created id=ses_…` 而不再刷 JSON-RPC result。
     if let Some(sid) = session_id_from_created_log(&cleaned) {
         proc.pending_json.push_back(json!({ "sessionId": sid }));
     }
@@ -2086,12 +2095,12 @@ mod tests {
 
         let mut mixed = String::from(
             "ERROR  Error handling notification code -32601 \"Method not found\": notifications/initialized\n\
-             INFO  created session ses_e30524520ffejRezFgcl2quFUa\n",
+             INFO  message=created id=ses_e3037ebe9ffeI0iV6lB877vDNF\n",
         );
         let result = json!({
             "jsonrpc": "2.0",
             "id": 2,
-            "result": { "sessionId": "ses_e30524520ffejRezFgcl2quFUa" }
+            "result": { "sessionId": "ses_e3037ebe9ffeI0iV6lB877vDNF" }
         });
         mixed.push_str(&serde_json::to_string(&result).unwrap());
         mixed.push('\n');
@@ -2099,14 +2108,21 @@ mod tests {
         let payload = rpc_payload(&parsed, 2, "session/new")
             .expect("session/new result")
             .expect("ok");
-        assert_eq!(payload["sessionId"], "ses_e30524520ffejRezFgcl2quFUa");
+        assert_eq!(payload["sessionId"], "ses_e3037ebe9ffeI0iV6lB877vDNF");
 
-        let bare = json!({ "sessionId": "ses_e30524520ffejRezFgcl2quFUa" });
+        let bare = json!({ "sessionId": "ses_e3037ebe9ffeI0iV6lB877vDNF" });
         assert_eq!(
             rpc_payload(&bare, 9, "session/new").unwrap().unwrap()["sessionId"],
-            "ses_e30524520ffejRezFgcl2quFUa"
+            "ses_e3037ebe9ffeI0iV6lB877vDNF"
         );
         assert!(rpc_payload(&bare, 9, "session/prompt").is_none());
+        assert_eq!(
+            session_id_from_created_log(
+                "INFO  message=created id=ses_e3037ebe9ffeI0iV6lB877vDNF"
+            )
+            .as_deref(),
+            Some("ses_e3037ebe9ffeI0iV6lB877vDNF")
+        );
         assert_eq!(
             session_id_from_created_log(
                 "INFO  created session ses_e30524520ffejRezFgcl2quFUa"
@@ -2114,6 +2130,7 @@ mod tests {
             .as_deref(),
             Some("ses_e30524520ffejRezFgcl2quFUa")
         );
+        assert!(session_id_from_created_log("INFO  bootstrapping qa-vault-a").is_none());
     }
 
     #[test]
