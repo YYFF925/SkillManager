@@ -348,28 +348,47 @@ fn install_dir(runtime: &HostRuntime) -> PathBuf {
 }
 
 fn spawn_login(cli: &DetectedCli) -> Result<(), String> {
+    login_spawn_command(cli)
+        .spawn()
+        .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+/// Windows 上 Host 常被无窗口拉起且 stdout 重定向到日志。`Command` 默认继承这些句柄
+/// （`STARTF_USESTDHANDLES`），再加 `CREATE_NEW_CONSOLE` 也不会把 TUI 绑到可见控制台：
+/// 「Select provider」写进 Host 日志，进程 `MainWindowHandle` 为 0。
+/// `start`（不要 `/B`）为子进程新建可见控制台并把 stdio 接到该窗口。
+fn login_spawn_command(cli: &DetectedCli) -> Command {
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
-        // CreateProcess 不能直接跑 .cmd；经 cmd.exe 解析 PATHEXT。
-        Command::new("cmd")
-            .arg("/C")
-            .arg(&cli.binary_path)
-            .args(DEFAULT_LOGIN_ARGS)
-            .creation_flags(CREATE_NEW_CONSOLE)
-            .spawn()
-            .map_err(|err| err.to_string())?;
-        Ok(())
+        use std::process::Stdio;
+        let mut cmd = skill_manager_core::process::command("cmd");
+        cmd.args(windows_login_cmd_args(&cli.binary_path))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        cmd
     }
     #[cfg(not(windows))]
     {
-        Command::new(&cli.binary_path)
-            .args(DEFAULT_LOGIN_ARGS)
-            .spawn()
-            .map_err(|err| err.to_string())?;
-        Ok(())
+        let mut cmd = Command::new(&cli.binary_path);
+        cmd.args(DEFAULT_LOGIN_ARGS);
+        cmd
     }
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_login_cmd_args(binary: &Path) -> Vec<std::ffi::OsString> {
+    let mut args = vec![
+        "/C".into(),
+        "start".into(),
+        "OpenCode 登录".into(),
+        "cmd".into(),
+        "/C".into(),
+        binary.as_os_str().to_os_string(),
+    ];
+    args.extend(DEFAULT_LOGIN_ARGS.iter().map(|arg| (*arg).into()));
+    args
 }
 
 fn install_package(dest: &Path, package: &str, bin_name: &str) -> Result<PathBuf, String> {
@@ -740,6 +759,66 @@ mod tests {
         assert_eq!(DEFAULT_PACKAGE, "opencode-ai");
         assert_eq!(DEFAULT_ACP_ARGS, &["acp"]);
         assert_eq!(DEFAULT_LOGIN_ARGS, &["auth", "login"]);
+    }
+
+    #[test]
+    fn windows_login_opens_visible_console_via_start() {
+        let binary =
+            PathBuf::from(r"C:\qa-host-a\agent-runtime\opencode\node_modules\.bin\opencode.cmd");
+        let argv: Vec<String> = windows_login_cmd_args(&binary)
+            .into_iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(argv[0], "/C");
+        assert_eq!(argv[1], "start");
+        assert_eq!(argv[2], "OpenCode 登录");
+        assert!(
+            !argv.iter().any(|arg| arg.eq_ignore_ascii_case("/B")),
+            "/B would hide the new console, got {argv:?}"
+        );
+        assert!(
+            argv.iter().all(|arg| !arg.contains('"')),
+            "do not pre-quote argv, got {argv:?}"
+        );
+        assert_eq!(
+            argv,
+            vec![
+                "/C",
+                "start",
+                "OpenCode 登录",
+                "cmd",
+                "/C",
+                r"C:\qa-host-a\agent-runtime\opencode\node_modules\.bin\opencode.cmd",
+                "auth",
+                "login",
+            ]
+        );
+
+        let cmd = login_spawn_command(&DetectedCli {
+            cli_id: "opencode".into(),
+            binary_path: binary,
+            installed_by_app: true,
+            acp_args: vec!["acp".into()],
+            user_selected: false,
+        });
+        let program = cmd.get_program().to_string_lossy();
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        #[cfg(windows)]
+        {
+            assert!(
+                program.contains("cmd"),
+                "login wrapper must be cmd.exe, got {program}"
+            );
+            assert_eq!(args, argv);
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(program.contains("opencode"), "{program}");
+            assert_eq!(args, vec!["auth", "login"]);
+        }
     }
 
     #[test]

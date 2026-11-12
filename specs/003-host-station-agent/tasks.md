@@ -237,3 +237,4 @@ T011 实现 vault clone（core/cli）
 - [X] T071 默认管理 CLI 钉死 OpenCode：不扫描厂商 PATH 清单；`host agent-cli` / 对话在未安装时返回 `needsInstall`（`cliId` 仍为 `opencode`，不是 `null`）；软件内 `--install` / `--login` 与对话面板「安装 OpenCode」「打开登录」。装好写入 `agent_runtime`，之后不再重探。不把「没有已登录 CLI」当成测试跳过。 per US3/AC9, FR-017
 - [X] T072 Windows 软件内安装 OpenCode：经 `cmd.exe /C` 启动 `npm.cmd`（CreateProcess 不能直接跑 `.cmd`）；失败不留空的 `agent-runtime/opencode`；对话等 `agent_runtime_get` 返回后再显示「安装 OpenCode」，不得先闪「打开登录」 per US3/AC9, FR-017, T071
 - [X] T073 Windows `cmd /C` 安装参数分开传入，不得预包 `\"路径\"`（否则 argv 转义成 `\"C:\Program Files\nodejs\npm.cmd\"`，cmd 当命令名失败） per T072
+- [X] T074 Windows「打开登录」/`host agent-cli --login` 用 `cmd /c start` 弹出可见交互控制台（不要 `CREATE_NEW_CONSOLE` + 继承 Host 重定向 stdio，也不要 `start /B`），以便完成 Select provider 与浏览器授权 per US3/AC9, T071
