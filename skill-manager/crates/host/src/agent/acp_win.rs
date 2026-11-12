@@ -14,7 +14,10 @@ use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Arc;
 
-use super::{ACP_CREATE_NEW_CONSOLE, ACP_CREATE_NO_WINDOW, windows_acp_create_flags};
+use super::{
+    ACP_CONPTY_INHERIT_HANDLES, ACP_CREATE_NEW_CONSOLE, ACP_CREATE_NO_WINDOW,
+    windows_acp_create_flags,
+};
 
 const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
 const WAIT_OBJECT_0: u32 = 0;
@@ -148,6 +151,12 @@ impl Drop for PseudoConsole {
     }
 }
 
+/// MSDN：`UpdateProcThreadAttribute(..., hPC, sizeof(hPC))`。lpValue 就是 HPCON，
+/// 不是 `&hPC`。传本地 HANDLE 的地址时，子进程会拿到无效伪控制台并报 0xC0000142。
+pub(crate) fn conpty_attribute_lp_value(hpcon: RawHandle) -> *mut core::ffi::c_void {
+    hpcon
+}
+
 pub(crate) struct HiddenChild {
     pub pid: u32,
     handle: OwnedHandle,
@@ -185,12 +194,10 @@ pub(crate) fn spawn_hidden(
     args: &[OsString],
     extra_env: &[(&str, &Path)],
 ) -> io::Result<HiddenSpawn> {
-    let (pty_in_r, stdin_w) = inheritable_pipe()?;
-    let (stdout_r, pty_out_w) = inheritable_pipe()?;
-    let (stderr_r, stderr_w) = inheritable_pipe()?;
+    let (pty_in_r, stdin_w) = create_pipe()?;
+    let (stdout_r, pty_out_w) = create_pipe()?;
     clear_inherit(stdin_w.as_raw_handle())?;
     clear_inherit(stdout_r.as_raw_handle())?;
-    clear_inherit(stderr_r.as_raw_handle())?;
 
     let mut hpcon: RawHandle = ptr::null_mut();
     let hr = unsafe {
@@ -202,8 +209,6 @@ pub(crate) fn spawn_hidden(
             &mut hpcon,
         )
     };
-    drop(pty_in_r);
-    drop(pty_out_w);
     if hr != 0 || hpcon.is_null() {
         return Err(io::Error::from_raw_os_error(hr));
     }
@@ -223,7 +228,7 @@ pub(crate) fn spawn_hidden(
             attr_ptr,
             0,
             PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-            (&raw mut hpcon).cast(),
+            conpty_attribute_lp_value(hpcon),
             std::mem::size_of::<RawHandle>(),
             ptr::null_mut(),
             ptr::null_mut(),
@@ -237,22 +242,23 @@ pub(crate) fn spawn_hidden(
         return Err(io::Error::last_os_error());
     }
 
+    let stderr = eof_pipe()?;
     let mut cmdline = command_line(program, args);
     let mut env = env_block(extra_env);
     let mut app = wide_nul(program);
-    let cwd = extra_env
-        .iter()
-        .find(|(key, _)| *key == "OPENCODE_CONFIG_DIR")
-        .map(|(_, path)| wide_nul(path.as_os_str()));
+    let cwd = Path::new(program)
+        .parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .map(|dir| wide_nul(dir.as_os_str()));
     let (dw_flags, show, creation) = windows_acp_create_flags();
     debug_assert_eq!(creation & ACP_CREATE_NO_WINDOW, 0);
     debug_assert_eq!(creation & ACP_CREATE_NEW_CONSOLE, 0);
+    debug_assert_eq!(dw_flags & super::ACP_STARTF_USESTDHANDLES, 0);
 
     let mut si: StartupInfoExW = unsafe { std::mem::zeroed() };
     si.startup.cb = std::mem::size_of::<StartupInfoExW>() as u32;
     si.startup.dw_flags = dw_flags;
     si.startup.w_show_window = show;
-    si.startup.stderr = stderr_w.as_raw_handle();
     si.attr_list = attr_ptr;
 
     let mut pi: ProcessInformation = unsafe { std::mem::zeroed() };
@@ -271,7 +277,7 @@ pub(crate) fn spawn_hidden(
             cmdline.as_mut_ptr(),
             ptr::null(),
             ptr::null(),
-            1,
+            ACP_CONPTY_INHERIT_HANDLES,
             creation,
             env.as_mut_ptr(),
             cwd_ptr,
@@ -282,7 +288,8 @@ pub(crate) fn spawn_hidden(
     unsafe {
         DeleteProcThreadAttributeList(attr_ptr);
     }
-    drop(stderr_w);
+    drop(pty_in_r);
+    drop(pty_out_w);
     if ok == 0 {
         unsafe { ClosePseudoConsole(hpcon) };
         return Err(io::Error::last_os_error());
@@ -299,15 +306,21 @@ pub(crate) fn spawn_hidden(
         },
         stdin: File::from(stdin_w),
         stdout: File::from(stdout_r),
-        stderr: File::from(stderr_r),
+        stderr,
     })
 }
 
-fn inheritable_pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
+fn eof_pipe() -> io::Result<File> {
+    let (read, write) = create_pipe()?;
+    drop(write);
+    Ok(File::from(read))
+}
+
+fn create_pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
     let sa = SecurityAttributes {
         n_length: std::mem::size_of::<SecurityAttributes>() as u32,
         lp_security_descriptor: ptr::null_mut(),
-        inherit_handle: 1,
+        inherit_handle: 0,
     };
     let mut read = ptr::null_mut();
     let mut write = ptr::null_mut();

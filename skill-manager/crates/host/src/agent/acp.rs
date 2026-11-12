@@ -37,14 +37,20 @@ pub(crate) const ACP_EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ACP_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// ConPTY 的 stdin/stdout 由 HPCON 提供；再设 STARTF_USESTDHANDLES（stdin/stdout 为空）
+/// 会让子进程拿到无效伪控制台，DllMain 报 `STATUS_DLL_INIT_FAILED`（0xC0000142）。
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn windows_acp_create_flags() -> (u32, u16, u32) {
     (
-        ACP_STARTF_USESHOWWINDOW | ACP_STARTF_USESTDHANDLES,
+        ACP_STARTF_USESHOWWINDOW,
         ACP_SW_HIDE,
         ACP_EXTENDED_STARTUPINFO_PRESENT | ACP_CREATE_UNICODE_ENVIRONMENT,
     )
 }
+
+/// MSDN ConPTY 样例：CreateProcess `bInheritHandles` 为 FALSE。管道已交给 HPCON。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_CONPTY_INHERIT_HANDLES: i32 = 0;
 
 const INIT_TIMEOUT: Duration = Duration::from_secs(12);
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -343,7 +349,7 @@ fn format_cli_exit(
     stderr: Option<&str>,
 ) -> String {
     let code_text = match code {
-        Some(code) => code.to_string(),
+        Some(code) => format_exit_code(code),
         None => format!("still-running pid {pid}"),
     };
     let cause = if timed_out {
@@ -361,6 +367,15 @@ fn format_cli_exit(
     match stderr {
         Some(text) if !text.is_empty() => format!("管理 CLI {cause}：{text}"),
         _ => format!("管理 CLI {cause}"),
+    }
+}
+
+fn format_exit_code(code: i32) -> String {
+    const STATUS_DLL_INIT_FAILED: u32 = 0xC000_0142;
+    if code as u32 == STATUS_DLL_INIT_FAILED {
+        format!("{code} / 0xC0000142 STATUS_DLL_INIT_FAILED")
+    } else {
+        code.to_string()
     }
 }
 
@@ -537,6 +552,8 @@ pub(crate) fn default_acp_arg_sets(_cli_id: &str) -> Vec<&'static [&'static str]
 
 fn should_retry_next_args(err: &str) -> bool {
     !err.contains("握手超时")
+        && !err.contains("STATUS_DLL_INIT_FAILED")
+        && !err.contains("0xC0000142")
 }
 
 fn initialize_payload(skill_dir: &Path, skill_text: &str) -> Value {
@@ -693,7 +710,9 @@ pub(crate) fn initialize_with_args(
     cancel: &AtomicBool,
 ) -> Result<(AcpProc, Vec<String>), String> {
     let mut last = "没有可用的 ACP 启动参数".to_string();
+    let mut tried = Vec::new();
     for args in candidate_arg_sets(cli) {
+        tried.push(args.clone());
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
         let mut proc = match spawn_with_args(&cli.binary_path, &refs, skill_dir) {
             Ok(proc) => proc,
@@ -713,16 +732,33 @@ pub(crate) fn initialize_with_args(
             }
         }
     }
-    Err(handshake_failure_message(&cli.binary_path, &last))
+    Err(handshake_failure_message(&cli.binary_path, &last, &tried))
 }
 
-fn handshake_failure_message(bin: &Path, last: &str) -> String {
+fn format_arg_set(args: &[String]) -> String {
+    if args.is_empty() {
+        "无参".into()
+    } else {
+        args.join(" ")
+    }
+}
+
+fn handshake_failure_message(bin: &Path, last: &str, tried: &[Vec<String>]) -> String {
     if looks_like_auth_failure(&json!(last)) && !is_cli_exit_error(last) {
         "管理 CLI 尚未登录模型。请先在该 CLI 中完成登录，再回来对话。任务不会标成进行中。"
             .to_string()
     } else {
+        let tried_text = if tried.is_empty() {
+            "无可用参数".to_string()
+        } else {
+            tried
+                .iter()
+                .map(|args| format_arg_set(args))
+                .collect::<Vec<_>>()
+                .join(" / ")
+        };
         format!(
-            "无法与 {bin} 完成 ACP 握手（已试 --print-logs acp / acp / --acp / 无参）。{last}",
+            "无法与 {bin} 完成 ACP 握手（已试 {tried_text}）。{last}",
             bin = bin.display()
         )
     }
@@ -764,7 +800,12 @@ fn recv_line(proc: &mut AcpProc, until: Instant) -> Result<String, String> {
         match proc.stdout_rx.recv_timeout(wait) {
             Ok(Ok(line)) => return Ok(line),
             Ok(Err(err)) => return Err(format!("读取管理 CLI 失败：{err}")),
-            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Timeout) => {
+                if proc.child.wait_exit(Duration::ZERO).is_some() {
+                    return Err(describe_cli_exit(proc));
+                }
+                continue;
+            }
             Err(RecvTimeoutError::Disconnected) => return Err(describe_cli_exit(proc)),
         }
     }
@@ -1367,7 +1408,11 @@ mod tests {
     #[test]
     fn process_exit_is_not_reported_as_missing_login() {
         let last = "管理 CLI 已退出（exit 1）：Error: Unknown command acp";
-        let msg = handshake_failure_message(Path::new(r"C:\qa-host-a\opencode.exe"), last);
+        let msg = handshake_failure_message(
+            Path::new(r"C:\qa-host-a\opencode.exe"),
+            last,
+            &[vec!["--print-logs".into(), "acp".into()]],
+        );
         assert!(msg.contains("exit 1"), "{msg}");
         assert!(msg.contains("Unknown command") || msg.contains("已退出"), "{msg}");
         assert!(
@@ -1404,7 +1449,13 @@ mod tests {
         );
         assert_eq!(
             dw_flags & ACP_STARTF_USESTDHANDLES,
-            ACP_STARTF_USESTDHANDLES
+            0,
+            "STARTF_USESTDHANDLES with empty stdin/stdout under ConPTY yields 0xC0000142"
+        );
+        assert_eq!(
+            ACP_CONPTY_INHERIT_HANDLES,
+            0,
+            "MSDN ConPTY sample uses bInheritHandles FALSE"
         );
         assert_eq!(
             creation & ACP_CREATE_NO_WINDOW,
@@ -1447,6 +1498,9 @@ mod tests {
         assert!(!should_retry_next_args(
             "管理 CLI 握手超时（12s 看门狗已 taskkill 进程树，exit 1）"
         ));
+        assert!(!should_retry_next_args(
+            "管理 CLI 已立即退出（exit -1073741502 / 0xC0000142 STATUS_DLL_INIT_FAILED）"
+        ));
         assert!(should_retry_next_args(
             "管理 CLI 已立即退出（exit 1）：Unknown command acp"
         ));
@@ -1459,12 +1513,48 @@ mod tests {
         assert!(last.contains("taskkill"), "{last}");
         assert!(last.contains("exit 1"), "{last}");
         assert!(!last.contains("unknown"), "{last}");
-        let msg = handshake_failure_message(Path::new(r"C:\qa-host-a\opencode.exe"), &last);
+        let msg = handshake_failure_message(
+            Path::new(r"C:\qa-host-a\opencode.exe"),
+            &last,
+            &[vec!["--print-logs".into(), "acp".into()]],
+        );
         assert!(msg.contains("握手超时"), "{msg}");
+        assert!(msg.contains("--print-logs acp"), "{msg}");
+        assert!(
+            !msg.contains("--acp"),
+            "timeout must not claim --acp was tried: {msg}"
+        );
+        assert!(
+            !msg.contains("无参"),
+            "timeout must not claim empty args were tried: {msg}"
+        );
         assert!(
             !msg.contains("尚未登录"),
             "timeout must not be blamed on missing login: {msg}"
         );
+        assert!(is_cli_exit_error(&last));
+    }
+
+    #[test]
+    fn dll_init_failure_is_not_unknown_or_login() {
+        let last = format_cli_exit(
+            false,
+            Duration::from_millis(80),
+            Some(-1073741502),
+            9,
+            None,
+        );
+        assert!(last.contains("0xC0000142"), "{last}");
+        assert!(last.contains("STATUS_DLL_INIT_FAILED"), "{last}");
+        assert!(last.contains("立即"), "{last}");
+        let msg = handshake_failure_message(
+            Path::new(r"C:\qa-host-a\opencode.exe"),
+            &last,
+            &[vec!["--print-logs".into(), "acp".into()]],
+        );
+        assert!(msg.contains("--print-logs acp"), "{msg}");
+        assert!(!msg.contains("--acp"), "{msg}");
+        assert!(!msg.contains("尚未登录"), "{msg}");
         assert!(is_cli_exit_error(&last));
     }
 
@@ -1482,7 +1572,11 @@ mod tests {
         assert!(last.contains("Unknown command"), "{last}");
         assert!(!last.contains("unknown"), "{last}");
         assert!(is_cli_exit_error(&last));
-        let msg = handshake_failure_message(Path::new(r"C:\qa-host-a\opencode.exe"), &last);
+        let msg = handshake_failure_message(
+            Path::new(r"C:\qa-host-a\opencode.exe"),
+            &last,
+            &[vec!["--print-logs".into(), "acp".into()]],
+        );
         assert!(
             !msg.contains("尚未登录"),
             "immediate exit must not be blamed on missing login: {msg}"
@@ -1553,6 +1647,17 @@ mod tests {
             "toolCall": { "kind": "edit", "title": "fs/write_text_file" }
         })));
         let _ = params;
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn conpty_attribute_passes_hpcon_value_not_address() {
+        let hpcon = 0x1234usize as *mut core::ffi::c_void;
+        assert_eq!(
+            acp_win::conpty_attribute_lp_value(hpcon),
+            hpcon,
+            "MSDN sample passes hPC, not &hPC; &hPC yields 0xC0000142"
+        );
     }
 
     #[test]
