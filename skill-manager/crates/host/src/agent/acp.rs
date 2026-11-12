@@ -37,20 +37,20 @@ pub(crate) const ACP_EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ACP_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// ConPTY 的 stdin/stdout 由 HPCON 提供；再设 STARTF_USESTDHANDLES（stdin/stdout 为空）
-/// 会让子进程拿到无效伪控制台，DllMain 报 `STATUS_DLL_INIT_FAILED`（0xC0000142）。
+/// ConPTY 只给 Bun 一个隐藏控制台（避免 CREATE_NO_WINDOW 把 stdin 当已关闭）。
+/// ACP JSON-RPC 必须走另一套管道：三个 std handle 都要有效，空 stdin/stdout 会 0xC0000142。
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn windows_acp_create_flags() -> (u32, u16, u32) {
     (
-        ACP_STARTF_USESHOWWINDOW,
+        ACP_STARTF_USESHOWWINDOW | ACP_STARTF_USESTDHANDLES,
         ACP_SW_HIDE,
         ACP_EXTENDED_STARTUPINFO_PRESENT | ACP_CREATE_UNICODE_ENVIRONMENT,
     )
 }
 
-/// MSDN ConPTY 样例：CreateProcess `bInheritHandles` 为 FALSE。管道已交给 HPCON。
+/// 子进程要继承 ACP 的 stdin/stdout/stderr 管道。ConPTY 句柄本身不继承。
 #[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) const ACP_CONPTY_INHERIT_HANDLES: i32 = 0;
+pub(crate) const ACP_CONPTY_INHERIT_HANDLES: i32 = 1;
 
 const INIT_TIMEOUT: Duration = Duration::from_secs(12);
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -319,7 +319,7 @@ fn collect_stderr_reader(mut stderr: impl Read + Send + 'static) -> Arc<Mutex<St
         let mut buf = String::new();
         let _ = stderr.read_to_string(&mut buf);
         if let Ok(mut guard) = slot.lock() {
-            *guard = buf;
+            *guard = strip_ansi(&buf);
         }
     });
     collected
@@ -365,9 +365,71 @@ fn format_cli_exit(
         format!("已退出（exit {code_text}）")
     };
     match stderr {
-        Some(text) if !text.is_empty() => format!("管理 CLI {cause}：{text}"),
+        Some(text) if !text.is_empty() => {
+            format!("管理 CLI {cause}：{}", strip_ansi(text))
+        }
         _ => format!("管理 CLI {cause}"),
     }
+}
+
+fn looks_like_tui(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    text.contains('\u{1b}')
+        || text.contains('\u{9b}')
+        || lower.contains("npm list")
+        || lower.contains("\u{1b}]0;")
+        || lower.contains("[?1049")
+        || lower.contains("[2j")
+}
+
+pub(crate) fn strip_ansi(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == 0x1b {
+            if i + 1 >= bytes.len() {
+                break;
+            }
+            match bytes[i + 1] {
+                b'[' => {
+                    i += 2;
+                    while i < bytes.len() && !(0x40..=0x7e).contains(&bytes[i]) {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                b']' => {
+                    i += 2;
+                    while i < bytes.len() && bytes[i] != 0x07 {
+                        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
+                            i += 2;
+                            break;
+                        }
+                        i += 1;
+                    }
+                    if i < bytes.len() && bytes[i] == 0x07 {
+                        i += 1;
+                    }
+                }
+                b'(' | b')' | b'#' => i += 3,
+                _ => i += 2,
+            }
+            continue;
+        }
+        if b == 0x9b {
+            i += 1;
+            while i < bytes.len() && !(0x40..=0x7e).contains(&bytes[i]) {
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        out.push(b);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 fn format_exit_code(code: i32) -> String {
@@ -489,6 +551,9 @@ fn spawn_with_args(bin: &Path, args: &[&str], skill_dir: &Path) -> Result<AcpPro
         )
     })?;
     let mut cmd = cli_process_command(&bin);
+    cmd.env("NO_COLOR", "1")
+        .env("FORCE_COLOR", "0")
+        .env("TERM", "dumb");
     cmd.args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -545,15 +610,21 @@ fn candidate_arg_sets(cli: &DetectedCli) -> Vec<Vec<String>> {
     sets
 }
 
-/// 未登记 `--args` 时的尝试顺序。OpenCode 文档是 `acp`；`--print-logs` 把日志写到 stderr。
+/// OpenCode 文档是 `opencode --print-logs acp`。无参会进 TUI 并拉起 `npm list -g`，不要试。
+/// `--acp` 只给别的 CLI；握手超时或 TUI 输出后不再试下一组。
 pub(crate) fn default_acp_arg_sets(_cli_id: &str) -> Vec<&'static [&'static str]> {
-    vec![&["--print-logs", "acp"], &["acp"], &["--acp"], &[]]
+    vec![&["--print-logs", "acp"], &["acp"], &["--acp"]]
 }
 
 fn should_retry_next_args(err: &str) -> bool {
-    !err.contains("握手超时")
-        && !err.contains("STATUS_DLL_INIT_FAILED")
-        && !err.contains("0xC0000142")
+    if err.contains("握手超时")
+        || err.contains("STATUS_DLL_INIT_FAILED")
+        || err.contains("0xC0000142")
+        || looks_like_tui(err)
+    {
+        return false;
+    }
+    err.contains("Unknown command") || err.contains("立即退出")
 }
 
 fn initialize_payload(skill_dir: &Path, skill_text: &str) -> Value {
@@ -759,7 +830,8 @@ fn handshake_failure_message(bin: &Path, last: &str, tried: &[Vec<String>]) -> S
         };
         format!(
             "无法与 {bin} 完成 ACP 握手（已试 {tried_text}）。{last}",
-            bin = bin.display()
+            bin = bin.display(),
+            last = strip_ansi(last).trim()
         )
     }
 }
@@ -817,7 +889,8 @@ fn read_msg(proc: &mut AcpProc, until: Instant) -> Result<Value, String> {
         if header.is_empty() {
             return Err(describe_cli_exit(proc));
         }
-        let trimmed = header.trim();
+        let trimmed = strip_ansi(&header);
+        let trimmed = trimmed.trim();
         if trimmed.is_empty() {
             continue;
         }
@@ -841,7 +914,7 @@ fn read_msg(proc: &mut AcpProc, until: Instant) -> Result<Value, String> {
             if !guard.is_empty() && !guard.ends_with('\n') {
                 guard.push('\n');
             }
-            guard.push_str(trimmed);
+            guard.push_str(&strip_ansi(trimmed));
             guard.push('\n');
         }
     }
@@ -1449,13 +1522,13 @@ mod tests {
         );
         assert_eq!(
             dw_flags & ACP_STARTF_USESTDHANDLES,
-            0,
-            "STARTF_USESTDHANDLES with empty stdin/stdout under ConPTY yields 0xC0000142"
+            ACP_STARTF_USESTDHANDLES,
+            "ACP NDJSON must use pipes; ConPTY as stdio makes OpenCode emit TUI"
         );
         assert_eq!(
             ACP_CONPTY_INHERIT_HANDLES,
-            0,
-            "MSDN ConPTY sample uses bInheritHandles FALSE"
+            1,
+            "child must inherit the ACP std pipes"
         );
         assert_eq!(
             creation & ACP_CREATE_NO_WINDOW,
@@ -1504,6 +1577,9 @@ mod tests {
         assert!(should_retry_next_args(
             "管理 CLI 已立即退出（exit 1）：Unknown command acp"
         ));
+        assert!(!should_retry_next_args(
+            "管理 CLI 已立即退出（exit 1）：\u{1b}[2J\u{1b}]0;OpenCode\u{07}"
+        ));
     }
 
     #[test]
@@ -1533,6 +1609,23 @@ mod tests {
             "timeout must not be blamed on missing login: {msg}"
         );
         assert!(is_cli_exit_error(&last));
+    }
+
+    #[test]
+    fn strip_ansi_drops_csi_and_osc() {
+        let raw = "\u{1b}[2J\u{1b}[?1049h\u{1b}]0;OpenCode\u{07}{\"jsonrpc\":\"2.0\"}\n";
+        let cleaned = strip_ansi(raw);
+        assert!(cleaned.contains("jsonrpc"), "{cleaned:?}");
+        assert!(!cleaned.contains('\u{1b}'), "{cleaned:?}");
+        let msg = handshake_failure_message(
+            Path::new(r"C:\qa-host-a\opencode.exe"),
+            raw,
+            &[vec!["--print-logs".into(), "acp".into()]],
+        );
+        assert!(msg.contains("--print-logs acp"), "{msg}");
+        assert!(!msg.contains('\u{1b}'), "{msg}");
+        assert!(!msg.contains("--acp"), "{msg}");
+        assert!(!msg.contains("无参"), "{msg}");
     }
 
     #[test]

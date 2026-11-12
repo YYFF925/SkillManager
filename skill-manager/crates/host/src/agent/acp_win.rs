@@ -1,12 +1,13 @@
-//! Windows ACP spawn：隐藏 ConPTY 控制台，把 stdin/stdout 接到 CLI，不用 CREATE_NO_WINDOW。
+//! Windows ACP spawn：隐藏 ConPTY 给 Bun 控制台，ACP JSON-RPC 走另一套管道。
 //!
-//! CREATE_NEW_CONSOLE + 管道会让 Bun 去读空的隐藏控制台，ACP 握手永远等不到。
-//! CREATE_NO_WINDOW 又会让 Bun 把管道 stdin 当已关闭。ConPTY 给 Bun 一个控制台，
-//! 同时把我们的管道接到该控制台。
+//! CREATE_NO_WINDOW：Bun 把管道 stdin 当已关闭。
+//! CREATE_NEW_CONSOLE + 管道：Bun 去读空的隐藏控制台。
+//! 只把 ConPTY 当 stdio：子进程 isatty，OpenCode 打 CSI/OSC TUI，initialize 完不成。
+//! ConPTY（SW_HIDE）+ STARTF_USESTDHANDLES 接到独立管道：Bun 有控制台，stdin 仍是打开的管道。
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io;
+use std::io::{self, Read};
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
 use std::path::Path;
@@ -161,6 +162,7 @@ pub(crate) struct HiddenChild {
     pub pid: u32,
     handle: OwnedHandle,
     pub hpcon: Arc<PseudoConsole>,
+    _pty_in: File,
 }
 
 impl HiddenChild {
@@ -194,10 +196,21 @@ pub(crate) fn spawn_hidden(
     args: &[OsString],
     extra_env: &[(&str, &Path)],
 ) -> io::Result<HiddenSpawn> {
-    let (pty_in_r, stdin_w) = create_pipe()?;
-    let (stdout_r, pty_out_w) = create_pipe()?;
+    let (pty_in_r, pty_in_w) = create_pipe()?;
+    let (pty_out_r, pty_out_w) = create_pipe()?;
+    let (stdin_r, stdin_w) = create_pipe()?;
+    let (stdout_r, stdout_w) = create_pipe()?;
+    let (stderr_r, stderr_w) = create_pipe()?;
+    set_inherit(stdin_r.as_raw_handle())?;
+    set_inherit(stdout_w.as_raw_handle())?;
+    set_inherit(stderr_w.as_raw_handle())?;
     clear_inherit(stdin_w.as_raw_handle())?;
     clear_inherit(stdout_r.as_raw_handle())?;
+    clear_inherit(stderr_r.as_raw_handle())?;
+    clear_inherit(pty_in_r.as_raw_handle())?;
+    clear_inherit(pty_in_w.as_raw_handle())?;
+    clear_inherit(pty_out_r.as_raw_handle())?;
+    clear_inherit(pty_out_w.as_raw_handle())?;
 
     let mut hpcon: RawHandle = ptr::null_mut();
     let hr = unsafe {
@@ -242,7 +255,6 @@ pub(crate) fn spawn_hidden(
         return Err(io::Error::last_os_error());
     }
 
-    let stderr = eof_pipe()?;
     let mut cmdline = command_line(program, args);
     let mut env = env_block(extra_env);
     let mut app = wide_nul(program);
@@ -253,12 +265,15 @@ pub(crate) fn spawn_hidden(
     let (dw_flags, show, creation) = windows_acp_create_flags();
     debug_assert_eq!(creation & ACP_CREATE_NO_WINDOW, 0);
     debug_assert_eq!(creation & ACP_CREATE_NEW_CONSOLE, 0);
-    debug_assert_eq!(dw_flags & super::ACP_STARTF_USESTDHANDLES, 0);
+    debug_assert_ne!(dw_flags & super::ACP_STARTF_USESTDHANDLES, 0);
 
     let mut si: StartupInfoExW = unsafe { std::mem::zeroed() };
     si.startup.cb = std::mem::size_of::<StartupInfoExW>() as u32;
     si.startup.dw_flags = dw_flags;
     si.startup.w_show_window = show;
+    si.startup.stdin = stdin_r.as_raw_handle();
+    si.startup.stdout = stdout_w.as_raw_handle();
+    si.startup.stderr = stderr_w.as_raw_handle();
     si.attr_list = attr_ptr;
 
     let mut pi: ProcessInformation = unsafe { std::mem::zeroed() };
@@ -290,10 +305,14 @@ pub(crate) fn spawn_hidden(
     }
     drop(pty_in_r);
     drop(pty_out_w);
+    drop(stdin_r);
+    drop(stdout_w);
+    drop(stderr_w);
     if ok == 0 {
         unsafe { ClosePseudoConsole(hpcon) };
         return Err(io::Error::last_os_error());
     }
+    drain_pty(File::from(pty_out_r));
     unsafe {
         let _ = CloseHandle(pi.thread);
     }
@@ -303,17 +322,24 @@ pub(crate) fn spawn_hidden(
             pid: pi.process_id,
             handle,
             hpcon: PseudoConsole::new(hpcon),
+            _pty_in: File::from(pty_in_w),
         },
         stdin: File::from(stdin_w),
         stdout: File::from(stdout_r),
-        stderr,
+        stderr: File::from(stderr_r),
     })
 }
 
-fn eof_pipe() -> io::Result<File> {
-    let (read, write) = create_pipe()?;
-    drop(write);
-    Ok(File::from(read))
+fn drain_pty(mut pty_out: File) {
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            match pty_out.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+    });
 }
 
 fn create_pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
@@ -338,6 +364,15 @@ fn create_pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
 
 fn clear_inherit(handle: RawHandle) -> io::Result<()> {
     let ok = unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0) };
+    if ok == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+fn set_inherit(handle: RawHandle) -> io::Result<()> {
+    let ok = unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) };
     if ok == 0 {
         Err(io::Error::last_os_error())
     } else {
@@ -376,6 +411,9 @@ fn quote(arg: &OsStr) -> OsString {
 fn env_block(extra: &[(&str, &Path)]) -> Vec<u16> {
     let mut map: std::collections::BTreeMap<OsString, OsString> =
         std::env::vars_os().collect();
+    map.insert(OsString::from("NO_COLOR"), OsString::from("1"));
+    map.insert(OsString::from("FORCE_COLOR"), OsString::from("0"));
+    map.insert(OsString::from("TERM"), OsString::from("dumb"));
     for (key, value) in extra {
         map.insert(OsString::from(*key), value.as_os_str().to_os_string());
     }

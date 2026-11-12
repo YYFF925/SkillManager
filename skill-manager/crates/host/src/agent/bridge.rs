@@ -1146,7 +1146,7 @@ for line in sys.stdin:
         let sets = acp::default_acp_arg_sets("my-vendor");
         assert_eq!(
             sets,
-            vec![&["--print-logs", "acp"][..], &["acp"][..], &["--acp"][..], &[][..]]
+            vec![&["--print-logs", "acp"][..], &["acp"][..], &["--acp"][..]]
         );
         assert_eq!(acp::default_acp_arg_sets("opencode"), sets);
     }
