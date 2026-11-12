@@ -11,7 +11,8 @@ use std::process::Command;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// 创建子进程命令；Windows 上不新建控制台窗口，其他平台等价于 `Command::new`。
-pub fn command(program: &str) -> Command {
+pub fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    #[cfg_attr(not(windows), allow(unused_mut))]
     let mut cmd = Command::new(program);
     #[cfg(windows)]
     {

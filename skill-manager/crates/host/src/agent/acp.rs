@@ -40,7 +40,7 @@ struct LiveAcp {
 
 impl Drop for LiveAcp {
     fn drop(&mut self) {
-        let _ = self.proc.child.kill();
+        kill_child(&mut self.proc.child);
     }
 }
 
@@ -97,19 +97,7 @@ pub fn cancel_live(task_id: &str) -> bool {
     task.cancel.store(true, Ordering::SeqCst);
     if let Ok(pid) = task.pid.lock() {
         if let Some(pid) = *pid {
-            #[cfg(windows)]
-            {
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
-                    .status();
-            }
-            #[cfg(unix)]
-            {
-                let _ = Command::new("kill")
-                    .arg("-TERM")
-                    .arg(pid.to_string())
-                    .status();
-            }
+            kill_pid(pid);
         }
     }
     true
@@ -133,7 +121,7 @@ pub(crate) struct AcpProc {
 }
 
 /// Windows 上 CreateProcess 不能跑无扩展 Unix `#!/bin/sh` 垫片（os error 193）。
-/// 同目录有 `.cmd` / `.exe` 时用那个；只有垫片则视为不可拉起。
+/// ACP 优先原生 `opencode.exe`（管道直接接到 CLI）；没有 exe 才退回 `.cmd`。
 pub(crate) fn spawnable_cli_path(path: &Path) -> Option<PathBuf> {
     #[cfg(windows)]
     {
@@ -145,23 +133,68 @@ pub(crate) fn spawnable_cli_path(path: &Path) -> Option<PathBuf> {
     }
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) fn windows_spawnable_cli_path(path: &Path) -> Option<PathBuf> {
-    let ext = path
-        .extension()
+fn windows_ext(path: &Path) -> String {
+    path.extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("")
-        .to_ascii_lowercase();
-    if matches!(ext.as_str(), "cmd" | "bat" | "exe" | "com") {
+        .to_ascii_lowercase()
+}
+
+fn is_usable_exe(path: &Path) -> bool {
+    path.is_file()
+}
+
+/// npm 可选依赖里的原生二进制，避开 几百字节的 launcher stub。
+fn find_bundled_opencode_exe(from: &Path) -> Option<PathBuf> {
+    let start = if from.is_dir() {
+        from
+    } else {
+        from.parent()?
+    };
+    for dir in start.ancestors() {
+        if dir.file_name().and_then(|name| name.to_str()) != Some("node_modules") {
+            continue;
+        }
+        let mut stub = None;
+        for pkg in ["opencode-windows-x64", "opencode-windows-arm64", "opencode-ai"] {
+            let exe = dir.join(pkg).join("bin").join("opencode.exe");
+            if !is_usable_exe(&exe) {
+                continue;
+            }
+            let len = std::fs::metadata(&exe).map(|meta| meta.len()).unwrap_or(0);
+            if len > 1024 {
+                return Some(exe);
+            }
+            if stub.is_none() {
+                stub = Some(exe);
+            }
+        }
+        if let Some(exe) = stub {
+            return Some(exe);
+        }
+    }
+    None
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn windows_spawnable_cli_path(path: &Path) -> Option<PathBuf> {
+    if let Some(exe) = find_bundled_opencode_exe(path) {
+        return Some(exe);
+    }
+    let ext = windows_ext(path);
+    if matches!(ext.as_str(), "exe" | "com") {
+        return path.is_file().then(|| path.to_path_buf());
+    }
+    let exe = path.with_extension("exe");
+    if is_usable_exe(&exe) {
+        return Some(exe);
+    }
+    if matches!(ext.as_str(), "cmd" | "bat") {
         return path.is_file().then(|| path.to_path_buf());
     }
     let cmd = path.with_extension("cmd");
     if cmd.is_file() {
         return Some(cmd);
-    }
-    let exe = path.with_extension("exe");
-    if exe.is_file() {
-        return Some(exe);
     }
     None
 }
@@ -171,12 +204,23 @@ fn windows_acp_cmd_args(bin: &Path) -> Vec<std::ffi::OsString> {
     vec!["/C".into(), bin.as_os_str().to_os_string()]
 }
 
+/// ACP 启动方式：exe 直接拉起（stdio 接到 CLI）；.cmd 才经 cmd /C。不要 start。
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_acp_invocation(bin: &Path) -> (std::ffi::OsString, Vec<std::ffi::OsString>) {
+    let ext = windows_ext(bin);
+    if matches!(ext.as_str(), "cmd" | "bat") {
+        ("cmd".into(), windows_acp_cmd_args(bin))
+    } else {
+        (bin.as_os_str().to_os_string(), Vec::new())
+    }
+}
+
 fn cli_process_command(bin: &Path) -> Command {
     #[cfg(windows)]
     {
-        // ACP 需要管道 JSON-RPC，不能用 start / CREATE_NEW_CONSOLE（那是登录窗口）。
-        let mut cmd = skill_manager_core::process::command("cmd");
-        cmd.args(windows_acp_cmd_args(bin));
+        let (program, args) = windows_acp_invocation(bin);
+        let mut cmd = skill_manager_core::process::command(&program);
+        cmd.args(args);
         cmd
     }
     #[cfg(not(windows))]
@@ -254,6 +298,16 @@ fn initialize_payload(skill_dir: &Path, skill_text: &str) -> Value {
     })
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_taskkill_args(pid: u32) -> Vec<String> {
+    vec![
+        "/PID".into(),
+        pid.to_string(),
+        "/T".into(),
+        "/F".into(),
+    ]
+}
+
 fn kill_pid(pid: u32) {
     #[cfg(unix)]
     {
@@ -264,9 +318,15 @@ fn kill_pid(pid: u32) {
     #[cfg(windows)]
     {
         let _ = Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F"])
+            .args(windows_taskkill_args(pid))
             .status();
     }
+}
+
+fn kill_child(child: &mut Child) {
+    kill_pid(child.id());
+    let _ = child.kill();
+    let _ = child.try_wait();
 }
 
 /// `read_line` 在子进程活着但不说话时会一直堵；握手必须能超时杀掉再试下一组参数。
@@ -288,27 +348,49 @@ fn arm_handshake_watchdog(pid: u32) -> (Arc<AtomicBool>, std::thread::JoinHandle
     (stop, handle)
 }
 
+fn request_bounded(
+    proc: &mut AcpProc,
+    method: &str,
+    params: Value,
+    cancel: &AtomicBool,
+    runtime: Option<&HostRuntime>,
+    host_session: Option<&str>,
+    acp_session: Option<&str>,
+) -> Result<Value, String> {
+    let (stop, watchdog) = arm_handshake_watchdog(proc.child.id());
+    let result = request(
+        proc,
+        method,
+        params,
+        Instant::now() + INIT_TIMEOUT,
+        cancel,
+        runtime,
+        host_session,
+        acp_session,
+    );
+    stop.store(true, Ordering::SeqCst);
+    let _ = watchdog.join();
+    if result.is_err() {
+        kill_child(&mut proc.child);
+    }
+    result
+}
+
 fn handshake_initialize(
     proc: &mut AcpProc,
     skill_dir: &Path,
     skill_text: &str,
     cancel: &AtomicBool,
 ) -> Result<(), String> {
-    let pid = proc.child.id();
-    let (stop, watchdog) = arm_handshake_watchdog(pid);
-    let init = request(
+    let init = request_bounded(
         proc,
         "initialize",
         initialize_payload(skill_dir, skill_text),
-        Instant::now() + INIT_TIMEOUT,
         cancel,
         None,
         None,
         None,
-    );
-    stop.store(true, Ordering::SeqCst);
-    let _ = watchdog.join();
-    let init = init?;
+    )?;
     if looks_like_auth_failure(&init) {
         return Err(
             "管理 CLI 尚未登录模型。请先在该 CLI 中完成登录，再回来对话。任务不会标成进行中。"
@@ -338,7 +420,7 @@ pub(crate) fn initialize_with_args(
         match handshake_initialize(&mut proc, skill_dir, skill_text, cancel) {
             Ok(()) => return Ok((proc, args)),
             Err(err) => {
-                let _ = proc.child.kill();
+                kill_child(&mut proc.child);
                 last = err;
             }
         }
@@ -360,7 +442,7 @@ pub(crate) fn initialize_with_args(
 pub(crate) fn probe_acp(cli: &DetectedCli, skill_dir: &Path) -> Result<Vec<String>, String> {
     let cancel = AtomicBool::new(false);
     let (mut proc, args) = initialize_with_args(cli, skill_dir, "", &cancel)?;
-    let _ = proc.child.kill();
+    kill_child(&mut proc.child);
     Ok(args)
 }
 
@@ -792,19 +874,18 @@ pub(crate) fn ensure_session(
     let mcp = match mcp_server_spec(runtime, host_session) {
         Ok(value) => value,
         Err(err) => {
-            let _ = proc.child.kill();
+            kill_child(&mut proc.child);
             return Err(err);
         }
     };
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let new_session = request(
+    let new_session = request_bounded(
         &mut proc,
         "session/new",
         json!({
             "cwd": cwd,
             "mcpServers": [mcp],
         }),
-        Instant::now() + INIT_TIMEOUT,
         cancel,
         Some(runtime),
         Some(host_session),
@@ -817,7 +898,7 @@ pub(crate) fn ensure_session(
             .unwrap_or(host_session)
             .to_string(),
         Err(err) => {
-            let _ = proc.child.kill();
+            kill_child(&mut proc.child);
             return Err(err);
         }
     };
@@ -915,6 +996,30 @@ mod tests {
     }
 
     #[test]
+    fn windows_prefers_native_exe_over_cmd_wrapper() {
+        let dir = tempfile::tempdir().unwrap();
+        let nm = dir.path().join("node_modules");
+        let bin_dir = nm.join(".bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        std::fs::create_dir_all(nm.join("opencode-windows-x64").join("bin")).unwrap();
+        std::fs::write(bin_dir.join("opencode"), b"#!/bin/sh\n").unwrap();
+        std::fs::write(bin_dir.join("opencode.cmd"), b"@echo off\n").unwrap();
+        let exe = nm.join("opencode-windows-x64").join("bin").join("opencode.exe");
+        std::fs::write(&exe, vec![0u8; 4096]).unwrap();
+        assert_eq!(
+            windows_spawnable_cli_path(&bin_dir.join("opencode")).as_deref(),
+            Some(exe.as_path())
+        );
+        let (program, args) = windows_acp_invocation(&exe);
+        assert_eq!(program, exe.as_os_str());
+        assert!(args.is_empty(), "exe must be spawned directly so ACP stdio is not on cmd.exe");
+        assert!(
+            !args.iter().any(|arg| arg.to_string_lossy().eq_ignore_ascii_case("start")),
+            "ACP must not use start"
+        );
+    }
+
+    #[test]
     fn windows_unix_shim_alone_is_not_spawnable() {
         let dir = tempfile::tempdir().unwrap();
         let unix = dir.path().join("opencode");
@@ -927,7 +1032,9 @@ mod tests {
         let bin = Path::new(
             r"C:\qa-host-a\agent-runtime\opencode\node_modules\.bin\opencode.cmd",
         );
-        let argv: Vec<String> = windows_acp_cmd_args(bin)
+        let (program, args) = windows_acp_invocation(bin);
+        assert_eq!(program, "cmd");
+        let argv: Vec<String> = args
             .into_iter()
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect();
@@ -937,6 +1044,12 @@ mod tests {
             "ACP handshake must keep piped stdio; start is only for login, got {argv:?}"
         );
         assert!(argv.iter().all(|arg| !arg.contains('"')));
+    }
+
+    #[test]
+    fn windows_timeout_kills_process_tree() {
+        let args = windows_taskkill_args(34160);
+        assert_eq!(args, vec!["/PID", "34160", "/T", "/F"]);
     }
 
     #[test]
