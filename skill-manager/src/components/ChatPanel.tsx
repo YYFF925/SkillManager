@@ -192,7 +192,6 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
       }
       if (status === "failed") {
         setTaskId(null);
-        setError(message || "对话未能执行");
         setMessages((prev) => [
           ...prev,
           { role: "assistant", text: message || "对话未能执行。", taskId: nextTask },

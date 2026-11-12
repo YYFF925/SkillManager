@@ -98,6 +98,34 @@ it("shows in-product OpenCode install instead of treating a missing CLI as a ski
   expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
 });
 
+it("shows a handshake failure once in the transcript, not also as a notice", async () => {
+  const failure =
+    "无法与 C:\\\\opencode.exe 完成 ACP 握手（已试 --print-logs acp）。管理 CLI 握手超时（12s 看门狗已 taskkill，exit 1）";
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    if (command === "agent_post_message") {
+      return { status: "failed", message: failure, taskId: "t1" };
+    }
+    return { messages: [] };
+  });
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  const box = await screen.findByPlaceholderText(/完善中文注释/);
+  await waitFor(() => expect(box).toBeEnabled());
+  fireEvent.change(box, { target: { value: "完善中文注释" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  expect(await screen.findByText(failure)).toBeTruthy();
+  expect(screen.queryAllByText(failure)).toHaveLength(1);
+});
+
 it("walks install then login before enabling send", async () => {
   render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
   fireEvent.click(await screen.findByRole("button", { name: "安装 OpenCode" }));

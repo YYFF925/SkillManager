@@ -205,7 +205,7 @@ pub(crate) fn spawn_hidden(
     let mut hpcon: RawHandle = ptr::null_mut();
     let hr = unsafe {
         CreatePseudoConsole(
-            Coord { x: 120, y: 30 },
+            Coord { x: 1024, y: 40 },
             pty_in_r.as_raw_handle(),
             pty_out_w.as_raw_handle(),
             0,

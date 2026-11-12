@@ -1,7 +1,7 @@
 //! ACP stdio JSON-RPC：拉起当前 ACP 兼容 CLI，按协议声明 Host 工具，支持取消与会话复用。
 
 use std::collections::{HashMap, VecDeque};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 #[cfg(not(windows))]
@@ -197,7 +197,8 @@ pub(crate) struct AcpProc {
     stdin: Arc<Mutex<Box<dyn Write + Send>>>,
     stdout_rx: mpsc::Receiver<std::io::Result<String>>,
     stderr: Arc<Mutex<String>>,
-    pending: VecDeque<String>,
+    scan: String,
+    pending_json: VecDeque<Value>,
     timed_out: Arc<AtomicBool>,
     started: Instant,
 }
@@ -362,7 +363,7 @@ fn format_cli_exit(
     };
     let cause = if timed_out {
         format!(
-            "握手超时（{}s 看门狗已 taskkill 进程树，exit {code_text}）",
+            "握手超时（{}s 看门狗已 taskkill，exit {code_text}）",
             INIT_TIMEOUT.as_secs()
         )
     } else if elapsed < Duration::from_secs(2) && code.is_some() {
@@ -486,20 +487,20 @@ fn skill_env(skill_dir: &Path) -> Vec<(&str, &Path)> {
 }
 
 fn spawn_stdout_reader(
-    stdout: Box<dyn Read + Send>,
+    mut stdout: Box<dyn Read + Send>,
 ) -> mpsc::Receiver<std::io::Result<String>> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
-        let mut reader = BufReader::new(stdout);
+        let mut buf = [0u8; 4096];
         loop {
-            let mut line = String::new();
-            match reader.read_line(&mut line) {
+            match stdout.read(&mut buf) {
                 Ok(0) => {
                     let _ = tx.send(Ok(String::new()));
                     break;
                 }
-                Ok(_) => {
-                    if tx.send(Ok(line)).is_err() {
+                Ok(n) => {
+                    let chunk = String::from_utf8_lossy(&buf[..n]).into_owned();
+                    if tx.send(Ok(chunk)).is_err() {
                         break;
                     }
                 }
@@ -526,7 +527,8 @@ fn acp_proc(
         stdin: Arc::new(Mutex::new(stdin)),
         stdout_rx: spawn_stdout_reader(stdout),
         stderr,
-        pending: VecDeque::new(),
+        scan: String::new(),
+        pending_json: VecDeque::new(),
         timed_out,
         started,
     }
@@ -784,6 +786,134 @@ fn stderr_contains(proc: &AcpProc, needle: &str) -> bool {
         .is_some_and(|guard| guard.contains(needle))
 }
 
+enum JsonPrefix {
+    Value(Value, usize),
+    NeedMore,
+    Invalid,
+}
+
+fn parse_json_prefix(s: &str) -> JsonPrefix {
+    let mut de = serde_json::Deserializer::from_str(s).into_iter::<Value>();
+    match de.next() {
+        Some(Ok(value)) => JsonPrefix::Value(value, de.byte_offset()),
+        Some(Err(err)) if err.classify() == serde_json::error::Category::Eof => JsonPrefix::NeedMore,
+        Some(Err(_)) | None => JsonPrefix::Invalid,
+    }
+}
+
+fn skip_collapsed_bytes(s: &str, start: usize, collapsed_bytes: usize) -> String {
+    let bytes = s.as_bytes();
+    let mut counted = 0usize;
+    let mut i = start;
+    while i < bytes.len() && counted < collapsed_bytes {
+        if bytes[i] != b'\n' {
+            counted += 1;
+        }
+        i += 1;
+    }
+    s[i..].to_string()
+}
+
+/// ConPTY 把 `--print-logs` INFO 和 ACP JSON 拌在一起，还可能按列宽插入 CR/LF。
+pub(crate) fn extract_json_value(buffer: &mut String) -> Option<Value> {
+    let s = buffer.replace('\r', "");
+    let mut search = 0;
+    while let Some(rel) = s[search..].find('{') {
+        let start = search + rel;
+        match parse_json_prefix(&s[start..]) {
+            JsonPrefix::Value(value, consumed) => {
+                *buffer = s[start + consumed..].to_string();
+                return Some(value);
+            }
+            JsonPrefix::NeedMore => {
+                match parse_json_prefix(&s[start..].replace('\n', "")) {
+                    JsonPrefix::Value(value, consumed) => {
+                        *buffer = skip_collapsed_bytes(&s, start, consumed);
+                        return Some(value);
+                    }
+                    JsonPrefix::NeedMore => {
+                        *buffer = s;
+                        return None;
+                    }
+                    JsonPrefix::Invalid => {
+                        *buffer = s;
+                        return None;
+                    }
+                }
+            }
+            JsonPrefix::Invalid => match parse_json_prefix(&s[start..].replace('\n', "")) {
+                JsonPrefix::Value(value, consumed) => {
+                    *buffer = skip_collapsed_bytes(&s, start, consumed);
+                    return Some(value);
+                }
+                JsonPrefix::NeedMore => {
+                    *buffer = s;
+                    return None;
+                }
+                JsonPrefix::Invalid => {
+                    search = start + 1;
+                }
+            },
+        }
+    }
+    *buffer = if s.len() > 32_768 {
+        s[s.len() - 16_384..].to_string()
+    } else {
+        s
+    };
+    None
+}
+
+fn ingest_stdout(proc: &mut AcpProc, chunk: &str) {
+    let cleaned = strip_ansi(chunk);
+    host_log(&cleaned);
+    if !cleaned.contains('{') && !proc.scan.contains('{') {
+        append_stderr(proc, &cleaned);
+    }
+    proc.scan.push_str(&cleaned);
+    while let Some(value) = extract_json_value(&mut proc.scan) {
+        proc.pending_json.push_back(value);
+    }
+}
+
+fn json_id_matches(msg: &Value, id: u64) -> bool {
+    match msg.get("id") {
+        Some(Value::Number(n)) => n.as_u64() == Some(id) || n.as_i64() == Some(id as i64),
+        Some(Value::String(s)) => s.parse::<u64>().ok() == Some(id),
+        _ => false,
+    }
+}
+
+fn is_rpc_echo(msg: &Value, id: u64) -> bool {
+    json_id_matches(msg, id)
+        && msg.get("method").is_some()
+        && msg.get("result").is_none()
+        && msg.get("error").is_none()
+}
+
+fn rpc_payload(msg: &Value, id: u64, method: &str) -> Option<Result<Value, String>> {
+    if is_rpc_echo(msg, id) {
+        return None;
+    }
+    if json_id_matches(msg, id) {
+        if let Some(error) = msg.get("error") {
+            return Some(Err(error.to_string()));
+        }
+        return Some(Ok(msg.get("result").cloned().unwrap_or_else(|| json!({}))));
+    }
+    if method == "initialize" {
+        if msg.get("protocolVersion").is_some() && msg.get("error").is_none() {
+            return Some(Ok(msg.clone()));
+        }
+        if let Some(result) = msg.get("result") {
+            if result.get("protocolVersion").is_some() {
+                return Some(Ok(result.clone()));
+            }
+        }
+    }
+    None
+}
+
 /// Bun 在 ConPTY 上要等 `process.stdin.resume()`（日志里的 setup connection）才读 ACP。
 /// 提前写入会被 cooked TTY 丢掉。Unix 假 CLI 没有这段日志，400ms 无输出就发 initialize。
 fn wait_for_acp_ready(proc: &mut AcpProc) -> Result<(), String> {
@@ -795,18 +925,15 @@ fn wait_for_acp_ready(proc: &mut AcpProc) -> Result<(), String> {
             return Ok(());
         }
         match proc.stdout_rx.recv_timeout(Duration::from_millis(100)) {
-            Ok(Ok(line)) => {
-                saw_output = true;
-                let cleaned = strip_ansi(&line);
-                host_log(&cleaned);
-                if cleaned.contains("setup connection") {
-                    append_stderr(proc, &cleaned);
-                    return Ok(());
+            Ok(Ok(chunk)) => {
+                if chunk.is_empty() {
+                    return Err(describe_cli_exit(proc));
                 }
-                if cleaned.trim().starts_with('{') {
-                    proc.pending.push_back(cleaned);
-                } else {
-                    append_stderr(proc, &cleaned);
+                saw_output = true;
+                ingest_stdout(proc, &chunk);
+                if stderr_contains(proc, "setup connection") || chunk.contains("setup connection")
+                {
+                    return Ok(());
                 }
             }
             Ok(Err(err)) => return Err(format!("读取管理 CLI 失败：{err}")),
@@ -936,10 +1063,7 @@ fn write_locked(stdin: &Arc<Mutex<Box<dyn Write + Send>>>, value: &Value) -> Res
     write_msg(&mut **guard, value)
 }
 
-fn recv_line(proc: &mut AcpProc, until: Instant) -> Result<String, String> {
-    if let Some(line) = proc.pending.pop_front() {
-        return Ok(line);
-    }
+fn recv_chunk(proc: &mut AcpProc, until: Instant) -> Result<String, String> {
     loop {
         if Instant::now() > until {
             proc.timed_out.store(true, Ordering::SeqCst);
@@ -950,7 +1074,7 @@ fn recv_line(proc: &mut AcpProc, until: Instant) -> Result<String, String> {
             .saturating_duration_since(Instant::now())
             .min(Duration::from_millis(200));
         match proc.stdout_rx.recv_timeout(wait) {
-            Ok(Ok(line)) => return Ok(line),
+            Ok(Ok(chunk)) => return Ok(chunk),
             Ok(Err(err)) => return Err(format!("读取管理 CLI 失败：{err}")),
             Err(RecvTimeoutError::Timeout) => {
                 if proc.child.wait_exit(Duration::ZERO).is_some() {
@@ -965,38 +1089,17 @@ fn recv_line(proc: &mut AcpProc, until: Instant) -> Result<String, String> {
 
 fn read_msg(proc: &mut AcpProc, until: Instant) -> Result<Value, String> {
     loop {
-        let header = recv_line(proc, until)?;
-        if header.is_empty() {
-            return Err(describe_cli_exit(proc));
-        }
-        let trimmed = strip_ansi(&header);
-        let trimmed = trimmed.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        if let Some(rest) = trimmed.strip_prefix("Content-Length:") {
-            let len: usize = rest
-                .trim()
-                .parse()
-                .map_err(|_| "无效的 Content-Length".to_string())?;
-            let blank = recv_line(proc, until)?;
-            let _ = blank;
-            let mut body = String::new();
-            while body.len() < len {
-                body.push_str(&recv_line(proc, until)?);
-            }
-            return serde_json::from_str(body.trim()).map_err(|err| err.to_string());
-        }
-        if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        if let Some(value) = proc.pending_json.pop_front() {
             return Ok(value);
         }
-        if let Ok(mut guard) = proc.stderr.lock() {
-            if !guard.is_empty() && !guard.ends_with('\n') {
-                guard.push('\n');
-            }
-            guard.push_str(&strip_ansi(trimmed));
-            guard.push('\n');
+        if let Some(value) = extract_json_value(&mut proc.scan) {
+            return Ok(value);
         }
+        let chunk = recv_chunk(proc, until)?;
+        if chunk.is_empty() {
+            return Err(describe_cli_exit(proc));
+        }
+        ingest_stdout(proc, &chunk);
     }
 }
 
@@ -1049,16 +1152,11 @@ fn request(
             return Err("cancelled".to_string());
         }
         let msg = read_msg(proc, until)?;
-        if msg.get("id").and_then(Value::as_u64) == Some(id)
-            || msg.get("id").and_then(Value::as_i64) == Some(id as i64)
-        {
-            if let Some(error) = msg.get("error") {
-                return Err(error.to_string());
-            }
-            return Ok(msg.get("result").cloned().unwrap_or(json!({})));
+        if let Some(outcome) = rpc_payload(&msg, id, method) {
+            return outcome;
         }
-        if let Some(method) = msg.get("method").and_then(Value::as_str) {
-            handle_incoming(proc, &msg, method, runtime, host_session)?;
+        if let Some(incoming) = msg.get("method").and_then(Value::as_str) {
+            handle_incoming(proc, &msg, incoming, runtime, host_session)?;
         }
     }
 }
@@ -1653,7 +1751,7 @@ mod tests {
     #[test]
     fn timeout_does_not_try_remaining_arg_sets() {
         assert!(!should_retry_next_args(
-            "管理 CLI 握手超时（12s 看门狗已 taskkill 进程树，exit 1）"
+            "管理 CLI 握手超时（12s 看门狗已 taskkill，exit 1）"
         ));
         assert!(!should_retry_next_args(
             "管理 CLI 已立即退出（exit -1073741502 / 0xC0000142 STATUS_DLL_INIT_FAILED）"
@@ -1692,6 +1790,8 @@ mod tests {
             !msg.contains("尚未登录"),
             "timeout must not be blamed on missing login: {msg}"
         );
+        assert!(!last.contains('\u{FFFD}'), "{last}");
+        assert!(!msg.contains('\u{FFFD}'), "{msg}");
         assert!(is_cli_exit_error(&last));
     }
 
@@ -1758,6 +1858,68 @@ mod tests {
         assert!(last.contains("仍在运行"), "{last}");
         assert!(!last.contains("unknown"), "{last}");
         assert!(is_cli_exit_error(&last));
+    }
+
+    #[test]
+    fn extracts_initialize_result_from_cooked_tty_info() {
+        let result = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": 1,
+                "agentInfo": { "name": "OpenCode", "version": "1.19.5" },
+                "authMethods": [{ "id": "opencode-login", "name": "Login with opencode" }]
+            }
+        });
+        let compact = serde_json::to_string(&result).unwrap();
+        let mut mixed = format!(
+            "INFO  bootstrapping\nINFO  setup connection\n{compact}\nINFO  global event connected\n"
+        );
+        let parsed = extract_json_value(&mut mixed).expect("json in mixed stream");
+        let payload = rpc_payload(&parsed, 1, "initialize")
+            .expect("initialize result")
+            .expect("ok");
+        assert_eq!(payload["protocolVersion"], 1);
+        assert_eq!(payload["agentInfo"]["name"], "OpenCode");
+        assert!(!looks_like_auth_failure(&payload));
+
+        let mut wrapped = String::new();
+        for (i, ch) in compact.chars().enumerate() {
+            wrapped.push(ch);
+            if (i + 1) % 40 == 0 {
+                wrapped.push('\n');
+            }
+        }
+        wrapped.push('\n');
+        let parsed = extract_json_value(&mut wrapped).expect("wrapped json");
+        assert_eq!(
+            rpc_payload(&parsed, 1, "initialize")
+                .unwrap()
+                .unwrap()["agentInfo"]["version"],
+            "1.19.5"
+        );
+
+        let echo = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+        });
+        assert!(rpc_payload(&echo, 1, "initialize").is_none());
+        let string_id = json!({
+            "jsonrpc": "2.0",
+            "id": "1",
+            "result": { "protocolVersion": 1, "agentInfo": { "name": "OpenCode" } }
+        });
+        assert!(rpc_payload(&string_id, 1, "initialize").unwrap().is_ok());
+        let bare = json!({
+            "protocolVersion": 1,
+            "agentInfo": { "name": "OpenCode", "version": "1.19.5" }
+        });
+        assert_eq!(
+            rpc_payload(&bare, 1, "initialize").unwrap().unwrap()["protocolVersion"],
+            1
+        );
     }
 
     #[test]
