@@ -15,7 +15,9 @@ pub mod runtime;
 pub mod serve;
 pub mod service;
 
-pub use events::{BroadcastSink, EventSink, FanoutSink, HOST_PLAN_EVENT, NoopSink};
+pub use events::{
+    AGENT_MESSAGE_CHUNK_EVENT, BroadcastSink, EventSink, FanoutSink, HOST_PLAN_EVENT, NoopSink,
+};
 pub use invoke::{InvokeError, InvokeSource};
 pub use lock::{HostLock, LockError, LockMeta, peek_meta};
 pub use runtime::{HostRuntime, HostStatus};

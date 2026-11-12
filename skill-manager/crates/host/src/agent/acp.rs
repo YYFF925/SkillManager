@@ -199,6 +199,7 @@ pub(crate) struct AcpProc {
     stderr: Arc<Mutex<String>>,
     scan: String,
     pending_json: VecDeque<Value>,
+    prompt_chunks: String,
     timed_out: Arc<AtomicBool>,
     started: Instant,
 }
@@ -529,6 +530,7 @@ fn acp_proc(
         stderr,
         scan: String::new(),
         pending_json: VecDeque::new(),
+        prompt_chunks: String::new(),
         timed_out,
         started,
     }
@@ -1235,6 +1237,9 @@ fn request(
     acp_session: Option<&str>,
 ) -> Result<Value, String> {
     let id = next_id();
+    if method == "session/prompt" {
+        proc.prompt_chunks.clear();
+    }
     write_locked(
         &proc.stdin,
         &json!({
@@ -1276,6 +1281,10 @@ fn handle_incoming(
     runtime: Option<&HostRuntime>,
     host_session: Option<&str>,
 ) -> Result<(), String> {
+    if method == "session/update" {
+        collect_session_update(proc, msg, runtime, host_session);
+        return Ok(());
+    }
     let Some(id) = msg.get("id").cloned() else {
         return Ok(());
     };
@@ -1353,6 +1362,104 @@ fn handle_incoming(
         }
     }
     Ok(())
+}
+
+fn content_text(content: &Value) -> Option<String> {
+    if let Some(text) = content.get("text").and_then(Value::as_str) {
+        if !text.is_empty() {
+            return Some(text.to_string());
+        }
+    }
+    if let Some(arr) = content.as_array() {
+        let mut out = String::new();
+        for item in arr {
+            if let Some(text) = item.get("text").and_then(Value::as_str) {
+                out.push_str(text);
+            }
+        }
+        if !out.is_empty() {
+            return Some(out);
+        }
+    }
+    content.as_str().filter(|s| !s.is_empty()).map(str::to_string)
+}
+
+pub(crate) fn session_update_text(msg: &Value) -> Option<String> {
+    let params = msg.get("params").unwrap_or(msg);
+    let update = params.get("update").unwrap_or(params);
+    let kind = update
+        .get("sessionUpdate")
+        .or_else(|| update.get("session_update"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if kind != "agent_message_chunk" && kind != "agent_message" {
+        return None;
+    }
+    update
+        .get("content")
+        .and_then(content_text)
+        .or_else(|| params.get("content").and_then(content_text))
+}
+
+fn collect_session_update(
+    proc: &mut AcpProc,
+    msg: &Value,
+    runtime: Option<&HostRuntime>,
+    host_session: Option<&str>,
+) {
+    let Some(text) = session_update_text(msg) else {
+        return;
+    };
+    proc.prompt_chunks.push_str(&text);
+    if let Some(runtime) = runtime {
+        runtime.emit(
+            crate::events::AGENT_MESSAGE_CHUNK_EVENT,
+            &json!({
+                "sessionId": host_session.unwrap_or(""),
+                "text": text,
+            }),
+        );
+    }
+}
+
+pub(crate) fn prompt_visible_text(result: &Value, chunks: &str) -> String {
+    if let Some(text) = result.get("text").and_then(Value::as_str) {
+        if !text.trim().is_empty() {
+            return text.to_string();
+        }
+    }
+    let collected = chunks.trim();
+    if !collected.is_empty() {
+        return collected.to_string();
+    }
+    if let Some(stop) = result.get("stopReason").and_then(Value::as_str) {
+        return format!("管理 CLI 已结束（{stop}）。细节已通过工具执行。");
+    }
+    "管理 CLI 已完成本轮。".to_string()
+}
+
+fn selected_ref_from_snapshot(snapshot: &Value) -> Option<&str> {
+    snapshot
+        .pointer("/view/selection/ref")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            snapshot
+                .pointer("/view/selection/refs/0")
+                .and_then(Value::as_str)
+        })
+}
+
+fn host_tool_instructions(snapshot: &Value, user_text: &str) -> String {
+    let mut out = String::from(
+        "必须用 Host 经 session/new.mcpServers 声明的 skill_get / skill_read / skill_set。禁止 bash、Get-ChildItem、PowerShell、edit、直写库文件。删除/覆盖必须走确认计划；未开启 git_auto_push 时不要上传。",
+    );
+    if let Some(reference) = selected_ref_from_snapshot(snapshot) {
+        out.push_str(&format!(
+            " 当前选中技能 `{reference}`。若用户要完善中文注释，先 skill_get(reference=\"{reference}\")，再 skill_set(reference=\"{reference}\", comment=改进后的中文注释)。"
+        ));
+    }
+    let _ = user_text;
+    out
 }
 
 fn dispatch_tool(
@@ -1653,9 +1760,10 @@ pub(crate) fn run_turn(
         .as_mut()
         .ok_or_else(|| "ACP session 未建立".to_string())?;
     bind_pid(task_id, live.proc.child.id());
+    let tools = host_tool_instructions(snapshot, user_text);
     let prompt = if fresh {
         format!(
-            "{skill_text}\n\n# 此前对话（Host 存档，ACP 新 session 回灌）\n{}\n# 当前 Host 快照（摘要+计数+引用，不含正文）\n{}\n\n# 用户\n{user_text}\n\n请用 Host 经 session/new.mcpServers 声明的工具（skill_list / skill_get / skill_read / skill_set 等）读取细节并执行。不要用 bash/edit 直写库。删除/覆盖必须走确认计划；未开启 git_auto_push 时不要上传。",
+            "{skill_text}\n\n# 此前对话（Host 存档，ACP 新 session 回灌）\n{}\n# 当前 Host 快照（摘要+计数+引用，不含正文）\n{}\n\n# 用户\n{user_text}\n\n{tools}",
             if history.is_empty() {
                 "（无）\n\n"
             } else {
@@ -1665,7 +1773,7 @@ pub(crate) fn run_turn(
         )
     } else {
         format!(
-            "# 当前 Host 快照（摘要+计数+引用，不含正文）\n{snapshot}\n\n# 用户\n{user_text}\n\n请用已声明的 Host 工具继续。不要用 bash/edit 直写库。"
+            "# 当前 Host 快照（摘要+计数+引用，不含正文）\n{snapshot}\n\n# 用户\n{user_text}\n\n{tools}"
         )
     };
     let until = Instant::now() + PROMPT_TIMEOUT;
@@ -1683,20 +1791,13 @@ pub(crate) fn run_turn(
         Some(host_session),
         Some(&acp_session),
     );
+    let chunks = live.proc.prompt_chunks.clone();
     forget_task(task_id);
     if cancel.load(Ordering::SeqCst) {
         *guard = None;
     }
     match result {
-        Ok(value) => {
-            if let Some(text) = value.get("text").and_then(Value::as_str) {
-                Ok(text.to_string())
-            } else if let Some(stop) = value.get("stopReason").and_then(Value::as_str) {
-                Ok(format!("管理 CLI 已结束（{stop}）。细节已通过工具执行。"))
-            } else {
-                Ok("管理 CLI 已完成本轮。".to_string())
-            }
-        }
+        Ok(value) => Ok(prompt_visible_text(&value, &chunks)),
         Err(err) if err == "cancelled" => Err("cancelled".into()),
         Err(err) => Err(err),
     }
@@ -2134,6 +2235,36 @@ mod tests {
     }
 
     #[test]
+    fn session_update_chunks_are_the_visible_reply() {
+        let chunk = json!({
+            "jsonrpc": "2.0",
+            "method": "session/update",
+            "params": {
+                "sessionId": "ses_1",
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": { "type": "text", "text": "已用 skill_set 更新注释。" }
+                }
+            }
+        });
+        assert_eq!(
+            session_update_text(&chunk).as_deref(),
+            Some("已用 skill_set 更新注释。")
+        );
+        let end = json!({ "stopReason": "end_turn" });
+        assert_eq!(
+            prompt_visible_text(&end, "已用 skill_set 更新注释。"),
+            "已用 skill_set 更新注释。"
+        );
+        assert!(prompt_visible_text(&end, "").contains("end_turn"));
+        let snap = json!({ "view": { "selection": { "ref": "code/hindsight-memory" } } });
+        let hint = host_tool_instructions(&snap, "完善中文注释");
+        assert!(hint.contains("skill_set"));
+        assert!(hint.contains("code/hindsight-memory"));
+        assert!(hint.contains("禁止 bash"));
+    }
+
+    #[test]
     fn auth_error_text_is_detected() {
         assert!(looks_like_auth_failure(
             &json!({"error": "unauthenticated"})
@@ -2159,6 +2290,23 @@ mod tests {
             ]
         }));
         assert_eq!(bash["outcome"]["optionId"], "reject-once");
+
+        let opencode_ask = permission_decision(&json!({
+            "sessionId": "ses_1",
+            "toolCall": {
+                "toolCallId": "call_1",
+                "status": "pending",
+                "title": "bash",
+                "kind": "execute",
+                "rawInput": { "command": "Get-ChildItem hindsight-memory" }
+            },
+            "options": [
+                { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+                { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+                { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+            ]
+        }));
+        assert_eq!(opencode_ask["outcome"]["optionId"], "reject");
 
         let edit = permission_decision(&json!({
             "title": "Edit SKILL.md",

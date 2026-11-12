@@ -22,9 +22,13 @@ description: 内置管理 Agent 短说明。两层上下文已注入；细节用
 
 ## 细节用工具
 
-快照不够时用 Host 经 ACP `session/new.mcpServers` 声明的工具（`skill_list` / `skill_get` / `skill_read` / `skill_set` 等），经 Host 执行现有 JSON CLI。不要直打 core，不要用 bash/edit 直写库文件。不要为对话发明 002 没有的筛选开关。
+快照不够时**必须**用 Host 经 ACP `session/new.mcpServers` 声明的工具（`skill_list` / `skill_get` / `skill_read` / `skill_set` 等），经 Host 执行现有 JSON CLI。
 
-工具失败把错误交回用户，不要编造正文。
+**禁止** OpenCode 自带 bash / Get-ChildItem / PowerShell / edit / write。那些会绕过 Host 锁。库写入只能 `skill_set` / `skill_delete`。
+
+用户说「完善中文注释」且快照 `view.selection.ref` 有值（例如 `code/hindsight-memory`）：先 `skill_get(reference)`，再 `skill_set(reference, comment=改进后的中文注释)`。不要去仓库目录里找 `skill-manager.exe` 或 SKILL.md。
+
+不要直打 core。不要为对话发明 002 没有的筛选开关。工具失败把错误交回用户，不要编造正文。
 
 ## 确认与上传（003，不是 002 外部 Agent）
 

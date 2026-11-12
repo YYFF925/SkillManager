@@ -98,6 +98,24 @@ fn basename(name: &str) -> Option<String> {
         .map(|item| (*item).to_string())
 }
 
+/// OpenCode 1.19.5 默认 `permission.bash * = allow`，不会发 `session/request_permission`。
+/// Host 写入 `$OPENCODE_CONFIG_DIR/opencode.json`：bash/edit 须询问 ACP，由 Host 拒绝。
+pub fn opencode_host_config() -> Value {
+    json!({
+        "$schema": "https://opencode.ai/config.json",
+        "tools": {
+            "bash": false,
+            "edit": false,
+            "write": false
+        },
+        "permission": {
+            "bash": { "*": "ask" },
+            "edit": { "*": "ask" },
+            "write": { "*": "ask" }
+        }
+    })
+}
+
 /// OpenCode 会搜索 `$OPENCODE_CONFIG_DIR/skills/<id>/SKILL.md`。把内置说明拷进 Host 本机目录，不入库。
 pub fn prepare_opencode_config(state_dir: &Path) -> Result<PathBuf, String> {
     let config = state_dir.join("agent-runtime").join("opencode-config");
@@ -107,6 +125,8 @@ pub fn prepare_opencode_config(state_dir: &Path) -> Result<PathBuf, String> {
     if src.is_file() {
         std::fs::copy(&src, dest.join("SKILL.md")).map_err(|err| err.to_string())?;
     }
+    let cfg = serde_json::to_vec_pretty(&opencode_host_config()).map_err(|err| err.to_string())?;
+    std::fs::write(config.join("opencode.json"), cfg).map_err(|err| err.to_string())?;
     Ok(config)
 }
 
@@ -317,7 +337,7 @@ fn tool_description(name: &str) -> &'static str {
         "skill_get" => "读取一个技能的详情（含文件树与部署位置；正文请用 skill_read）",
         "skill_read" => "读取技能正文片段",
         "skill_file_read" => "读取技能目录内指定相对路径文件",
-        "skill_set" => "修改注释、分类、标签或支持声明",
+        "skill_set" => "修改技能中文注释、分类、标签或支持声明。完善中文注释必须用本工具的 comment 字段，禁止 bash/edit",
         "skill_delete" => "删除技能；须经界面确认计划，口头同意无效",
         "skill_archive_list" => "列出已归档技能",
         "skill_translation_get" => "读取中文译文",
@@ -442,5 +462,22 @@ mod tests {
         assert!(is_allowed("mcp_skill-manager_skill_read"));
         assert!(!is_allowed("bash"));
         assert!(!is_allowed("plans_confirm"));
+    }
+
+    #[test]
+    fn opencode_config_asks_before_native_bash() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = prepare_opencode_config(tmp.path()).unwrap();
+        let written: Value = serde_json::from_str(
+            &std::fs::read_to_string(config.join("opencode.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(written["permission"]["bash"]["*"], "ask");
+        assert_eq!(written["permission"]["edit"]["*"], "ask");
+        assert_eq!(written["tools"]["bash"], false);
+        assert_eq!(written["tools"]["edit"], false);
+        assert!(config
+            .join("skills/skill-manager-builtin-agent/SKILL.md")
+            .is_file());
     }
 }
