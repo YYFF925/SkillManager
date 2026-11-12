@@ -1,4 +1,8 @@
-//! Windows ACP spawn：隐藏控制台且保持管道 stdin，不用 CREATE_NO_WINDOW。
+//! Windows ACP spawn：隐藏 ConPTY 控制台，把 stdin/stdout 接到 CLI，不用 CREATE_NO_WINDOW。
+//!
+//! CREATE_NEW_CONSOLE + 管道会让 Bun 去读空的隐藏控制台，ACP 握手永远等不到。
+//! CREATE_NO_WINDOW 又会让 Bun 把管道 stdin 当已关闭。ConPTY 给 Bun 一个控制台，
+//! 同时把我们的管道接到该控制台。
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -8,13 +12,18 @@ use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
 use std::path::Path;
 use std::ptr;
 
-use super::{
-    ACP_CREATE_NO_WINDOW, windows_acp_create_flags,
-};
+use super::{ACP_CREATE_NO_WINDOW, windows_acp_create_flags};
 
 const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
 const WAIT_OBJECT_0: u32 = 0;
 const STILL_ACTIVE: u32 = 259;
+const PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE: usize = 0x0002_0016;
+
+#[repr(C)]
+struct Coord {
+    x: i16,
+    y: i16,
+}
 
 #[repr(C)]
 struct SecurityAttributes {
@@ -46,6 +55,12 @@ struct StartupInfoW {
 }
 
 #[repr(C)]
+struct StartupInfoExW {
+    startup: StartupInfoW,
+    attr_list: *mut core::ffi::c_void,
+}
+
+#[repr(C)]
 struct ProcessInformation {
     process: RawHandle,
     thread: RawHandle,
@@ -71,17 +86,51 @@ unsafe extern "system" {
         flags: u32,
         env: *const u16,
         cwd: *const u16,
-        startup: *const StartupInfoW,
+        startup: *const StartupInfoExW,
         info: *mut ProcessInformation,
     ) -> i32;
     fn CloseHandle(handle: RawHandle) -> i32;
     fn WaitForSingleObject(handle: RawHandle, millis: u32) -> u32;
     fn GetExitCodeProcess(handle: RawHandle, code: *mut u32) -> i32;
+    fn CreatePseudoConsole(
+        size: Coord,
+        input: RawHandle,
+        output: RawHandle,
+        flags: u32,
+        pc: *mut RawHandle,
+    ) -> i32;
+    fn ClosePseudoConsole(pc: RawHandle);
+    fn InitializeProcThreadAttributeList(
+        list: *mut core::ffi::c_void,
+        count: u32,
+        flags: u32,
+        size: *mut usize,
+    ) -> i32;
+    fn UpdateProcThreadAttribute(
+        list: *mut core::ffi::c_void,
+        flags: u32,
+        attr: usize,
+        value: *mut core::ffi::c_void,
+        size: usize,
+        prev: *mut core::ffi::c_void,
+        ret_size: *mut usize,
+    ) -> i32;
+    fn DeleteProcThreadAttributeList(list: *mut core::ffi::c_void);
 }
 
 pub(crate) struct HiddenChild {
     pub pid: u32,
     handle: OwnedHandle,
+    hpcon: RawHandle,
+}
+
+impl Drop for HiddenChild {
+    fn drop(&mut self) {
+        if !self.hpcon.is_null() {
+            unsafe { ClosePseudoConsole(self.hpcon) };
+            self.hpcon = ptr::null_mut();
+        }
+    }
 }
 
 impl HiddenChild {
@@ -115,33 +164,85 @@ pub(crate) fn spawn_hidden(
     args: &[OsString],
     extra_env: &[(&str, &Path)],
 ) -> io::Result<HiddenSpawn> {
-    let (stdin_r, stdin_w) = inheritable_pipe()?;
-    let (stdout_r, stdout_w) = inheritable_pipe()?;
+    let (pty_in_r, stdin_w) = inheritable_pipe()?;
+    let (stdout_r, pty_out_w) = inheritable_pipe()?;
     let (stderr_r, stderr_w) = inheritable_pipe()?;
     clear_inherit(stdin_w.as_raw_handle())?;
     clear_inherit(stdout_r.as_raw_handle())?;
     clear_inherit(stderr_r.as_raw_handle())?;
 
+    let mut hpcon: RawHandle = ptr::null_mut();
+    let hr = unsafe {
+        CreatePseudoConsole(
+            Coord { x: 120, y: 30 },
+            pty_in_r.as_raw_handle(),
+            pty_out_w.as_raw_handle(),
+            0,
+            &mut hpcon,
+        )
+    };
+    drop(pty_in_r);
+    drop(pty_out_w);
+    if hr != 0 || hpcon.is_null() {
+        return Err(io::Error::from_raw_os_error(hr));
+    }
+
+    let mut attr_size = 0usize;
+    unsafe {
+        InitializeProcThreadAttributeList(ptr::null_mut(), 1, 0, &mut attr_size);
+    }
+    let mut attr_buf = vec![0u8; attr_size.max(1)];
+    let attr_ptr = attr_buf.as_mut_ptr().cast::<core::ffi::c_void>();
+    if unsafe { InitializeProcThreadAttributeList(attr_ptr, 1, 0, &mut attr_size) } == 0 {
+        unsafe { ClosePseudoConsole(hpcon) };
+        return Err(io::Error::last_os_error());
+    }
+    if unsafe {
+        UpdateProcThreadAttribute(
+            attr_ptr,
+            0,
+            PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
+            (&raw mut hpcon).cast(),
+            std::mem::size_of::<RawHandle>(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+        )
+    } == 0
+    {
+        unsafe {
+            DeleteProcThreadAttributeList(attr_ptr);
+            ClosePseudoConsole(hpcon);
+        }
+        return Err(io::Error::last_os_error());
+    }
+
     let mut cmdline = command_line(program, args);
     let mut env = env_block(extra_env);
     let mut app = wide_nul(program);
+    let cwd = extra_env
+        .iter()
+        .find(|(key, _)| *key == "OPENCODE_CONFIG_DIR")
+        .map(|(_, path)| wide_nul(path.as_os_str()));
     let (dw_flags, show, creation) = windows_acp_create_flags();
     debug_assert_eq!(creation & ACP_CREATE_NO_WINDOW, 0);
 
-    let mut si: StartupInfoW = unsafe { std::mem::zeroed() };
-    si.cb = std::mem::size_of::<StartupInfoW>() as u32;
-    si.dw_flags = dw_flags;
-    si.w_show_window = show;
-    si.stdin = stdin_r.as_raw_handle();
-    si.stdout = stdout_w.as_raw_handle();
-    si.stderr = stderr_w.as_raw_handle();
+    let mut si: StartupInfoExW = unsafe { std::mem::zeroed() };
+    si.startup.cb = std::mem::size_of::<StartupInfoExW>() as u32;
+    si.startup.dw_flags = dw_flags;
+    si.startup.w_show_window = show;
+    si.startup.stderr = stderr_w.as_raw_handle();
+    si.attr_list = attr_ptr;
 
     let mut pi: ProcessInformation = unsafe { std::mem::zeroed() };
-    let app_ptr = if looks_like_path(program) {
+    let app_ptr = if Path::new(program).is_absolute() {
         app.as_mut_ptr()
     } else {
         ptr::null_mut()
     };
+    let cwd_ptr = cwd
+        .as_ref()
+        .map(|wide| wide.as_ptr())
+        .unwrap_or(ptr::null());
     let ok = unsafe {
         CreateProcessW(
             app_ptr,
@@ -151,15 +252,17 @@ pub(crate) fn spawn_hidden(
             1,
             creation,
             env.as_mut_ptr(),
-            ptr::null(),
+            cwd_ptr,
             &si,
             &mut pi,
         )
     };
-    drop(stdin_r);
-    drop(stdout_w);
+    unsafe {
+        DeleteProcThreadAttributeList(attr_ptr);
+    }
     drop(stderr_w);
     if ok == 0 {
+        unsafe { ClosePseudoConsole(hpcon) };
         return Err(io::Error::last_os_error());
     }
     unsafe {
@@ -170,15 +273,12 @@ pub(crate) fn spawn_hidden(
         child: HiddenChild {
             pid: pi.process_id,
             handle,
+            hpcon,
         },
         stdin: File::from(stdin_w),
         stdout: File::from(stdout_r),
         stderr: File::from(stderr_r),
     })
-}
-
-fn looks_like_path(program: &OsStr) -> bool {
-    Path::new(program).is_absolute()
 }
 
 fn inheritable_pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
@@ -211,8 +311,9 @@ fn clear_inherit(handle: RawHandle) -> io::Result<()> {
 }
 
 fn command_line(program: &OsStr, args: &[OsString]) -> Vec<u16> {
-    let mut line = OsString::new();
-    line.push(quote(program));
+    let mut line = OsString::from("\"");
+    line.push(program);
+    line.push("\"");
     for arg in args {
         line.push(" ");
         line.push(quote(arg));
@@ -228,11 +329,7 @@ fn wide_nul(value: &OsStr) -> Vec<u16> {
 
 fn quote(arg: &OsStr) -> OsString {
     let raw = arg.to_string_lossy();
-    if !raw.is_empty()
-        && !raw.contains([' ', '\t', '"'])
-        && !raw.contains('\\')
-        && Path::new(arg).components().count() == 1
-    {
+    if !raw.is_empty() && !raw.contains([' ', '\t', '"']) && !raw.contains('\\') {
         return arg.to_os_string();
     }
     let mut out = OsString::from("\"");

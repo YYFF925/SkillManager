@@ -20,7 +20,7 @@ use crate::HostRuntime;
 #[path = "acp_win.rs"]
 mod acp_win;
 
-/// Windows ACP CreateProcess：隐藏窗口但给 Bun 一个控制台（不用 CREATE_NO_WINDOW）。
+/// Windows ACP CreateProcess：隐藏 ConPTY（不用 CREATE_NO_WINDOW，也不用会抢走管道的 CREATE_NEW_CONSOLE）。
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ACP_SW_HIDE: u16 = 0;
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -32,6 +32,8 @@ pub(crate) const ACP_CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ACP_CREATE_UNICODE_ENVIRONMENT: u32 = 0x0000_0400;
 #[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ACP_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -39,7 +41,7 @@ pub(crate) fn windows_acp_create_flags() -> (u32, u16, u32) {
     (
         ACP_STARTF_USESHOWWINDOW | ACP_STARTF_USESTDHANDLES,
         ACP_SW_HIDE,
-        ACP_CREATE_NEW_CONSOLE | ACP_CREATE_UNICODE_ENVIRONMENT,
+        ACP_EXTENDED_STARTUPINFO_PRESENT | ACP_CREATE_UNICODE_ENVIRONMENT,
     )
 }
 
@@ -317,7 +319,7 @@ fn collect_stderr_reader(mut stderr: impl Read + Send + 'static) -> Arc<Mutex<St
 }
 
 fn take_stderr(proc: &AcpProc) -> Option<String> {
-    for _ in 0..20 {
+    for _ in 0..50 {
         let text = proc
             .stderr
             .lock()
@@ -490,9 +492,13 @@ fn candidate_arg_sets(cli: &DetectedCli) -> Vec<Vec<String>> {
     sets
 }
 
-/// 未登记 `--args` 时的尝试顺序。按文档试 `acp` / `--acp` / 无参；握手失败再试下一组。
+/// 未登记 `--args` 时的尝试顺序。OpenCode 文档是 `acp`；`--print-logs` 把日志写到 stderr。
 pub(crate) fn default_acp_arg_sets(_cli_id: &str) -> Vec<&'static [&'static str]> {
-    vec![&["acp"], &["--acp"], &[]]
+    vec![&["--print-logs", "acp"], &["acp"], &["--acp"], &[]]
+}
+
+fn should_retry_next_args(err: &str) -> bool {
+    !err.contains("握手超时")
 }
 
 fn initialize_payload(skill_dir: &Path, skill_text: &str) -> Value {
@@ -645,6 +651,9 @@ pub(crate) fn initialize_with_args(
             Err(err) => {
                 kill_child(&mut proc.child);
                 last = err;
+                if !should_retry_next_args(&last) {
+                    break;
+                }
             }
         }
     }
@@ -720,17 +729,30 @@ fn read_msg(proc: &mut AcpProc, until: Instant) -> Result<Value, String> {
         if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
             return Ok(value);
         }
+        if let Ok(mut guard) = proc.stderr.lock() {
+            if !guard.is_empty() && !guard.ends_with('\n') {
+                guard.push('\n');
+            }
+            guard.push_str(trimmed);
+            guard.push('\n');
+        }
     }
 }
 
 fn looks_like_auth_failure(value: &Value) -> bool {
-    let text = value.to_string().to_lowercase();
-    text.contains("auth")
-        || text.contains("login")
-        || text.contains("unauthenticated")
+    if value.get("protocolVersion").is_some() && value.get("error").is_none() {
+        return false;
+    }
+    let text = match value.get("error") {
+        Some(err) => err.to_string().to_lowercase(),
+        None => value.to_string().to_lowercase(),
+    };
+    text.contains("unauthenticated")
+        || text.contains("auth_required")
+        || text.contains("not logged")
         || text.contains("api key")
         || text.contains("api_key")
-        || text.contains("not logged")
+        || (text.contains("login") && text.contains("error"))
 }
 
 fn request(
@@ -1324,9 +1346,24 @@ mod tests {
         );
         assert_eq!(
             creation & ACP_CREATE_NEW_CONSOLE,
-            ACP_CREATE_NEW_CONSOLE,
-            "Bun needs a console; hide it with SW_HIDE instead of omitting one"
+            0,
+            "CREATE_NEW_CONSOLE steals stdio onto an empty hidden console"
         );
+        assert_eq!(
+            creation & ACP_EXTENDED_STARTUPINFO_PRESENT,
+            ACP_EXTENDED_STARTUPINFO_PRESENT,
+            "ConPTY needs STARTUPINFOEX"
+        );
+    }
+
+    #[test]
+    fn timeout_does_not_try_remaining_arg_sets() {
+        assert!(!should_retry_next_args(
+            "管理 CLI 握手超时（12s 看门狗已 taskkill 进程树，exit 1）"
+        ));
+        assert!(should_retry_next_args(
+            "管理 CLI 已立即退出（exit 1）：Unknown command acp"
+        ));
     }
 
     #[test]
@@ -1381,6 +1418,13 @@ mod tests {
             &json!({"error": "unauthenticated"})
         ));
         assert!(!looks_like_auth_failure(&json!({"ok": true})));
+        assert!(
+            !looks_like_auth_failure(&json!({
+                "protocolVersion": 1,
+                "authMethods": [{ "id": "opencode-login", "name": "Login with opencode" }]
+            })),
+            "OpenCode always lists opencode-login; that is not a failed handshake"
+        );
     }
 
     #[test]

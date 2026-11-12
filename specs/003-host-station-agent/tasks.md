@@ -241,4 +241,5 @@ T011 实现 vault clone（core/cli）
 - [X] T075 Windows ACP 握手拉起 `opencode.cmd`（经 `cmd /C`），不得 CreateProcess 无扩展 Unix `#!/bin/sh` 垫片（os error 193）；`ready: true` 表示该路径可在 Windows 拉起；登录仍走 `start` 可见控制台 per US3, T071, T074
 - [X] T076 Windows ACP 优先直接拉起 `opencode.exe`（stdio 接到 CLI，不经 cmd 包装）；超时 `taskkill /T /F` 杀掉整棵进程树，对话必须收到成功或失败，不得一直「发送中」；登录仍用 `start` per T074, T075
 - [X] T077 Windows ACP 拉起原生 `opencode.exe` 不得加 `CREATE_NO_WINDOW`（否则 Bun 把管道 stdin 当已关闭，`acp`/`--acp`/无参都立刻退出）；握手失败须带 exit code 与 stderr，不得把进程退出说成未登录 per T076
-- [X] T078 Windows ACP 探测/握手用 `STARTF_USESHOWWINDOW|SW_HIDE` + `CREATE_NEW_CONSOLE` 隐藏控制台（仍不用 `CREATE_NO_WINDOW`）；`taskkill` 后等待真实 exit code 与 stderr，超时/立即退出/仍在运行分开报告，不得写 `exit unknown`；登录仍用 `cmd /c start` 可见控制台 per T074, T077
+- [X] T078 Windows ACP 探测/握手用 `STARTF_USESHOWWINDOW|SW_HIDE` 隐藏控制台（仍不用 `CREATE_NO_WINDOW`）；`taskkill` 后等待真实 exit code 与 stderr，超时/立即退出/仍在运行分开报告，不得写 `exit unknown`；登录仍用 `cmd /c start` 可见控制台 per T074, T077
+- [X] T079 Windows ACP 用隐藏 ConPTY 把 stdin/stdout 接到 `opencode.exe`（`CREATE_NEW_CONSOLE` 会让 Bun 读空控制台，握手一直超时）；`--print-logs acp` 优先，超时不再试 `--acp`/无参；失败须带 stderr/非 JSON 输出；initialize 列出 `authMethods` 不得当成未登录 per T078
