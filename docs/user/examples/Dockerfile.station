@@ -1,0 +1,27 @@
+# 管理站示例镜像：从本仓库 skill-manager/ 构建 CLI 与前端。
+# 在仓库根目录：docker compose -f docs/user/examples/docker-compose.station.yml up --build
+# 不是官方发布物，也不用来跑 Host。
+
+FROM node:22-bookworm AS web
+WORKDIR /web
+COPY skill-manager/package.json skill-manager/package-lock.json ./
+RUN npm ci
+COPY skill-manager/ ./
+RUN npm run build
+
+FROM rust:1.85-bookworm AS cli
+WORKDIR /src
+COPY skill-manager/ ./
+RUN cargo build -p skill-manager-cli --release
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=cli /src/target/release/skill-manager /usr/local/bin/skill-manager
+COPY --from=web /web/dist /opt/skill-manager/web
+ENV SKILL_MANAGER_WEB=/opt/skill-manager/web
+VOLUME /data
+EXPOSE 8787
+ENTRYPOINT ["skill-manager", "station", "serve"]
+CMD ["--listen", "0.0.0.0:8787", "--data-dir", "/data"]

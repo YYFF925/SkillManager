@@ -70,7 +70,7 @@ Hermes 中独立的配置与数据目录，各 Agent 可使用各自档案运行
 每台安装了 Skill Manager 的电脑上的本机服务：统一操作入口、任务协调、事件、与管理站的密钥对接、以及内置管理 Agent 的运行。Vault、部署、Hermes 目录与 SQLite 仍在这台机器。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
 
 **管理站（统一管理站）**:
-远程入口：一次登录、用设备密钥对接各机 Host、登录后切换设备并打开**当前那一台**的完整 Skill Manager 界面。不持有 Vault，不在同一屏里总览所有设备。发布形态不限定为 Docker。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
+远程入口：一次登录、用设备密钥对接各机 Host、登录后切换设备并打开**当前那一台**的完整 Skill Manager 界面。不持有 Vault，不在同一屏里总览所有设备。发布形态不限定为 Docker；怎么装见 [docs/user/station.md](docs/user/station.md)。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。
 
 **内置管理 Agent（管理 Agent）**:
 Skill Manager 产品内的对话式管理能力，跑在当前设备的 Host 上，经 GUI 或管理站网页使用。不是设置页里的「内置 Agent 名单」（那些是部署目标），也不是把任务复制到软件外的编码 Agent。定义见 [ADR 0002](docs/adr/0002-host-management-station-and-agent.md)。

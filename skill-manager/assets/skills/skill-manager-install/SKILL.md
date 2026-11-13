@@ -10,6 +10,8 @@ description: 在一台新电脑上接入 Skill Manager：clone SkillManagerVault
 
 不要改写配套维护 Skill。不要把本说明入库成用户技能。
 
+人类阅读的安装与使用说明在本仓库 `docs/user/`（含管理站 / Docker）；本文件只给编码 Agent 在新机器上执行接入步骤。
+
 ## 一、要达成的结果
 
 1. 本机有一份已有远端的 SkillManagerVault 克隆（不 init 新中央库）。

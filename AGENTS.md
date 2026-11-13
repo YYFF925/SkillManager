@@ -8,6 +8,7 @@
 | 位置 | 职责 | 何时读取 |
 |---|---|---|
 | [README.md](README.md) | 对外项目概况与安装/开发入口；不写本机路径、内网地址或验收过程 | 缺少项目上下文时 |
+| [docs/user/](docs/user/README.md) | 给使用者的安装、功能说明、管理站（含可选 Docker）；不写本机路径或内网地址 | 改安装/使用说明、或用户问「怎么装、界面是干什么的」时 |
 | [.specify/memory/constitution.md](.specify/memory/constitution.md) | 长期原则、技术栈与架构基线 | 制定需求、设计或实现方案，以及判断是否偏离原则时 |
 | [GLOSSARY.md](GLOSSARY.md) | 领域术语与边界 | 对库、管理域、同步、部署等概念有疑问时 |
 | [docs/requirements.md](docs/requirements.md) | 核心需求、访谈结论、修订与未决事项 | 确认用户意图、查找业务规则或继续需求讨论时，定位相关章节阅读 |
