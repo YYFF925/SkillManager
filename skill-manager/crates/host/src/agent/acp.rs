@@ -27,7 +27,17 @@ pub(crate) const ACP_SW_HIDE: u16 = 0;
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ACP_STARTF_USESHOWWINDOW: u32 = 0x0000_0001;
 #[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_STARTF_USEPOSITION: u32 = 0x0000_0004;
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ACP_STARTF_USESTDHANDLES: u32 = 0x0000_0100;
+/// ConPTY 列宽：过窄会在多字节 UTF-8 中间插 CR/LF。i16 上限 32767。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_CONPTY_COLS: i16 = 32766;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_CONPTY_ROWS: i16 = 80;
+/// 把可能闪现的控制台放到屏外（配合 STARTF_USEPOSITION）。
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const ACP_CONPTY_OFFSCREEN: u32 = (-32000i32) as u32;
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ACP_CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -42,7 +52,7 @@ pub(crate) const ACP_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn windows_acp_create_flags() -> (u32, u16, u32) {
     (
-        ACP_STARTF_USESHOWWINDOW | ACP_STARTF_USESTDHANDLES,
+        ACP_STARTF_USESHOWWINDOW | ACP_STARTF_USESTDHANDLES | ACP_STARTF_USEPOSITION,
         ACP_SW_HIDE,
         ACP_EXTENDED_STARTUPINFO_PRESENT | ACP_CREATE_UNICODE_ENVIRONMENT,
     )
@@ -74,6 +84,18 @@ struct LiveAcp {
     proc: AcpProc,
     acp_session_id: String,
     cli_path: PathBuf,
+}
+
+#[derive(Clone, Debug, Default)]
+struct SessionModels {
+    current_id: Option<String>,
+    available: Vec<ModelChoice>,
+}
+
+#[derive(Clone, Debug)]
+struct ModelChoice {
+    id: String,
+    name: String,
 }
 
 impl Drop for LiveAcp {
@@ -202,6 +224,7 @@ pub(crate) struct AcpProc {
     prompt_chunks: String,
     timed_out: Arc<AtomicBool>,
     started: Instant,
+    models: SessionModels,
 }
 
 /// Windows 上 CreateProcess 不能跑无扩展 Unix `#!/bin/sh` 垫片（os error 193）。
@@ -320,11 +343,12 @@ fn collect_stderr_reader(mut stderr: impl Read + Send + 'static) -> Arc<Mutex<St
     let slot = Arc::clone(&collected);
     std::thread::spawn(move || {
         let mut buf = [0u8; 1024];
+        let mut pending = Vec::new();
         loop {
             match stderr.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
-                    let chunk = strip_ansi(&String::from_utf8_lossy(&buf[..n]));
+                    let chunk = strip_ansi(&decode_acp_bytes(&mut pending, &buf[..n]));
                     if let Ok(mut guard) = slot.lock() {
                         guard.push_str(&chunk);
                     }
@@ -487,12 +511,71 @@ fn skill_env(skill_dir: &Path) -> Vec<(&str, &Path)> {
     }
 }
 
+fn utf8_char_width(b: u8) -> Option<usize> {
+    if b < 0x80 {
+        Some(1)
+    } else if b & 0xE0 == 0xC0 {
+        Some(2)
+    } else if b & 0xF0 == 0xE0 {
+        Some(3)
+    } else if b & 0xF8 == 0xF0 {
+        Some(4)
+    } else {
+        None
+    }
+}
+
+/// ConPTY 可能在 UTF-8 多字节中间切断 read，或按列宽插入 CR/LF。
+/// 保留不完整尾字节；CR 丢掉；插在汉字中间的 LF 也丢掉。不要 `from_utf8_lossy`。
+pub(crate) fn decode_acp_bytes(pending: &mut Vec<u8>, incoming: &[u8]) -> String {
+    pending.extend_from_slice(incoming);
+    pending.retain(|&b| b != b'\r');
+    let mut out = String::new();
+    let mut i = 0;
+    while i < pending.len() {
+        let b = pending[i];
+        if b < 0x80 {
+            out.push(b as char);
+            i += 1;
+            continue;
+        }
+        let Some(width) = utf8_char_width(b) else {
+            i += 1;
+            continue;
+        };
+        let mut ch = Vec::with_capacity(width);
+        let mut j = i;
+        while ch.len() < width && j < pending.len() {
+            let c = pending[j];
+            j += 1;
+            if c == b'\n' && !ch.is_empty() {
+                continue;
+            }
+            ch.push(c);
+        }
+        if ch.len() < width {
+            pending.drain(..i);
+            return out;
+        }
+        match std::str::from_utf8(&ch) {
+            Ok(text) => {
+                out.push_str(text);
+                i = j;
+            }
+            Err(_) => i += 1,
+        }
+    }
+    pending.clear();
+    out
+}
+
 fn spawn_stdout_reader(
     mut stdout: Box<dyn Read + Send>,
 ) -> mpsc::Receiver<std::io::Result<String>> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
+        let mut pending = Vec::new();
         loop {
             match stdout.read(&mut buf) {
                 Ok(0) => {
@@ -500,7 +583,10 @@ fn spawn_stdout_reader(
                     break;
                 }
                 Ok(n) => {
-                    let chunk = String::from_utf8_lossy(&buf[..n]).into_owned();
+                    let chunk = decode_acp_bytes(&mut pending, &buf[..n]);
+                    if chunk.is_empty() {
+                        continue;
+                    }
                     if tx.send(Ok(chunk)).is_err() {
                         break;
                     }
@@ -533,6 +619,7 @@ fn acp_proc(
         prompt_chunks: String::new(),
         timed_out,
         started,
+        models: SessionModels::default(),
     }
 }
 
@@ -1407,6 +1494,10 @@ fn collect_session_update(
     runtime: Option<&HostRuntime>,
     host_session: Option<&str>,
 ) {
+    let parsed = parse_session_models(msg);
+    if !parsed.available.is_empty() || parsed.current_id.is_some() {
+        merge_models(&mut proc.models, parsed);
+    }
     let Some(text) = session_update_text(msg) else {
         return;
     };
@@ -1419,6 +1510,129 @@ fn collect_session_update(
                 "text": text,
             }),
         );
+    }
+}
+
+fn merge_models(dst: &mut SessionModels, src: SessionModels) {
+    if src.current_id.is_some() {
+        dst.current_id = src.current_id;
+    }
+    if !src.available.is_empty() {
+        dst.available = src.available;
+    }
+}
+
+fn parse_session_models(value: &Value) -> SessionModels {
+    let root = value.get("result").unwrap_or(value);
+    let mut models = SessionModels::default();
+    if let Some(state) = root.get("models") {
+        models.current_id = state
+            .get("currentModelId")
+            .or_else(|| state.get("current_model_id"))
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+            .map(str::to_string);
+        if let Some(arr) = state
+            .get("availableModels")
+            .or_else(|| state.get("available_models"))
+            .and_then(Value::as_array)
+        {
+            for item in arr {
+                push_model_choice(
+                    &mut models.available,
+                    item.get("modelId")
+                        .or_else(|| item.get("model_id"))
+                        .or_else(|| item.get("id"))
+                        .and_then(Value::as_str),
+                    item.get("name").and_then(Value::as_str),
+                );
+            }
+        }
+    }
+    if let Some(opts) = root.get("configOptions").and_then(Value::as_array) {
+        for opt in opts {
+            let id = opt.get("id").and_then(Value::as_str).unwrap_or("");
+            let category = opt.get("category").and_then(Value::as_str).unwrap_or("");
+            if id != "model" && category != "model" {
+                continue;
+            }
+            if let Some(current) = opt.get("currentValue").and_then(Value::as_str) {
+                if !current.is_empty() {
+                    models.current_id = Some(current.to_string());
+                }
+            }
+            if let Some(choices) = opt.get("options").and_then(Value::as_array) {
+                for choice in choices {
+                    push_model_choice(
+                        &mut models.available,
+                        choice
+                            .get("value")
+                            .or_else(|| choice.get("id"))
+                            .and_then(Value::as_str),
+                        choice.get("name").and_then(Value::as_str),
+                    );
+                }
+            }
+        }
+    }
+    if models.current_id.is_none() {
+        models.current_id = models.available.first().map(|item| item.id.clone());
+    }
+    models
+}
+
+fn push_model_choice(out: &mut Vec<ModelChoice>, id: Option<&str>, name: Option<&str>) {
+    let Some(id) = id.filter(|id| !id.is_empty()) else {
+        return;
+    };
+    if out.iter().any(|item| item.id == id) {
+        return;
+    }
+    out.push(ModelChoice {
+        name: name
+            .filter(|name| !name.is_empty())
+            .unwrap_or(id)
+            .to_string(),
+        id: id.to_string(),
+    });
+}
+
+fn models_json(models: &SessionModels) -> Value {
+    json!({
+        "currentModelId": models.current_id,
+        "models": models.available.iter().map(|item| json!({
+            "id": item.id,
+            "name": item.name,
+        })).collect::<Vec<_>>(),
+    })
+}
+
+fn enrich_session_models(proc: &mut AcpProc, models: &mut SessionModels, wait: Duration) {
+    if !models.available.is_empty() {
+        return;
+    }
+    let until = Instant::now() + wait;
+    while Instant::now() < until {
+        match proc.stdout_rx.recv_timeout(Duration::from_millis(80)) {
+            Ok(Ok(chunk)) => {
+                if chunk.is_empty() {
+                    return;
+                }
+                ingest_stdout(proc, &chunk);
+                while let Some(value) = proc.pending_json.pop_front() {
+                    merge_models(models, parse_session_models(&value));
+                }
+                if !models.available.is_empty() {
+                    return;
+                }
+            }
+            Ok(Err(_)) | Err(RecvTimeoutError::Disconnected) => return,
+            Err(RecvTimeoutError::Timeout) => {
+                if proc.child.wait_exit(Duration::ZERO).is_some() {
+                    return;
+                }
+            }
+        }
     }
 }
 
@@ -1733,23 +1947,109 @@ pub(crate) fn ensure_session(
         Some(host_session),
         None,
     );
-    let acp_session = match new_session {
-        Ok(value) => value
-            .get("sessionId")
-            .and_then(Value::as_str)
-            .unwrap_or(host_session)
-            .to_string(),
+    let (acp_session, mut models) = match new_session {
+        Ok(value) => (
+            value
+                .get("sessionId")
+                .and_then(Value::as_str)
+                .unwrap_or(host_session)
+                .to_string(),
+            parse_session_models(&value),
+        ),
         Err(err) => {
             kill_child(&mut proc.child);
             return Err(err);
         }
     };
+    enrich_session_models(&mut proc, &mut models, Duration::from_millis(1200));
+    proc.models = models;
     *guard = Some(LiveAcp {
         proc,
         acp_session_id: acp_session,
         cli_path: cli.binary_path.clone(),
     });
     Ok(true)
+}
+
+fn live_for(host_session: &str) -> Result<Arc<Mutex<Option<LiveAcp>>>, String> {
+    Ok(session_slot(host_session))
+}
+
+pub(crate) fn session_models_view(host_session: &str) -> Value {
+    let slot = session_slot(host_session);
+    let Ok(guard) = slot.lock() else {
+        return models_json(&SessionModels::default());
+    };
+    match guard.as_ref() {
+        Some(live) => models_json(&live.proc.models),
+        None => models_json(&SessionModels::default()),
+    }
+}
+
+pub(crate) fn apply_session_model(
+    host_session: &str,
+    model_id: &str,
+    runtime: &HostRuntime,
+    cancel: &AtomicBool,
+) -> Result<Value, String> {
+    let slot = live_for(host_session)?;
+    let mut guard = slot.lock().map_err(|_| "ACP 会话锁已损坏".to_string())?;
+    let live = guard
+        .as_mut()
+        .ok_or_else(|| "ACP session 未建立".to_string())?;
+    let acp_session = live.acp_session_id.clone();
+    let until = Instant::now() + Duration::from_secs(8);
+    let set_model = request(
+        &mut live.proc,
+        "session/set_model",
+        json!({ "sessionId": acp_session, "modelId": model_id }),
+        until,
+        cancel,
+        Some(runtime),
+        Some(host_session),
+        Some(&acp_session),
+    );
+    let result = match set_model {
+        Ok(value) => value,
+        Err(err) if looks_like_unknown_method(&err) => request(
+            &mut live.proc,
+            "session/set_config_option",
+            json!({
+                "sessionId": acp_session,
+                "configId": "model",
+                "value": model_id,
+            }),
+            Instant::now() + Duration::from_secs(8),
+            cancel,
+            Some(runtime),
+            Some(host_session),
+            Some(&acp_session),
+        )?,
+        Err(err) => return Err(err),
+    };
+    merge_models(&mut live.proc.models, parse_session_models(&result));
+    live.proc.models.current_id = Some(model_id.to_string());
+    if !live
+        .proc
+        .models
+        .available
+        .iter()
+        .any(|item| item.id == model_id)
+    {
+        live.proc.models.available.push(ModelChoice {
+            id: model_id.to_string(),
+            name: model_id.to_string(),
+        });
+    }
+    Ok(models_json(&live.proc.models))
+}
+
+fn looks_like_unknown_method(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("method not found")
+        || lower.contains("unknown method")
+        || lower.contains("未知方法")
+        || lower.contains("-32601")
 }
 
 /// 同一 Host 对话复用 ACP session；进程死了才 initialize + session/new。
@@ -1930,6 +2230,14 @@ mod tests {
             dw_flags & ACP_STARTF_USESHOWWINDOW,
             ACP_STARTF_USESHOWWINDOW
         );
+        assert_eq!(
+            dw_flags & ACP_STARTF_USEPOSITION,
+            ACP_STARTF_USEPOSITION,
+            "off-screen STARTF_USEPOSITION hides the ConPTY flash"
+        );
+        assert_eq!(ACP_CONPTY_COLS, 32766);
+        assert_eq!(ACP_CONPTY_ROWS, 80);
+        assert_eq!(ACP_CONPTY_OFFSCREEN, (-32000i32) as u32);
         assert_eq!(
             dw_flags & ACP_STARTF_USESTDHANDLES,
             ACP_STARTF_USESTDHANDLES,
@@ -2487,5 +2795,56 @@ mod tests {
             opencode_1_19_5_mcp_from_acp(&typed_stdio).is_err(),
             "type=stdio must not be sent: OpenCode maps it to remote and drops Host tools"
         );
+    }
+
+    #[test]
+    fn decode_acp_bytes_carries_incomplete_utf8_without_replacement() {
+        let ni = "你".as_bytes();
+        assert_eq!(ni, &[0xE4, 0xBD, 0xA0]);
+        let mut pending = Vec::new();
+        let first = decode_acp_bytes(&mut pending, &ni[..2]);
+        assert_eq!(first, "");
+        assert!(!first.contains('\u{FFFD}'));
+        assert_eq!(pending, ni[..2]);
+        let second = decode_acp_bytes(&mut pending, &ni[2..]);
+        assert_eq!(second, "你");
+        assert!(!second.contains('\u{FFFD}'));
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn decode_acp_bytes_drops_wrap_inside_multibyte() {
+        let mut pending = Vec::new();
+        let out = decode_acp_bytes(&mut pending, &[0xE4, 0xBD, b'\r', b'\n', 0xA0]);
+        assert_eq!(out, "你");
+        assert!(!out.contains('\u{FFFD}'));
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn parse_session_models_from_opencode_config_options() {
+        let value = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "sessionId": "ses_demo",
+                "configOptions": [{
+                    "id": "model",
+                    "category": "model",
+                    "currentValue": "opencode/gpt-5",
+                    "options": [
+                        { "value": "opencode/gpt-5", "name": "GPT-5" },
+                        { "value": "opencode/claude-sonnet-4", "name": "Claude Sonnet 4" }
+                    ]
+                }]
+            }
+        });
+        let models = parse_session_models(&value);
+        assert_eq!(models.current_id.as_deref(), Some("opencode/gpt-5"));
+        assert_eq!(models.available.len(), 2);
+        assert_eq!(models.available[1].id, "opencode/claude-sonnet-4");
+        let view = models_json(&models);
+        assert_eq!(view["currentModelId"], "opencode/gpt-5");
+        assert_eq!(view["models"][0]["name"], "GPT-5");
     }
 }

@@ -55,6 +55,7 @@ pub fn router(runtime: HostRuntime) -> Router {
         .route("/agent/runtime", get(agent_runtime_get).put(agent_runtime_put))
         .route("/agent/runtime/install", post(agent_runtime_install))
         .route("/agent/runtime/login", post(agent_runtime_login))
+        .route("/agent/models", get(agent_models_get).put(agent_set_model))
         .with_state(App { runtime })
 }
 
@@ -198,6 +199,35 @@ async fn agent_runtime_install(State(app): State<App>) -> impl IntoResponse {
 
 async fn agent_runtime_login(State(app): State<App>) -> impl IntoResponse {
     match crate::agent::launch_login(&app.runtime) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response(),
+    }
+}
+
+async fn agent_models_get(State(app): State<App>, headers: HeaderMap) -> impl IntoResponse {
+    let body = match session_from(&headers, &json!({})) {
+        Some(session) => json!({ "sessionId": session }),
+        None => json!({}),
+    };
+    match crate::agent::list_models(&app.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response(),
+    }
+}
+
+async fn agent_set_model(
+    State(app): State<App>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    let mut body = body;
+    if let Some(session) = session_from(&headers, &body) {
+        if let Some(obj) = body.as_object_mut() {
+            obj.entry("sessionId".to_string())
+                .or_insert_with(|| json!(session));
+        }
+    }
+    match crate::agent::set_model(&app.runtime, body) {
         Ok(value) => (StatusCode::OK, Json(value)).into_response(),
         Err(err) => (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response(),
     }

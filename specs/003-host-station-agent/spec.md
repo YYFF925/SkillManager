@@ -23,7 +23,7 @@
 - Q: 内置管理说明要不要像安装 Skill 那样入库到用户的 SkillManagerVault？要不要为「译文待更新 / 上游待更新」新增 002 CLI 筛选开关？ → A: **都不。** 内置管理说明只由 Host 注入到所用 CLI 的技能搜索路径（该 CLI 若无此目录，则作为 ACP 初始化文本注入）；**不入库、不出现在用户技能列表、不作为可部署的库内技能**。列待更新不新增 002 命令：`skill list` 等现有 JSON 已含 `translation_stale` 等字段，Host 快照从 **core**（与 GUI 同一数据）组装，工具走现有 JSON CLI。
 - Q: 两层快照和工具读到的库内容，会不会发给第三方模型？对话要不要做成多会话工作区？ → A: **会发给当前选用的那家 CLI 的模型。** 选用哪一家即接受其模型处理技能名、注释、错误原文与工具结果；第一版不脱敏、不另做拦截。对话历史留在该机 Host，可继续同一时间线并从本机读取；第一版不要求分叉、文件夹或多会话工作区产品。
 - Q: 用户能否取消进行中的对话任务？ → A: **能。** 取消后该任务不得表达为成功或已经改库；未写完的不得继续写。已发出任务仍钉死发出时的对象，取消只停止继续执行。
-- Q: 内置管理 Agent 是否只能用 OpenCode / Codex / Gemini 三家里锁死的默认？模型谁决定？ → A: **模型不锁死三家。** 产品**钉死一家默认管理 CLI：OpenCode**（D9 已跑通 ACP）。Host 安装并引导登录这一家，之后对话固定用它，**不扫描** PATH 上的厂商清单。用户仍可用 `host agent-cli --bin` / `PUT /agent/runtime` / `SKILL_MANAGER_AGENT_CLI` 覆盖为任意 ACP 兼容 CLI；模型由当前那家 CLI 决定。没有默认 CLI 时，对话面板提供安装与登录，不得当成测试跳过或外部前置。
+- Q: 内置管理 Agent 是否只能用 OpenCode / Codex / Gemini 三家里锁死的默认？模型谁决定？ → A: **模型不锁死三家。** 产品**钉死一家默认管理 CLI：OpenCode**（D9 已跑通 ACP）。Host 安装并引导登录这一家，之后对话固定用它，**不扫描** PATH 上的厂商清单。用户仍可用 `host agent-cli --bin` / `PUT /agent/runtime` / `SKILL_MANAGER_AGENT_CLI` 覆盖为任意 ACP 兼容 CLI。可用模型由当前那家 CLI 经 ACP 提供；对话面板须展示并允许选择，密钥仍只留在该 CLI。没有默认 CLI 时，对话面板提供安装与登录，不得当成测试跳过或外部前置。
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -95,6 +95,10 @@
 13. **Given** 用户打开某技能详情，**When** 问「这个技能的上游是什么」或「它部署到哪了」，**Then** Agent 使用当前界面上下文中的来源与部署事实，用户不必粘贴 `source.yaml` 或部署路径。
 14. **Given** 快照只有某技能摘要、用户要看正文某一段，**When** 说「把这个技能的说明读一下」，**Then** Agent 经 Host 在 ACP `session/new.mcpServers` 声明的工具（如 `skill_read`）读取库文件，用户未粘贴正文。
 15. **Given** 一条对话任务仍在进行，**When** 用户取消该任务，**Then** 该任务停止继续写库，界面不得把它显示为成功或已经改完。
+16. **Given** Windows 上已安装 Skill Manager，**When** 打开管理对话，**Then** 不得闪出黑色控制台窗口。点「打开登录」仍须弹出可见交互控制台。
+17. **Given** 默认 OpenCode 已登录，**When** 打开管理对话，**Then** 面板显示该 CLI 经 ACP 给出的当前模型与可选列表，用户可切换；密钥不进 Host / Vault / 管理站。
+18. **Given** 输入框已启用，**When** 按 Enter，**Then** 发送当前内容；Shift+Enter 换行；IME 组字过程中的 Enter 不得发送。
+19. **Given** 模型回复含中文或路径，**When** Host 从 Windows ConPTY 读出并显示气泡，**Then** 正文不得夹杂 U+FFFD 替换符。
 
 ---
 
@@ -123,7 +127,7 @@
 - **FR-002**: 本机桌面必须只管理本机 Host，不得经桌面切换其它设备。没有管理站时，本机桌面与命令行必须仍可独立使用。
 - **FR-003**: 无窗口 Host 必须以本机服务运行：随系统开机启动，关机即停。软件必须提供可复制的启动命令，使用户或该机上的 Agent 能把已关闭的 Host 拉起。第一版不得要求唤醒已休眠电脑。
 - **FR-004**: 新机器接入 SkillManagerVault 必须通过 git clone 已有远端，不得提供图形克隆向导，不得在应用内创建另一座中央库。软件必须提供一键命令：即 [CLI 契约](contracts/cli.md) 的 `vault clone` 成功后接 `host serve`（可选再 `host pair`），不另发明第三条入口；完成克隆并让本机 Host 指向该克隆。
-- **FR-005**: 必须提供与配套维护 Skill 分开的安装 Skill，供新机器上已有的编码 Agent 使用，指导 clone、配置并启动 Host、对接管理站。该技能必须说明：内置管理对话默认钉死 OpenCode，由 Host 安装并引导登录；模型由当前 CLI 决定；覆盖其它 ACP CLI 用 `host agent-cli --bin`。
+- **FR-005**: 必须提供与配套维护 Skill 分开的安装 Skill，供新机器上已有的编码 Agent 使用，指导 clone、配置并启动 Host、对接管理站。该技能必须说明：内置管理对话默认钉死 OpenCode，由 Host 安装并引导登录；可用模型由当前 CLI 经 ACP 提供并在对话面板选择；覆盖其它 ACP CLI 用 `host agent-cli --bin`。
 - **FR-006**: 命令行在 Host 未运行时可直接完成本机管理；Host 已运行时必须经 Host 执行，避免与图形界面或 Agent 同时改同一份库而无协调。
 - **FR-007**: 管理站必须提供用户指定的 HTTPS 入口与唯一管理员登录。登录方式为账号密码加基于时间的一次性密码；绑定过程必须提供二维码、密钥与一次性恢复码；登录后保持时长必须可配置。用恢复码登录后必须先完成 TOTP 重绑才成为正常管理员会话；完成前不得消耗并替换已绑定的 TOTP。
 - **FR-008**: 管理站首次启动必须创建那一个管理员。丢失恢复码后，只允许在管理站所在机器上用本地命令重置，不得提供公网自助注册或多人账号。
@@ -138,7 +142,7 @@
   2. **当前界面上下文**：用户正在看的页面与对象。客户端只上报页面与选中引用；详情（注释、分类、标签、支持声明、文件树、上游、部署位置等）由 Host 按引用从 core 补齐。缺省指示语（「这个」「这些」）只解析这一层。
   任务在发出时钉死当时两层快照；之后切页只影响新指令的界面层。不得把整库正文塞进每一条消息；摘要与引用足够定位时，细节由 Agent **主动**经 Host 暴露的 ACP 工具读取（工具 = 现有 JSON CLI，含 `skill list`/`get`/`read`/`check` 等已有字段与命令，**不为对话新增 002 筛选开关**；向 CLI 声明走 `session/new.mcpServers`，带 inputSchema，不是把清单塞进 initialize）。Host 须向该 CLI 注入与配套维护 Skill、安装 Skill 分开的内置管理说明：写入该 CLI 会搜索的 skills 目录，若无此目录则写入 ACP 初始化文本。该说明**不得入库**到用户 SkillManagerVault，不得出现在用户技能列表。不得把 002「每次询问上传」套进这份说明。同一 Host 对话复用 ACP session 并回灌历史。CLI 自带 bash/edit 不得绕过 Host 锁与确认计划。
 - **FR-016**: 内置管理 Agent 只响应对话中用户发起的任务。不得在无人指令时主动巡检、采用上游、入库、安装升级或 push。002 已规定的定时上游检查、库拉取与工具版本检查仍由 Host 后台执行，与对话无关。
-- **FR-017**: 内置管理对话的**默认 ACP CLI 钉死为 OpenCode**。Host 按顺序解析：环境变量 `SKILL_MANAGER_AGENT_CLI` → 用户登记的 `agent_runtime` → 本机已由软件安装的 OpenCode → PATH 上名为 `opencode` 的默认命令（**只认这一个名字**，不扫描厂商清单）。都没有时，对话与 `host agent-cli` 必须提供软件内安装（`host agent-cli --install` / `POST /agent/runtime/install`）和登录引导（`host agent-cli --login` / `POST /agent/runtime/login`），不得把「本机没有已登录 CLI」当成跳过条件或甩给用户自己先装。不得把第三方工具打进 Skill Manager 安装包。用户仍可把其它 ACP 兼容 CLI 登记为当前宿主（路径 + ACP 参数）。该 CLI 的认证与模型密钥不得存入管理站，也不得写入 Host 本机状态表或 Vault。设备密钥与对话历史不得写入 Vault。管理站只保存管理员密码哈希、TOTP 密钥、恢复码哈希与设备密钥哈希。模型由当前 CLI 决定。
+- **FR-017**: 内置管理对话的**默认 ACP CLI 钉死为 OpenCode**。Host 按顺序解析：环境变量 `SKILL_MANAGER_AGENT_CLI` → 用户登记的 `agent_runtime` → 本机已由软件安装的 OpenCode → PATH 上名为 `opencode` 的默认命令（**只认这一个名字**，不扫描厂商清单）。都没有时，对话与 `host agent-cli` 必须提供软件内安装（`host agent-cli --install` / `POST /agent/runtime/install`）和登录引导（`host agent-cli --login` / `POST /agent/runtime/login`），不得把「本机没有已登录 CLI」当成跳过条件或甩给用户自己先装。不得把第三方工具打进 Skill Manager 安装包。用户仍可把其它 ACP 兼容 CLI 登记为当前宿主（路径 + ACP 参数）。该 CLI 的认证与模型密钥不得存入管理站，也不得写入 Host 本机状态表或 Vault。设备密钥与对话历史不得写入 Vault。管理站只保存管理员密码哈希、TOTP 密钥、恢复码哈希与设备密钥哈希。可用模型由当前 CLI 经 ACP 提供；对话面板须展示当前模型并允许选择，不得在 Skill Manager 另存 API Key。
 - **FR-018**: 对话历史必须保存在该机 Host 的本机状态中，不得写入 SkillManagerVault，不得随库同步到其它电脑。
 - **FR-019**: 删除技能（含因此清理受管部署）与覆盖（覆盖部署副本、丢弃副本独有改动）必须先由当前客户端确认带对象预览的操作计划，再执行。不得采信 Agent 口头「用户已同意」。改注释、分类、标签、普通部署以及远端 push 不得逐步确认。
 - **FR-020**: 上传授权分三条路径，不得混用：
@@ -148,6 +152,7 @@
 - **FR-021**: 不提供专用冲突合并界面，也不提供「保留本地/远端/双方」流程（002 FR-039 的界面形态不改）。有内置管理 Agent 可用时，同步或部署暂停后必须把 Host 已知事实交给当前对话，由用户在对话里裁决，不得再把「把现场复制给外部 Agent」当作继续方式。主动维护、跨设备总览、多人账号、唤醒休眠电脑、管理站自行申请证书，均不纳入。
 - **FR-022**: 信息展示必须区分已知事实、待确认状态和执行结果。下列情形均不得表达为已经改库或已经同步成功：未检查、检查失败、管理命令行未登录模型、任务已生成但尚未执行、破坏性确认未完成、自动上传授权未打开、任务已被取消、工具调用失败。
 - **FR-023**: 用户必须能取消进行中的内置管理 Agent 任务。取消后该任务停止继续写库，不得表达为成功；已发出任务仍以发出时钉死的对象为准，取消只停止继续执行。
+- **FR-024**: 管理对话可用性：Windows 上打开对话不得闪出控制台（PATH 探测等普通子进程走 `CREATE_NO_WINDOW`；ACP 仍不得用 `CREATE_NO_WINDOW`/`CREATE_NEW_CONSOLE`，用隐藏宽 ConPTY + `SW_HIDE`）；「打开登录」仍为可见控制台。输入框 Enter 发送、Shift+Enter 换行，IME 组字（`isComposing` / `keyCode === 229`）不得误发。已登录后须展示并允许选择当前 CLI 经 ACP 提供的模型。从 ConPTY 读出的对话正文须拼接不完整 UTF-8，不得 `from_utf8_lossy` 插入 U+FFFD。
 
 ### Key Entities
 
@@ -182,7 +187,7 @@
 - 云电脑等目标机器上通常已有编码 Agent，能阅读并执行安装 Skill。
 - 技能管理的字段、上游、部署、预设、Hermes、工具中心等行为以 002 为准，除非本规格明文取代。
 - 002 User Story 8 场景 6（不远程管理其它机器上的 Agent）由本规格取代；002 FR-038 对**外部编码 Agent** 的每次询问仍有效。
-- 内置管理 Agent 默认使用钉死的 OpenCode；模型由当前 CLI 决定。用户可覆盖为任意 ACP 兼容 CLI。不扫描厂商清单；不阻塞 Host 与管理站验收。
+- 内置管理 Agent 默认使用钉死的 OpenCode；可用模型由当前 CLI 经 ACP 提供并在对话面板选择。用户可覆盖为任意 ACP 兼容 CLI。不扫描厂商清单；不阻塞 Host 与管理站验收。
 - 三条用户故事允许分里程碑交付（US1 → US2 → US3）；对话不可用时 Host 与管理站仍须可验收。
 - 库拉取冲突的专门产品、主动维护、跨设备总览，明确留到后续专题。
 - 登录页、设备切换、对话界面的具体布局在设计层给出，本规格只约束行为与范围。

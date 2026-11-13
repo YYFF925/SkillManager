@@ -781,6 +781,8 @@ fn dispatch(runtime: &HostRuntime, command: &str, body: &Value) -> Result<Value,
             crate::agent::install_default_cli(runtime).map_err(InvokeError::Failed)
         }
         "agent_runtime_login" => crate::agent::launch_login(runtime).map_err(InvokeError::Failed),
+        "agent_models_get" => crate::agent::list_models(runtime, body.clone()).map_err(InvokeError::Failed),
+        "agent_set_model" => crate::agent::set_model(runtime, body.clone()).map_err(InvokeError::Failed),
         _ => Err(InvokeError::Unknown(command.to_string())),
     }
 }

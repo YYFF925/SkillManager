@@ -499,7 +499,10 @@ fn which(bin: &str) -> Option<PathBuf> {
 
 #[cfg(windows)]
 fn which(bin: &str) -> Option<PathBuf> {
-    let output = Command::new("where").arg(bin).output().ok()?;
+    let output = skill_manager_core::process::command("where")
+        .arg(bin)
+        .output()
+        .ok()?;
     if !output.status.success() {
         return None;
     }
@@ -522,6 +525,97 @@ fn builtin_skill_text() -> String {
     std::fs::read_to_string(path).unwrap_or_else(|_| {
         "你是 Skill Manager 当前 Host 上的内置管理 Agent。两层上下文已注入；细节用工具；删除/覆盖走确认计划。本说明不入库。".to_string()
     })
+}
+
+fn empty_models() -> Value {
+    json!({
+        "currentModelId": Value::Null,
+        "models": [],
+    })
+}
+
+/// 列出当前 ACP session 可用模型。未建会话时先握手；密钥仍在 OpenCode。
+pub fn list_models(runtime: &HostRuntime, body: Value) -> Result<Value, String> {
+    let session_id = body
+        .get("sessionId")
+        .or_else(|| body.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    if session_id.is_empty() {
+        return Err("缺少 sessionId".to_string());
+    }
+    let resolved = resolve_runtime(Some(runtime));
+    let Some(cli) = resolved.cli.clone() else {
+        let mut payload = empty_models();
+        payload["needsInstall"] = json!(resolved.needs_install);
+        payload["needsLogin"] = json!(resolved.needs_login);
+        payload["message"] = json!(resolved.message);
+        return Ok(payload);
+    };
+    let skill_dir = tools::prepare_opencode_config(runtime.state_dir())
+        .unwrap_or_else(|_| tools::builtin_skill_dir());
+    let skill_text = builtin_skill_text();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    match acp::ensure_session(
+        &cli,
+        &skill_dir,
+        &skill_text,
+        runtime,
+        &session_id,
+        &cancel,
+    ) {
+        Ok(_) => Ok(acp::session_models_view(&session_id)),
+        Err(err) if looks_like_auth_text(&err) => {
+            let mut payload = empty_models();
+            payload["needsLogin"] = json!(true);
+            payload["message"] = json!(format!(
+                "{DEFAULT_CLI_NAME} 尚未完成登录。请在对话面板点「打开登录」，或在本机执行：{}。{LOGIN_HINT}",
+                login_command(&cli)
+            ));
+            Ok(payload)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+pub fn set_model(runtime: &HostRuntime, body: Value) -> Result<Value, String> {
+    let session_id = body
+        .get("sessionId")
+        .or_else(|| body.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let model_id = body
+        .get("modelId")
+        .or_else(|| body.get("model_id"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if session_id.is_empty() {
+        return Err("缺少 sessionId".to_string());
+    }
+    if model_id.is_empty() {
+        return Err("缺少 modelId".to_string());
+    }
+    let resolved = resolve_runtime(Some(runtime));
+    let Some(cli) = resolved.cli.clone() else {
+        return Err(resolved.message);
+    };
+    let skill_dir = tools::prepare_opencode_config(runtime.state_dir())
+        .unwrap_or_else(|_| tools::builtin_skill_dir());
+    let skill_text = builtin_skill_text();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    acp::ensure_session(
+        &cli,
+        &skill_dir,
+        &skill_text,
+        runtime,
+        &session_id,
+        &cancel,
+    )?;
+    acp::apply_session_model(&session_id, &model_id, runtime, &cancel)
 }
 
 pub fn post_message(runtime: &HostRuntime, body: Value) -> Result<Value, String> {

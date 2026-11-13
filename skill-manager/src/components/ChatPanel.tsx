@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { Button, Notice } from "./ui";
 import { getTransport } from "../services/transport";
@@ -45,6 +45,16 @@ interface AgentRuntime {
   message?: string;
 }
 
+interface AgentModel {
+  id: string;
+  name: string;
+}
+
+interface AgentModels {
+  currentModelId?: string | null;
+  models?: AgentModel[];
+}
+
 const LOGIN_ACK_KEY = "sm-cli-login-ack";
 
 function viewLabel(view: ChatViewRef): string {
@@ -62,6 +72,9 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
   const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
   const [runtimeChecked, setRuntimeChecked] = useState(false);
   const [setupBusy, setSetupBusy] = useState<"install" | "login" | null>(null);
+  const [models, setModels] = useState<AgentModel[]>([]);
+  const [currentModelId, setCurrentModelId] = useState<string | null>(null);
+  const [modelBusy, setModelBusy] = useState(false);
 
   useEffect(() => {
     sessionStorage.setItem("sm-agent-session", sessionId);
@@ -118,6 +131,32 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
   const canSend = runtimeLoaded && !!runtime?.ready && !needsInstall && !needsLogin;
   const showSetup = runtimeLoaded && (needsInstall || needsLogin);
 
+  useEffect(() => {
+    if (!open || !canSend) {
+      if (!open || needsInstall || needsLogin) {
+        setModels([]);
+        setCurrentModelId(null);
+      }
+      return;
+    }
+    let cancelled = false;
+    void getTransport()
+      .invoke<AgentModels>("agent_models_get", { sessionId })
+      .then((result) => {
+        if (cancelled) return;
+        const rows = (result.models ?? []).filter((item) => item.id);
+        setModels(rows);
+        setCurrentModelId(result.currentModelId ?? rows[0]?.id ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setModels([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, canSend, sessionId, needsInstall, needsLogin]);
+
   async function refreshRuntime() {
     try {
       const next = await getTransport().invoke<AgentRuntime>("agent_runtime_get");
@@ -167,6 +206,32 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
   function ackLogin() {
     sessionStorage.setItem(LOGIN_ACK_KEY, "1");
     void refreshRuntime();
+  }
+
+  function composerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    void send();
+  }
+
+  async function changeModel(modelId: string) {
+    if (!modelId || modelId === currentModelId) return;
+    setModelBusy(true);
+    setError(null);
+    try {
+      const result = await getTransport().invoke<AgentModels>("agent_set_model", {
+        sessionId,
+        modelId,
+      });
+      const rows = (result.models ?? []).filter((item) => item.id);
+      if (rows.length) setModels(rows);
+      setCurrentModelId(result.currentModelId ?? modelId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setModelBusy(false);
+    }
   }
 
   async function send() {
@@ -289,9 +354,29 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
           <h2 className="text-[13px] font-semibold">管理对话</h2>
           <p className="text-[11px] text-muted">{viewLabel(view)}</p>
         </div>
-        <button type="button" className="text-[12px] text-muted" onClick={onClose}>
-          关闭
-        </button>
+        <div className="chat-panel-head-actions flex items-center gap-2">
+          {models.length > 0 && (
+            <label className="chat-model flex items-center gap-1.5 text-[11px] text-muted">
+              <span>模型</span>
+              <select
+                className="max-w-[140px] rounded-md border border-line bg-app px-1.5 py-0.5 text-[11px] text-ink-2"
+                value={currentModelId ?? models[0]?.id ?? ""}
+                disabled={busy || modelBusy}
+                aria-label="当前模型"
+                onChange={(event) => void changeModel(event.target.value)}
+              >
+                {models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name || model.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <button type="button" className="text-[12px] text-muted" onClick={onClose}>
+            关闭
+          </button>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
         {!runtimeLoaded && (
@@ -363,6 +448,7 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
           value={text}
           disabled={!canSend}
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={composerKeyDown}
         />
         <div className="mt-2">
           <Button kind="primary" compact disabled={busy || !canSend || !text.trim()} onClick={() => void send()}>

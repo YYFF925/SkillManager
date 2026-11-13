@@ -53,6 +53,9 @@ beforeEach(() => {
     if (command === "agent_runtime_login") {
       return { ok: true, message: "已打开 OpenCode 登录。", loginCommand: "opencode auth login" };
     }
+    if (command === "agent_models_get" || command === "agent_set_model") {
+      return { currentModelId: null, models: [] };
+    }
     return {};
   });
 });
@@ -165,6 +168,93 @@ it("shows a handshake failure once in the transcript, not also as a notice", asy
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
   expect(await screen.findByText(failure)).toBeTruthy();
   expect(screen.queryAllByText(failure)).toHaveLength(1);
+});
+
+it("sends on Enter and inserts a newline on Shift+Enter", async () => {
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    if (command === "agent_post_message") {
+      return { status: "running", taskId: "t-enter", message: "" };
+    }
+    if (command === "agent_models_get") {
+      return { currentModelId: null, models: [] };
+    }
+    return { messages: [] };
+  });
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  const box = await screen.findByPlaceholderText(/完善中文注释/);
+  await waitFor(() => expect(box).toBeEnabled());
+  fireEvent.change(box, { target: { value: "完善中文注释" } });
+  fireEvent.keyDown(box, { key: "Enter", shiftKey: true });
+  expect(transportInvoke()).not.toHaveBeenCalledWith(
+    "agent_post_message",
+    expect.anything(),
+  );
+  fireEvent.keyDown(box, { key: "Enter", keyCode: 229, isComposing: true });
+  expect(transportInvoke()).not.toHaveBeenCalledWith(
+    "agent_post_message",
+    expect.anything(),
+  );
+  fireEvent.keyDown(box, { key: "Enter" });
+  await waitFor(() =>
+    expect(transportInvoke()).toHaveBeenCalledWith("agent_post_message", {
+      sessionId: expect.any(String),
+      text: "完善中文注释",
+    }),
+  );
+});
+
+it("lists OpenCode models and applies a selection", async () => {
+  transportInvoke().mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    if (command === "agent_models_get") {
+      return {
+        currentModelId: "opencode/gpt-5",
+        models: [
+          { id: "opencode/gpt-5", name: "GPT-5" },
+          { id: "opencode/claude-sonnet-4", name: "Claude Sonnet 4" },
+        ],
+      };
+    }
+    if (command === "agent_set_model") {
+      return {
+        currentModelId: args?.modelId,
+        models: [
+          { id: "opencode/gpt-5", name: "GPT-5" },
+          { id: "opencode/claude-sonnet-4", name: "Claude Sonnet 4" },
+        ],
+      };
+    }
+    return { messages: [] };
+  });
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  const select = await screen.findByLabelText("当前模型");
+  expect((select as HTMLSelectElement).value).toBe("opencode/gpt-5");
+  fireEvent.change(select, { target: { value: "opencode/claude-sonnet-4" } });
+  await waitFor(() =>
+    expect(transportInvoke()).toHaveBeenCalledWith("agent_set_model", {
+      sessionId: expect.any(String),
+      modelId: "opencode/claude-sonnet-4",
+    }),
+  );
 });
 
 it("walks install then login before enabling send", async () => {

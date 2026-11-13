@@ -61,6 +61,13 @@ Host 在 `POST /agent/messages` 时从 core 组装两层并钉死到该条任务
 
 `GET /agent/runtime` 报告钉死的默认 OpenCode 与当前覆盖：含 `cliId`、`defaultCliId`、`ready`、`needsInstall`、`needsLogin`、`loginCommand`。缺省未安装时 `cliId` 仍为 `opencode`，`needsInstall` 为真，不得只给 `cliId: null`。`POST /agent/runtime/install` 安装并钉死默认 CLI；`POST /agent/runtime/login` 打开本机授权。`PUT /agent/runtime` 把其它 ACP CLI 登记为覆盖。环境变量 `SKILL_MANAGER_AGENT_CLI` 优先于库内登记。同名 invoke：`agent_runtime_get` / `agent_runtime_install` / `agent_runtime_login`。
 
+```text
+GET  /agent/models        # 头 `x-skill-manager-session`；必要时先 ensure ACP session
+PUT  /agent/models        { sessionId?, modelId }
+```
+
+`GET /agent/models` 返回 `{ currentModelId, models: [{ id, name }] }`，列表来自当前 ACP session，不把密钥写入 Host。`PUT /agent/models` 经 ACP 切换当前模型。同名 invoke：`agent_models_get` / `agent_set_model`（前端超时 30s）。
+
 ## 本机状态
 
 ```text

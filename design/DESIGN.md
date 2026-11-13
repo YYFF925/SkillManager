@@ -136,6 +136,6 @@ Agent 改界面前读本文。视觉画布是可操作原型，不是本文的�
 - 管理站登录：`login-screen` / `login-card` → `pages/LoginPage.tsx`
 - 管理站首次接入：`first-connect-card` / `first-connect-steps` → `App.tsx` VaultWelcome（远程、尚无库）；先对接并选择当前设备，再接入 Host 上的路径
 - 设备条（仅远程壳）：`device-bar` → `components/DeviceBar.tsx`；含生成对接码、改名、解除对接；首次接入欢迎页也显示；桌面原型不得出现「切换其它设备」
-- 管理对话：`chat-panel` → `components/ChatPanel.tsx`
+- 管理对话：`chat-panel`（含 `chat-model`、Enter 发送）→ `components/ChatPanel.tsx`
 
 样式源文件是 `specs/001-skill-management-prototype/ui-prototype/prototype.css`。

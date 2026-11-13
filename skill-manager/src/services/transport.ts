@@ -22,9 +22,12 @@ export function isDesktopShell(): boolean {
 const SESSION_KEY = "sm-host-session";
 const INVOKE_TIMEOUT_MS = 15_000;
 const AGENT_POST_TIMEOUT_MS = 10 * 60 * 1000;
+const AGENT_MODEL_TIMEOUT_MS = 30_000;
 
 function invokeTimeoutMs(command: string): number {
-  return command === "agent_post_message" ? AGENT_POST_TIMEOUT_MS : INVOKE_TIMEOUT_MS;
+  if (command === "agent_post_message") return AGENT_POST_TIMEOUT_MS;
+  if (command === "agent_models_get" || command === "agent_set_model") return AGENT_MODEL_TIMEOUT_MS;
+  return INVOKE_TIMEOUT_MS;
 }
 
 function timeoutError(action: string, ms: number): Error {

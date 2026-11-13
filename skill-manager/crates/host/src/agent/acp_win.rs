@@ -14,16 +14,20 @@ use std::path::Path;
 use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use super::{
-    ACP_CONPTY_INHERIT_HANDLES, ACP_CREATE_NEW_CONSOLE, ACP_CREATE_NO_WINDOW,
-    windows_acp_create_flags,
+    ACP_CONPTY_COLS, ACP_CONPTY_INHERIT_HANDLES, ACP_CONPTY_OFFSCREEN, ACP_CONPTY_ROWS,
+    ACP_CREATE_NEW_CONSOLE, ACP_CREATE_NO_WINDOW, windows_acp_create_flags,
 };
 
 const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
 const WAIT_OBJECT_0: u32 = 0;
 const STILL_ACTIVE: u32 = 259;
 const PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE: usize = 0x0002_0016;
+const TH32CS_SNAPPROCESS: u32 = 0x0000_0002;
+const INVALID_HANDLE_VALUE: RawHandle = -1isize as RawHandle;
+const MAX_PATH: usize = 260;
 
 #[repr(C)]
 struct Coord {
@@ -74,6 +78,20 @@ struct ProcessInformation {
     thread_id: u32,
 }
 
+#[repr(C)]
+struct ProcessEntry32W {
+    dw_size: u32,
+    cnt_usage: u32,
+    th32_process_id: u32,
+    th32_default_heap_id: usize,
+    th32_module_id: u32,
+    cnt_threads: u32,
+    th32_parent_process_id: u32,
+    pc_pri_class_base: i32,
+    dw_flags: u32,
+    sz_exe_file: [u16; MAX_PATH],
+}
+
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn CreatePipe(
@@ -122,6 +140,14 @@ unsafe extern "system" {
         ret_size: *mut usize,
     ) -> i32;
     fn DeleteProcThreadAttributeList(list: *mut core::ffi::c_void);
+    fn EnumWindows(cb: Option<unsafe extern "system" fn(RawHandle, isize) -> i32>, lparam: isize) -> i32;
+    fn GetWindowThreadProcessId(hwnd: RawHandle, pid: *mut u32) -> u32;
+    fn GetClassNameW(hwnd: RawHandle, class: *mut u16, max: i32) -> i32;
+    fn ShowWindow(hwnd: RawHandle, cmd: i32) -> i32;
+    fn GetCurrentProcessId() -> u32;
+    fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> RawHandle;
+    fn Process32FirstW(snap: RawHandle, entry: *mut ProcessEntry32W) -> i32;
+    fn Process32NextW(snap: RawHandle, entry: *mut ProcessEntry32W) -> i32;
 }
 
 pub(crate) struct PseudoConsole {
@@ -205,7 +231,10 @@ pub(crate) fn spawn_hidden(
     let mut hpcon: RawHandle = ptr::null_mut();
     let hr = unsafe {
         CreatePseudoConsole(
-            Coord { x: 1024, y: 40 },
+            Coord {
+                x: ACP_CONPTY_COLS,
+                y: ACP_CONPTY_ROWS,
+            },
             pty_in_r.as_raw_handle(),
             pty_out_w.as_raw_handle(),
             0,
@@ -261,6 +290,8 @@ pub(crate) fn spawn_hidden(
     si.startup.cb = std::mem::size_of::<StartupInfoExW>() as u32;
     si.startup.dw_flags = dw_flags;
     si.startup.w_show_window = show;
+    si.startup.dw_x = ACP_CONPTY_OFFSCREEN;
+    si.startup.dw_y = ACP_CONPTY_OFFSCREEN;
     si.startup.stdin = ptr::null_mut();
     si.startup.stdout = ptr::null_mut();
     si.startup.stderr = ptr::null_mut();
@@ -303,6 +334,7 @@ pub(crate) fn spawn_hidden(
         let _ = CloseHandle(pi.thread);
     }
     let handle = unsafe { OwnedHandle::from_raw_handle(pi.process) };
+    hide_acp_console_windows(pi.process_id);
     Ok(HiddenSpawn {
         child: HiddenChild {
             pid: pi.process_id,
@@ -313,6 +345,91 @@ pub(crate) fn spawn_hidden(
         stdout: File::from(pty_out_r),
         stderr: eof_pipe()?,
     })
+}
+
+fn hide_acp_console_windows(child_pid: u32) {
+    hide_console_windows_once(child_pid);
+    std::thread::spawn(move || {
+        for _ in 0..20 {
+            std::thread::sleep(Duration::from_millis(50));
+            hide_console_windows_once(child_pid);
+        }
+    });
+}
+
+fn hide_console_windows_once(child_pid: u32) {
+    let mut pids = vec![child_pid];
+    pids.extend(conhost_children_of_self());
+    unsafe {
+        EnumWindows(Some(hide_console_enum), &pids as *const Vec<u32> as isize);
+    }
+}
+
+fn conhost_children_of_self() -> Vec<u32> {
+    let host_pid = unsafe { GetCurrentProcessId() };
+    let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if snap == INVALID_HANDLE_VALUE || snap.is_null() {
+        return Vec::new();
+    }
+    let mut entry = ProcessEntry32W {
+        dw_size: std::mem::size_of::<ProcessEntry32W>() as u32,
+        cnt_usage: 0,
+        th32_process_id: 0,
+        th32_default_heap_id: 0,
+        th32_module_id: 0,
+        cnt_threads: 0,
+        th32_parent_process_id: 0,
+        pc_pri_class_base: 0,
+        dw_flags: 0,
+        sz_exe_file: [0; MAX_PATH],
+    };
+    let mut out = Vec::new();
+    unsafe {
+        if Process32FirstW(snap, &mut entry) != 0 {
+            loop {
+                if entry.th32_parent_process_id == host_pid {
+                    let name = String::from_utf16_lossy(
+                        &entry.sz_exe_file[..entry
+                            .sz_exe_file
+                            .iter()
+                            .position(|&c| c == 0)
+                            .unwrap_or(entry.sz_exe_file.len())],
+                    );
+                    if name.eq_ignore_ascii_case("conhost.exe") {
+                        out.push(entry.th32_process_id);
+                    }
+                }
+                if Process32NextW(snap, &mut entry) == 0 {
+                    break;
+                }
+            }
+        }
+        let _ = CloseHandle(snap);
+    }
+    out
+}
+
+unsafe extern "system" fn hide_console_enum(hwnd: RawHandle, lparam: isize) -> i32 {
+    let pids = unsafe { &*(lparam as *const Vec<u32>) };
+    let mut pid = 0u32;
+    unsafe {
+        GetWindowThreadProcessId(hwnd, &mut pid);
+    }
+    if !pids.contains(&pid) {
+        return 1;
+    }
+    let mut class = [0u16; 64];
+    let n = unsafe { GetClassNameW(hwnd, class.as_mut_ptr(), class.len() as i32) };
+    if n <= 0 {
+        return 1;
+    }
+    let name = String::from_utf16_lossy(&class[..n as usize]);
+    if name == "ConsoleWindowClass" {
+        unsafe {
+            ShowWindow(hwnd, 0);
+        }
+    }
+    1
 }
 
 fn eof_pipe() -> io::Result<File> {

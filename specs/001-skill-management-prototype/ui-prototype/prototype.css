@@ -245,9 +245,12 @@ body.is-sorting .preset-row-actions{opacity:1;pointer-events:auto}
 .window.has-chat .content{right:340px}
 .chat-panel{position:absolute;top:0;right:0;bottom:0;width:340px;border-left:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;z-index:4}
 .chat-panel[hidden]{display:none}
-.chat-panel-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border)}
+.chat-panel-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);gap:8px}
 .chat-panel-head h2{margin:0;font-size:13px;font-weight:600}
 .chat-panel-head p{margin:2px 0 0;font-size:11px;color:var(--muted)}
+.chat-panel-head-actions{display:flex;align-items:center;gap:8px}
+.chat-model{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.chat-model select{max-width:140px;font-size:11px;border:1px solid var(--border);border-radius:6px;padding:2px 6px;background:var(--bg);color:inherit}
 .chat-panel-body{flex:1;min-height:0;overflow:auto;padding:10px 12px}
 .chat-msg{margin:0 0 10px}
 .chat-msg .role{font-size:11px;color:var(--faint)}
