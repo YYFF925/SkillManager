@@ -3853,7 +3853,7 @@ checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
 name = "skill-manager-cli"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "clap",
  "ctrlc",
@@ -3868,7 +3868,7 @@ dependencies = [
 
 [[package]]
 name = "skill-manager-core"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "chrono",
  "dirs 7.0.0",
@@ -3886,7 +3886,7 @@ dependencies = [
 
 [[package]]
 name = "skill-manager-desktop"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "serde",
  "serde_json",
@@ -3902,7 +3902,7 @@ dependencies = [
 
 [[package]]
 name = "skill-manager-host"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "axum",
@@ -3933,7 +3933,7 @@ dependencies = [
 
 [[package]]
 name = "skill-manager-station"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "argon2",
