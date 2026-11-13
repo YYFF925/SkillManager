@@ -9,7 +9,7 @@
 
 装好后打开 **Skill Manager**。命令行 `skill-manager` 随安装包一起提供。设置里可以 **检查更新**，确认后再安装。
 
-没有 Linux 桌面安装包。无窗口的 Linux / 云电脑用同一套 CLI 跑 Host，见 [管理站与 Host](station.md)。
+没有 Linux 桌面安装包。无窗口的 Linux / 云电脑用同一套 CLI 跑 Host。一台常开的 Linux（amd64）上用 Docker Compose 跑管理站，推荐配置见 [管理站与 Host](station.md)。
 
 ## 第一次打开
 

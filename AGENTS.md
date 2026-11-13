@@ -32,7 +32,7 @@
 - GitHub 源码仓库 `YYFF925/SkillManager` 公开，Issues / Pull Request / Wiki / Discussions 关闭，不接外部贡献。在线更新源就是该仓库的 GitHub Releases：安装包挂版本 tag，各平台 `latest-*.json` 挂稳定 tag `updater-manifests`。不是 git 里的 `release/`。`release/` 仍按平台各留一份安装包并纳入本仓库提交。
 - 构建更新包前用凭据 `/service/skillmanager/updater` 注入 `TAURI_SIGNING_PRIVATE_KEY`，再执行 `tauri build`；当前平台发布用 `node skill-manager/scripts/publish-github-update.mjs`。
 - 双平台发版走 GitHub Actions：推送 `v*` tag（或手动 `workflow_dispatch`）后，macOS 与 Windows 标准 runner 签名构建并发布到 GitHub Releases。私钥只放 GitHub secret `TAURI_SIGNING_PRIVATE_KEY`，不进仓库。公开仓标准 runner 不收费。构建完成后从 Release 下载 Windows 安装包替换 `release/` 旧包并推到 `github`；Actions 产物不会自动进入 Git。完整步骤见 [docs/technical-reference/app-updater.md](docs/technical-reference/app-updater.md)。
-- 管理站 Docker 镜像由 `.github/workflows/station-image.yml` 构建并推到 GitHub Container Registry（`ghcr.io/yyff925/skill-manager-station`），不进 Git。同一 `v*` tag 会编桌面安装包和管理站镜像。镜像只含 `station serve`，不含 Host。第一份 Package 若是私有，在 GitHub Packages 设置里改为 Public。
+- 管理站 Docker 镜像由 `.github/workflows/station-image.yml` 构建并推到 GitHub Container Registry（`ghcr.io/yyff925/skill-manager-station`，linux/amd64，已 Public），不进 Git。同一 `v*` tag 会编桌面安装包和管理站镜像。镜像只含 `station serve`，不含 Host。使用者安装步骤与推荐 Compose 在 [docs/user/station.md](docs/user/station.md)。
 
 ## 按任务阅读
 

@@ -1,20 +1,27 @@
-# 只跑统一管理站。各机 Host 仍装在系统里，不要加进这个 compose。
-# 用法（仓库根目录）：
-#   docker compose -f docs/user/examples/docker-compose.station.yml up
-# 本地重编：同一命令加 --build
-# 前面再加你自己的 HTTPS 反代。
+# Skill Manager 管理站（推荐）。不要在这里加 Host。
+# 与 docs/user/station.md 第四节同一份配置。
+#
+# 任意目录：
+#   docker compose up -d
+# 更新镜像：
+#   docker compose pull && docker compose up -d
+# 前面再加你自己的 HTTPS 反代，指到 127.0.0.1:8787。
 
 services:
   station:
     image: ghcr.io/yyff925/skill-manager-station:latest
-    build:
-      context: ../../..
-      dockerfile: docs/user/examples/Dockerfile.station
+    container_name: skill-manager-station
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
       - station-data:/data
     restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   station-data:
