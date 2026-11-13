@@ -66,7 +66,7 @@ GET  /agent/models        # 头 `x-skill-manager-session`；必要时先 ensure 
 PUT  /agent/models        { sessionId?, modelId }
 ```
 
-`GET /agent/models` 返回 `{ currentModelId, models: [{ id, name }] }`，列表来自当前 ACP session，不把密钥写入 Host。`PUT /agent/models` 经 ACP 切换当前模型。同名 invoke：`agent_models_get` / `agent_set_model`（前端超时 30s）。
+`GET /agent/models` 返回 `{ currentModelId, models: [{ id, name }] }`，列表来自当前 ACP session，不把密钥写入 Host。必要时先 `ensure` ACP session；OpenCode 若只先打 INFO `created id=ses_`，Host 须继续排 `session/new` 的 JSON（含分组 `configOptions`），空列表不得覆盖已解析项。`PUT /agent/models` 经 ACP 切换当前模型。同名 invoke：`agent_models_get` / `agent_set_model`（前端超时 30s）。
 
 ## 本机状态
 

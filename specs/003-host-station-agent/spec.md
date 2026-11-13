@@ -96,7 +96,7 @@
 14. **Given** 快照只有某技能摘要、用户要看正文某一段，**When** 说「把这个技能的说明读一下」，**Then** Agent 经 Host 在 ACP `session/new.mcpServers` 声明的工具（如 `skill_read`）读取库文件，用户未粘贴正文。
 15. **Given** 一条对话任务仍在进行，**When** 用户取消该任务，**Then** 该任务停止继续写库，界面不得把它显示为成功或已经改完。
 16. **Given** Windows 上已安装 Skill Manager，**When** 打开管理对话，**Then** 不得闪出黑色控制台窗口。点「打开登录」仍须弹出可见交互控制台。
-17. **Given** 默认 OpenCode 已登录，**When** 打开管理对话，**Then** 面板显示该 CLI 经 ACP 给出的当前模型与可选列表，用户可切换；密钥不进 Host / Vault / 管理站。
+17. **Given** 默认 OpenCode 已登录，**When** 打开管理对话，**Then** 面板显示该 CLI 经 ACP 给出的当前模型与可选列表，用户可切换；密钥不进 Host / Vault / 管理站。OpenCode 若先打出 INFO `created id=ses_`、模型列表稍后才到，控件仍须可见：先「正在获取…」，列表空则「暂无列表」，不得整块藏起。
 18. **Given** 输入框已启用，**When** 按 Enter，**Then** 发送当前内容；Shift+Enter 换行；IME 组字过程中的 Enter 不得发送。
 19. **Given** 模型回复含中文或路径，**When** Host 从 Windows ConPTY 读出并显示气泡，**Then** 正文不得夹杂 U+FFFD 替换符。
 
@@ -152,7 +152,7 @@
 - **FR-021**: 不提供专用冲突合并界面，也不提供「保留本地/远端/双方」流程（002 FR-039 的界面形态不改）。有内置管理 Agent 可用时，同步或部署暂停后必须把 Host 已知事实交给当前对话，由用户在对话里裁决，不得再把「把现场复制给外部 Agent」当作继续方式。主动维护、跨设备总览、多人账号、唤醒休眠电脑、管理站自行申请证书，均不纳入。
 - **FR-022**: 信息展示必须区分已知事实、待确认状态和执行结果。下列情形均不得表达为已经改库或已经同步成功：未检查、检查失败、管理命令行未登录模型、任务已生成但尚未执行、破坏性确认未完成、自动上传授权未打开、任务已被取消、工具调用失败。
 - **FR-023**: 用户必须能取消进行中的内置管理 Agent 任务。取消后该任务停止继续写库，不得表达为成功；已发出任务仍以发出时钉死的对象为准，取消只停止继续执行。
-- **FR-024**: 管理对话可用性：Windows 上打开对话不得闪出控制台（PATH 探测等普通子进程走 `CREATE_NO_WINDOW`；ACP 仍不得用 `CREATE_NO_WINDOW`/`CREATE_NEW_CONSOLE`，用隐藏宽 ConPTY + `SW_HIDE`）；「打开登录」仍为可见控制台。输入框 Enter 发送、Shift+Enter 换行，IME 组字（`isComposing` / `keyCode === 229`）不得误发。已登录后须展示并允许选择当前 CLI 经 ACP 提供的模型。从 ConPTY 读出的对话正文须拼接不完整 UTF-8，不得 `from_utf8_lossy` 插入 U+FFFD。
+- **FR-024**: 管理对话可用性：Windows 上打开对话不得闪出控制台（PATH 探测等普通子进程走 `CREATE_NO_WINDOW`；ACP 仍不得用 `CREATE_NO_WINDOW`/`CREATE_NEW_CONSOLE`，用隐藏宽 ConPTY + `SW_HIDE`）；「打开登录」仍为可见控制台。输入框 Enter 发送、Shift+Enter 换行，IME 组字（`isComposing` / `keyCode === 229`）不得误发。已登录后须展示并允许选择当前 CLI 经 ACP 提供的模型；Host 须把迟到的 `session/new` JSON（含 `configOptions` / 分组 `options`）合并进列表，不得用 INFO-only 的 `sessionId` 把已解析列表覆盖成空。列表未到或为空时，对话面板仍显示「模型」控件（正在获取 / 暂无列表 / 错误），不得因 `models.length === 0` 隐藏。从 ConPTY 读出的对话正文须拼接不完整 UTF-8，不得 `from_utf8_lossy` 插入 U+FFFD。
 
 ### Key Entities
 

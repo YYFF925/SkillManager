@@ -246,7 +246,7 @@ it("lists OpenCode models and applies a selection", async () => {
     return { messages: [] };
   });
   render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
-  const select = await screen.findByLabelText("当前模型");
+  const select = await screen.findByRole("combobox", { name: "当前模型" });
   expect((select as HTMLSelectElement).value).toBe("opencode/gpt-5");
   fireEvent.change(select, { target: { value: "opencode/claude-sonnet-4" } });
   await waitFor(() =>
@@ -255,6 +255,58 @@ it("lists OpenCode models and applies a selection", async () => {
       modelId: "opencode/claude-sonnet-4",
     }),
   );
+});
+
+it("keeps the model control visible while the list is loading or empty", async () => {
+  let finish: (value: unknown) => void = () => undefined;
+  const pending = new Promise((resolve) => {
+    finish = resolve;
+  });
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    if (command === "agent_models_get") {
+      return pending;
+    }
+    return { messages: [] };
+  });
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  await waitFor(() => expect(screen.getByPlaceholderText(/完善中文注释/)).toBeEnabled());
+  expect(screen.getByText("正在获取…")).toBeTruthy();
+  expect(screen.queryByRole("combobox", { name: "当前模型" })).toBeNull();
+  finish({ currentModelId: null, models: [] });
+  expect(await screen.findByText("暂无列表")).toBeTruthy();
+});
+
+it("shows a model-list error instead of hiding the control", async () => {
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    if (command === "agent_models_get") {
+      throw new Error("agent_models_get超时（30s），请检查本机 Host 是否在线。");
+    }
+    return { messages: [] };
+  });
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  expect(await screen.findByText(/agent_models_get超时/)).toBeTruthy();
+  expect(screen.getByText("模型")).toBeTruthy();
+  expect(screen.queryByRole("combobox", { name: "当前模型" })).toBeNull();
 });
 
 it("walks install then login before enabling send", async () => {

@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -565,7 +566,22 @@ pub fn list_models(runtime: &HostRuntime, body: Value) -> Result<Value, String> 
         &session_id,
         &cancel,
     ) {
-        Ok(_) => Ok(acp::session_models_view(&session_id)),
+        Ok(_) => {
+            let view = acp::session_models_view(&session_id);
+            let empty = view
+                .get("models")
+                .and_then(Value::as_array)
+                .map(|rows| rows.is_empty())
+                .unwrap_or(true);
+            if empty {
+                Ok(acp::refresh_session_models(
+                    &session_id,
+                    Duration::from_secs(8),
+                ))
+            } else {
+                Ok(view)
+            }
+        }
         Err(err) if looks_like_auth_text(&err) => {
             let mut payload = empty_models();
             payload["needsLogin"] = json!(true);

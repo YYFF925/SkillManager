@@ -1349,6 +1349,7 @@ fn request(
             return Err("cancelled".to_string());
         }
         let msg = read_msg(proc, until)?;
+        merge_models(&mut proc.models, parse_session_models(&msg));
         if is_echoed_client_request(&msg) || is_unsolicited_rpc_error(&msg, id) {
             continue;
         }
@@ -1561,17 +1562,8 @@ fn parse_session_models(value: &Value) -> SessionModels {
                     models.current_id = Some(current.to_string());
                 }
             }
-            if let Some(choices) = opt.get("options").and_then(Value::as_array) {
-                for choice in choices {
-                    push_model_choice(
-                        &mut models.available,
-                        choice
-                            .get("value")
-                            .or_else(|| choice.get("id"))
-                            .and_then(Value::as_str),
-                        choice.get("name").and_then(Value::as_str),
-                    );
-                }
+            if let Some(choices) = opt.get("options") {
+                collect_select_options(choices, &mut models.available);
             }
         }
     }
@@ -1579,6 +1571,37 @@ fn parse_session_models(value: &Value) -> SessionModels {
         models.current_id = models.available.first().map(|item| item.id.clone());
     }
     models
+}
+
+fn collect_select_options(value: &Value, out: &mut Vec<ModelChoice>) {
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                if let Some(nested) = item.get("options") {
+                    collect_select_options(nested, out);
+                    continue;
+                }
+                push_model_choice(
+                    out,
+                    item.get("value")
+                        .or_else(|| item.get("id"))
+                        .or_else(|| item.get("modelId"))
+                        .or_else(|| item.get("model_id"))
+                        .and_then(Value::as_str),
+                    item.get("name").and_then(Value::as_str),
+                );
+            }
+        }
+        Value::Object(map) => {
+            if let Some(groups) = map.get("groups") {
+                collect_select_options(groups, out);
+            }
+            if let Some(opts) = map.get("options") {
+                collect_select_options(opts, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn push_model_choice(out: &mut Vec<ModelChoice>, id: Option<&str>, name: Option<&str>) {
@@ -1607,8 +1630,8 @@ fn models_json(models: &SessionModels) -> Value {
     })
 }
 
-fn enrich_session_models(proc: &mut AcpProc, models: &mut SessionModels, wait: Duration) {
-    if !models.available.is_empty() {
+fn enrich_session_models(proc: &mut AcpProc, wait: Duration) {
+    if !proc.models.available.is_empty() {
         return;
     }
     let until = Instant::now() + wait;
@@ -1620,9 +1643,9 @@ fn enrich_session_models(proc: &mut AcpProc, models: &mut SessionModels, wait: D
                 }
                 ingest_stdout(proc, &chunk);
                 while let Some(value) = proc.pending_json.pop_front() {
-                    merge_models(models, parse_session_models(&value));
+                    merge_models(&mut proc.models, parse_session_models(&value));
                 }
-                if !models.available.is_empty() {
+                if !proc.models.available.is_empty() {
                     return;
                 }
             }
@@ -1947,7 +1970,7 @@ pub(crate) fn ensure_session(
         Some(host_session),
         None,
     );
-    let (acp_session, mut models) = match new_session {
+    let (acp_session, models) = match new_session {
         Ok(value) => (
             value
                 .get("sessionId")
@@ -1961,8 +1984,9 @@ pub(crate) fn ensure_session(
             return Err(err);
         }
     };
-    enrich_session_models(&mut proc, &mut models, Duration::from_millis(1200));
-    proc.models = models;
+    merge_models(&mut proc.models, models);
+    // OpenCode 先打 INFO `created id=ses_`，configOptions 要等 loadSessionMode 列完模型才写 JSON。
+    enrich_session_models(&mut proc, Duration::from_secs(8));
     *guard = Some(LiveAcp {
         proc,
         acp_session_id: acp_session,
@@ -1982,6 +2006,21 @@ pub(crate) fn session_models_view(host_session: &str) -> Value {
     };
     match guard.as_ref() {
         Some(live) => models_json(&live.proc.models),
+        None => models_json(&SessionModels::default()),
+    }
+}
+
+/// 会话已建立但列表仍空时，再排一会迟到的 session/new JSON。
+pub(crate) fn refresh_session_models(host_session: &str, wait: Duration) -> Value {
+    let slot = session_slot(host_session);
+    let Ok(mut guard) = slot.lock() else {
+        return models_json(&SessionModels::default());
+    };
+    match guard.as_mut() {
+        Some(live) => {
+            enrich_session_models(&mut live.proc, wait);
+            models_json(&live.proc.models)
+        }
         None => models_json(&SessionModels::default()),
     }
 }
@@ -2846,5 +2885,55 @@ mod tests {
         let view = models_json(&models);
         assert_eq!(view["currentModelId"], "opencode/gpt-5");
         assert_eq!(view["models"][0]["name"], "GPT-5");
+    }
+
+    #[test]
+    fn parse_session_models_from_grouped_config_options() {
+        let value = json!({
+            "result": {
+                "sessionId": "ses_grouped",
+                "configOptions": [{
+                    "id": "model",
+                    "category": "model",
+                    "currentValue": "opencode/gpt-5",
+                    "options": {
+                        "type": "grouped",
+                        "groups": [{
+                            "id": "opencode",
+                            "name": "OpenCode",
+                            "options": [
+                                { "value": "opencode/gpt-5", "name": "GPT-5" },
+                                { "value": "opencode/claude-sonnet-4", "name": "Claude Sonnet 4" }
+                            ]
+                        }]
+                    }
+                }]
+            }
+        });
+        let models = parse_session_models(&value);
+        assert_eq!(models.current_id.as_deref(), Some("opencode/gpt-5"));
+        assert_eq!(models.available.len(), 2);
+        assert_eq!(models.available[1].id, "opencode/claude-sonnet-4");
+    }
+
+    #[test]
+    fn parse_session_models_ignores_info_only_session_id() {
+        let models = parse_session_models(&json!({ "sessionId": "ses_log_only" }));
+        assert!(models.available.is_empty());
+        assert_eq!(models.current_id, None);
+    }
+
+    #[test]
+    fn merge_models_does_not_wipe_with_info_only() {
+        let mut dst = SessionModels {
+            current_id: Some("opencode/gpt-5".into()),
+            available: vec![ModelChoice {
+                id: "opencode/gpt-5".into(),
+                name: "GPT-5".into(),
+            }],
+        };
+        merge_models(&mut dst, parse_session_models(&json!({ "sessionId": "ses_log_only" })));
+        assert_eq!(dst.available.len(), 1);
+        assert_eq!(dst.current_id.as_deref(), Some("opencode/gpt-5"));
     }
 }

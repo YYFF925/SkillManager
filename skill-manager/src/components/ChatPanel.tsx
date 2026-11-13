@@ -75,6 +75,8 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
   const [models, setModels] = useState<AgentModel[]>([]);
   const [currentModelId, setCurrentModelId] = useState<string | null>(null);
   const [modelBusy, setModelBusy] = useState(false);
+  const [modelStatus, setModelStatus] = useState<"idle" | "loading" | "empty" | "error">("idle");
+  const [modelError, setModelError] = useState<string | null>(null);
 
   useEffect(() => {
     sessionStorage.setItem("sm-agent-session", sessionId);
@@ -136,10 +138,14 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
       if (!open || needsInstall || needsLogin) {
         setModels([]);
         setCurrentModelId(null);
+        setModelStatus("idle");
+        setModelError(null);
       }
       return;
     }
     let cancelled = false;
+    setModelStatus("loading");
+    setModelError(null);
     void getTransport()
       .invoke<AgentModels>("agent_models_get", { sessionId })
       .then((result) => {
@@ -147,10 +153,13 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
         const rows = (result.models ?? []).filter((item) => item.id);
         setModels(rows);
         setCurrentModelId(result.currentModelId ?? rows[0]?.id ?? null);
+        setModelStatus(rows.length > 0 ? "idle" : "empty");
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
         setModels([]);
+        setModelStatus("error");
+        setModelError(err instanceof Error ? err.message : String(err));
       });
     return () => {
       cancelled = true;
@@ -355,22 +364,32 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
           <p className="text-[11px] text-muted">{viewLabel(view)}</p>
         </div>
         <div className="chat-panel-head-actions flex items-center gap-2">
-          {models.length > 0 && (
+          {canSend && (
             <label className="chat-model flex items-center gap-1.5 text-[11px] text-muted">
               <span>模型</span>
-              <select
-                className="max-w-[140px] rounded-md border border-line bg-app px-1.5 py-0.5 text-[11px] text-ink-2"
-                value={currentModelId ?? models[0]?.id ?? ""}
-                disabled={busy || modelBusy}
-                aria-label="当前模型"
-                onChange={(event) => void changeModel(event.target.value)}
-              >
-                {models.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name || model.id}
-                  </option>
-                ))}
-              </select>
+              {models.length > 0 ? (
+                <select
+                  className="max-w-[140px] rounded-md border border-line bg-app px-1.5 py-0.5 text-[11px] text-ink-2"
+                  value={currentModelId ?? models[0]?.id ?? ""}
+                  disabled={busy || modelBusy}
+                  aria-label="当前模型"
+                  onChange={(event) => void changeModel(event.target.value)}
+                >
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name || model.id}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="chat-model-status max-w-[140px] truncate" aria-label="当前模型">
+                  {modelStatus === "error"
+                    ? modelError || "无法列出"
+                    : modelStatus === "empty"
+                      ? "暂无列表"
+                      : "正在获取…"}
+                </span>
+              )}
             </label>
           )}
           <button type="button" className="text-[12px] text-muted" onClick={onClose}>
