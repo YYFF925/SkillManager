@@ -56,18 +56,28 @@ skill-manager --state-dir <本机状态目录> host pair --station <管理站 UR
 
 ## 4. 用 Docker 跑管理站
 
-第一版**没有**官方镜像，也不把 Docker 当成唯一发布形态。只有管理站适合进容器；Host 仍装在各机系统里。
+只有管理站适合进容器；Host 仍装在各机系统里。Docker 不是唯一发布形态。
 
-仓库里有一份从源码构建的例子：
-
-- 镜像：[examples/Dockerfile.station](examples/Dockerfile.station)
-- 编排：[examples/docker-compose.station.yml](examples/docker-compose.station.yml)
-
-在仓库根目录：
+GitHub Actions 在推送 `v*` 或手动触发时，把 **linux/amd64** 镜像存到 GitHub Container Registry：
 
 ```text
-docker compose -f docs/user/examples/docker-compose.station.yml up --build
+ghcr.io/yyff925/skill-manager-station:latest
+ghcr.io/yyff925/skill-manager-station:<版本号>
 ```
+
+公开仓库里第一次推送的 Package 可能是私有的：打开仓库 → Packages → `skill-manager-station` → Package settings → 改成 Public，之后才能不登录拉取。
+
+```text
+docker pull ghcr.io/yyff925/skill-manager-station:latest
+```
+
+编排文件：[examples/docker-compose.station.yml](examples/docker-compose.station.yml)。在仓库根目录：
+
+```text
+docker compose -f docs/user/examples/docker-compose.station.yml up
+```
+
+要在本机从源码重编，同一命令加 `--build`。Dockerfile：[examples/Dockerfile.station](examples/Dockerfile.station)。
 
 容器监听 `8787`。先创建管理员（密码至少 8 位），把返回的 TOTP 密钥和恢复码存好：
 

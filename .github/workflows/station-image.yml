@@ -1,0 +1,61 @@
+name: Station image
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - main
+    paths:
+      - "docs/user/examples/Dockerfile.station"
+      - "docs/user/examples/docker-compose.station.yml"
+      - ".github/workflows/station-image.yml"
+      - ".dockerignore"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: station-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image name
+        id: image
+        run: |
+          owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "name=ghcr.io/${owner}/skill-manager-station" >> "$GITHUB_OUTPUT"
+          ver=$(sed -n 's/^version = "\([0-9][0-9.]*\)"/\1/p' skill-manager/Cargo.toml | head -1)
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docs/user/examples/Dockerfile.station
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.version }}
+            ${{ steps.image.outputs.name }}:latest
+          labels: |
+            org.opencontainers.image.title=Skill Manager station
+            org.opencontainers.image.description=统一管理站（不含 Host）
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.image.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64

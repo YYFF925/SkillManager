@@ -1,10 +1,12 @@
 # 只跑统一管理站。各机 Host 仍装在系统里，不要加进这个 compose。
 # 用法（仓库根目录）：
-#   docker compose -f docs/user/examples/docker-compose.station.yml up --build
+#   docker compose -f docs/user/examples/docker-compose.station.yml up
+# 本地重编：同一命令加 --build
 # 前面再加你自己的 HTTPS 反代。
 
 services:
   station:
+    image: ghcr.io/yyff925/skill-manager-station:latest
     build:
       context: ../../..
       dockerfile: docs/user/examples/Dockerfile.station

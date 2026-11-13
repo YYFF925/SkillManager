@@ -1,0 +1,10 @@
+.git
+.github
+.cursor
+.agents
+.release
+release
+**/node_modules
+**/target
+**/dist
+**/.DS_Store

@@ -13,7 +13,7 @@
 
 启动后检查更新，确认后再安装。CLI 随安装包交付。
 
-使用说明（给使用者，不是开发文档）：[docs/user/](docs/user/README.md)。管理站可用 Docker，见其中 [管理站与 Host](docs/user/station.md)。
+使用说明（给使用者，不是开发文档）：[docs/user/](docs/user/README.md)。管理站镜像 `ghcr.io/yyff925/skill-manager-station`，用法见 [管理站与 Host](docs/user/station.md)。
 
 ## 开发
 

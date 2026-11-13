@@ -1,6 +1,7 @@
-# 管理站示例镜像：从本仓库 skill-manager/ 构建 CLI 与前端。
-# 在仓库根目录：docker compose -f docs/user/examples/docker-compose.station.yml up --build
-# 不是官方发布物，也不用来跑 Host。
+# 管理站镜像：从本仓库 skill-manager/ 构建 CLI 与前端。
+# GitHub Actions 推送到 ghcr.io/yyff925/skill-manager-station
+# 本地：docker compose -f docs/user/examples/docker-compose.station.yml up --build
+# 不要用来跑 Host。
 
 FROM node:22-bookworm AS web
 WORKDIR /web
