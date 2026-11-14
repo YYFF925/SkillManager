@@ -446,12 +446,86 @@ fn npm_install_command(dest: &Path, package: &str) -> Command {
     }
     #[cfg(not(windows))]
     {
-        let mut cmd = Command::new("npm");
+        let mut cmd = match resolve_npm_spawn() {
+            Some((npm, bin_dir)) => {
+                let mut cmd = Command::new(&npm);
+                // npm 的 shebang 是 `#!/usr/bin/env node`，npm 所在目录里的配套
+                // node 也必须能被 env 解析，接到子进程 PATH 最前。
+                let old = std::env::var_os("PATH").unwrap_or_default();
+                if let Ok(paths) =
+                    std::env::join_paths(std::iter::once(bin_dir).chain(std::env::split_paths(&old)))
+                {
+                    cmd.env("PATH", paths);
+                }
+                cmd
+            }
+            None => Command::new("npm"),
+        };
         cmd.args(["install", "--omit=dev", "--prefix"])
             .arg(dest)
             .arg(package);
         cmd
     }
+}
+
+/// macOS/Linux GUI 进程 PATH 只有系统目录（/usr/bin 等），fnm/nvm/Homebrew 装的
+/// npm 看不见，`Command::new("npm")` 直接 ENOENT（os error 2）。按常见安装位置
+/// 探测 npm 绝对路径；探测不到回退裸 `npm`，终端 CLI 场景 PATH 通常可用，行为不变。
+#[cfg(not(windows))]
+fn resolve_npm_spawn() -> Option<(PathBuf, PathBuf)> {
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin"] {
+        let dir = PathBuf::from(dir);
+        if dir.join("npm").exists() {
+            return Some((dir.join("npm"), dir));
+        }
+    }
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let mut bins = Vec::new();
+    for base in [
+        home.join(".local/share/fnm/node-versions"),
+        home.join(".fnm/node-versions"),
+        home.join(".nvm/versions/node"),
+    ] {
+        bins.extend(scan_node_bins(&base));
+    }
+    bins.into_iter()
+        .max_by_key(|(_, version)| *version)
+        .map(|(bin, _)| (bin.join("npm"), bin))
+}
+
+/// 扫描版本管理器的版本目录（如 `node-versions/<v>/…`），返回含 npm 的 bin 目录
+/// 与解析出的版本。fnm 结构是 `installation/bin`，兼容直接 `bin`（nvm）；无版本号
+/// 的目录忽略。
+#[cfg(not(windows))]
+fn scan_node_bins(base: &Path) -> Vec<(PathBuf, (u64, u64, u64))> {
+    let Ok(entries) = std::fs::read_dir(base) else {
+        return Vec::new();
+    };
+    let mut bins = Vec::new();
+    for entry in entries.flatten() {
+        let Some(version) = parse_node_version(&entry.file_name().to_string_lossy()) else {
+            continue;
+        };
+        let root = entry.path();
+        for bin in [root.join("installation").join("bin"), root.join("bin")] {
+            if bin.join("npm").exists() {
+                bins.push((bin, version));
+                break;
+            }
+        }
+    }
+    bins
+}
+
+/// 目录名 `v24.21.0` → `(24, 21, 0)`，数字比较保证 v10 > v9；无法解析的目录忽略。
+#[cfg(not(windows))]
+fn parse_node_version(name: &str) -> Option<(u64, u64, u64)> {
+    let rest = name.strip_prefix('v')?;
+    let mut parts = rest.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next().unwrap_or("0").parse().ok()?;
+    let patch = parts.next().unwrap_or("0").parse().ok()?;
+    Some((major, minor, patch))
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -982,10 +1056,57 @@ mod tests {
         }
         #[cfg(not(windows))]
         {
-            assert_eq!(program, "npm");
+            // 探测到 fnm/nvm/Homebrew 的 npm 时是绝对路径，否则回退裸 "npm"。
+            assert!(
+                program == "npm" || program.ends_with("/npm"),
+                "resolved npm (absolute or PATH fallback), got {program}"
+            );
             assert!(args.contains(&"install".to_string()));
             assert!(args.contains(&"opencode-ai".to_string()));
         }
+    }
+
+    #[test]
+    fn node_version_dirs_parse_and_pick_newest() {
+        assert_eq!(parse_node_version("v24.21.0"), Some((24, 21, 0)));
+        assert_eq!(parse_node_version("v10"), Some((10, 0, 0)));
+        assert_eq!(parse_node_version("v9.0.1"), Some((9, 0, 1)));
+        assert_eq!(parse_node_version("garbage"), None);
+        assert!(
+            parse_node_version("v9") < parse_node_version("v10"),
+            "numeric compare, not lexicographic"
+        );
+
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        for name in ["v9.0.1", "v24.21.0", "garbage"] {
+            let bin = base.join(name).join("installation/bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            std::fs::write(bin.join("npm"), "").unwrap();
+        }
+        // nvm 直连结构 `versions/node/<v>/bin` 也兼容。
+        let nvm_bin = base.join("v20.11.1").join("bin");
+        std::fs::create_dir_all(&nvm_bin).unwrap();
+        std::fs::write(nvm_bin.join("npm"), "").unwrap();
+
+        let bins = scan_node_bins(base);
+        let (newest, version) = bins
+            .iter()
+            .max_by_key(|(_, version)| *version)
+            .expect("fnm/nvm version dirs must be scanned");
+        assert_eq!(*version, (24, 21, 0), "numeric pick, v24.21.0 > v9.0.1/v20.11.1");
+        assert!(
+            newest.ends_with("installation/bin"),
+            "fnm layout, got {newest:?}"
+        );
+        assert!(
+            bins.iter().any(|(bin, _)| bin == &nvm_bin),
+            "nvm layout bin/ scanned too"
+        );
+        assert!(
+            !bins.iter().any(|(bin, _)| bin.starts_with(base.join("garbage"))),
+            "dirs without a parseable version are ignored"
+        );
     }
 
     #[test]
