@@ -56,30 +56,68 @@ skill-manager --state-dir <本机状态目录> host pair --station <管理站 UR
 
 ## 4. 用 Docker 跑管理站
 
-只有管理站适合进容器；Host 仍装在各机系统里。Docker 不是唯一发布形态。
+只有管理站适合进容器；Host 仍装在各机系统里，**不要**写进这份 Compose。Docker 不是唯一发布形态，不用容器时用上面第二节即可。
 
-GitHub Actions 在推送 `v*` 或手动触发时，把 **linux/amd64** 镜像存到 GitHub Container Registry：
+当前公开镜像是 **linux/amd64**：
 
 ```text
 ghcr.io/yyff925/skill-manager-station:latest
 ghcr.io/yyff925/skill-manager-station:<版本号>
 ```
 
-公开仓库里第一次推送的 Package 可能是私有的：打开仓库 → Packages → `skill-manager-station` → Package settings → 改成 Public，之后才能不登录拉取。
+x86_64 的 NAS、云主机、家里的小主机可以直接拉，无需登录 GitHub。ARM 机器（常见 ARM NAS、树莓派）现在跑不了这份镜像。
 
-```text
-docker pull ghcr.io/yyff925/skill-manager-station:latest
+### 4.1 推荐 Compose
+
+在一台已装 Docker Compose 的 Linux 上建一个空目录，把下面存成 `docker-compose.yml`（仓库里同一份：[examples/docker-compose.station.yml](examples/docker-compose.station.yml)）：
+
+```yaml
+services:
+  station:
+    image: ghcr.io/yyff925/skill-manager-station:latest
+    container_name: skill-manager-station
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - station-data:/data
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  station-data:
 ```
 
-编排文件：[examples/docker-compose.station.yml](examples/docker-compose.station.yml)。在仓库根目录：
+要点：
+
+- 只映射 **本机回环** `127.0.0.1:8787`，不把未加密端口暴露到局域网或公网。
+- 管理员、对接设备写在 named volume `station-data`（容器内 `/data`）。重建容器不会丢；删掉这个 volume 会丢掉账号和已对接设备。
+- 开机后 Docker 会按 `unless-stopped` 拉起。你自己 `docker compose stop` 过的，开机不会擅自再开。
+
+也可以不手抄，直接下载：
 
 ```text
-docker compose -f docs/user/examples/docker-compose.station.yml up
+mkdir -p skill-manager-station && cd skill-manager-station
+curl -fsSL -o docker-compose.yml \
+  https://raw.githubusercontent.com/YYFF925/SkillManager/main/docs/user/examples/docker-compose.station.yml
 ```
 
-要在本机从源码重编，同一命令加 `--build`。Dockerfile：[examples/Dockerfile.station](examples/Dockerfile.station)。
+### 4.2 安装步骤
 
-容器监听 `8787`。先创建管理员（密码至少 8 位），把返回的 TOTP 密钥和恢复码存好：
+1. 启动：
+
+```text
+docker compose up -d
+docker compose logs -f
+```
+
+日志里出现「正在监听」即可。第一次会提示还没有管理员，这是正常的。
+
+2. **在这台机器上**创建唯一管理员（密码至少 8 位）。把返回的 `totpSecret`、`otpauth` 和 `recoveryCodes` 存好，只出现这一次：
 
 ```text
 curl -sS -X POST http://127.0.0.1:8787/auth/setup \
@@ -87,8 +125,59 @@ curl -sS -X POST http://127.0.0.1:8787/auth/setup \
   -d "{\"username\":\"admin\",\"password\":\"你的密码\"}"
 ```
 
-然后用 Caddy / nginx 等把公网 HTTPS 反代到本机 `8787`。不要把未加密的 8787 直接暴露到公网。
+用手机 Authenticator 扫 `otpauth` 或手动录入密钥。不要把这段响应发到网上。
 
-管理员数据在 Docker volume `station-data` 里。重建容器不会丢掉账号，删 volume 会。
+3. 用你已有的 HTTPS 反代指到本机 `127.0.0.1:8787`。管理站自己不申请证书。Caddy 示例：
 
-也可以不用这份 Dockerfile：在你已有 Linux 上装好 `skill-manager` CLI 和前端静态文件（`SKILL_MANAGER_WEB` 指到 `dist/`），自己写一个只跑 `station serve --listen 0.0.0.0:8787` 的容器即可。
+```text
+skill.example.com {
+    reverse_proxy 127.0.0.1:8787
+}
+```
+
+群晖 / 威联通的「反向代理」同样指到这台机器的 `127.0.0.1:8787`。若反代也跑在容器里：把反代和管理站放进同一 Compose 网络，让反代访问服务名 `station:8787`，不要把 `8787` 映射成 `0.0.0.0`。
+
+4. 浏览器打开你的 HTTPS 地址，用刚才的用户名、密码和一次性密码登录。之后按第三节把各机 Host 对接过来；`host pair` 里的管理站 URL 填这个 **HTTPS 公网地址**，不要填容器里的 `127.0.0.1`。
+
+### 4.3 日常维护
+
+```text
+# 看日志
+docker compose logs -f --tail=100
+
+# 跟着发版拉新镜像（不删 volume，管理员还在）
+docker compose pull
+docker compose up -d
+
+# 停
+docker compose stop
+```
+
+备份：备份 Docker volume `station-data`（或你的 Compose 项目名下的 `*_station-data`）。里面是管理站自己的库，**不含** SkillManagerVault。
+
+重置管理员（恢复码也丢了时）：只能动跑管理站的这台机器。删 volume 会清掉管理员**和**已对接设备，然后重新走 4.2 的 setup，各机需要重新 `host pair`：
+
+```text
+docker compose down
+docker volume rm skill-manager-station_station-data
+docker compose up -d
+```
+
+volume 名字以 `docker volume ls | grep station-data` 为准。
+
+改登录保持时长（秒，最小 60）：
+
+```text
+docker compose exec station skill-manager station session-ttl --data-dir /data --seconds 86400
+```
+
+### 4.4 不想用这份镜像时
+
+在仓库根目录从源码重编：
+
+```text
+docker build -f docs/user/examples/Dockerfile.station \
+  -t ghcr.io/yyff925/skill-manager-station:latest .
+```
+
+或在已有 Linux 上安装 `skill-manager` CLI，把 `SKILL_MANAGER_WEB` 指到前端 `dist/`，自己写一个只跑 `station serve --listen 0.0.0.0:8787 --data-dir /data` 的容器。

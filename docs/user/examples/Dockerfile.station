@@ -1,6 +1,8 @@
 # 管理站镜像：从本仓库 skill-manager/ 构建 CLI 与前端。
 # GitHub Actions 推送到 ghcr.io/yyff925/skill-manager-station
-# 本地：docker compose -f docs/user/examples/docker-compose.station.yml up --build
+# 日常请拉公开镜像，见 docs/user/station.md 与 docker-compose.station.yml。
+# 本机重编（仓库根目录）：
+#   docker build -f docs/user/examples/Dockerfile.station -t ghcr.io/yyff925/skill-manager-station:latest .
 # 不要用来跑 Host。
 
 FROM node:22-bookworm AS web

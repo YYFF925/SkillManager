@@ -8,6 +8,6 @@
 |---|---|
 | 在电脑上安装并开始用 | [安装与日常使用](install.md) |
 | 看清每个界面是干什么的 | [功能说明](features.md) |
-| 远程管多台机器、或把管理站放进 Docker | [管理站与 Host](station.md)（镜像在 `ghcr.io/yyff925/skill-manager-station`） |
+| 远程管多台机器、或用 Docker Compose 跑管理站 | [管理站与 Host](station.md)（推荐配置在第四节） |
 
 界面只有简体中文。本仓库公开是为了桌面应用自动更新，不接受外部贡献。
