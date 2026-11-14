@@ -116,26 +116,15 @@ fn read_msg(stdout: &mut BufReader<impl Read>) -> Result<Value, String> {
     if trimmed.is_empty() {
         return read_msg(stdout);
     }
-    if let Some(rest) = trimmed.strip_prefix("Content-Length:") {
-        let len: usize = rest
-            .trim()
-            .parse()
-            .map_err(|_| "无效的 Content-Length".to_string())?;
-        let mut blank = String::new();
-        stdout
-            .read_line(&mut blank)
-            .map_err(|err| err.to_string())?;
-        let mut buf = vec![0u8; len];
-        stdout.read_exact(&mut buf).map_err(|err| err.to_string())?;
-        return serde_json::from_slice(&buf).map_err(|err| err.to_string());
-    }
     serde_json::from_str(trimmed).map_err(|err| err.to_string())
 }
 
 fn write_msg(out: &mut impl Write, value: &Value) -> Result<(), String> {
-    let body = serde_json::to_vec(value).map_err(|err| err.to_string())?;
-    write!(out, "Content-Length: {}\r\n\r\n", body.len()).map_err(|err| err.to_string())?;
-    out.write_all(&body).map_err(|err| err.to_string())?;
+    // MCP stdio 传输是换行分隔 JSON。之前写 LSP 风格 Content-Length 帧，OpenCode 的
+    // stdio client 读不懂，把它判 server unavailable 拖满 30s 才放行 session/new 的
+    // result——configOptions（模型列表）一起被堵住，UI 只能显示「暂无列表」。
+    let line = serde_json::to_string(value).map_err(|err| err.to_string())?;
+    writeln!(out, "{line}").map_err(|err| err.to_string())?;
     out.flush().map_err(|err| err.to_string())
 }
 
@@ -158,6 +147,21 @@ mod tests {
                 .any(|t| t["name"] == "skill_list" && t["inputSchema"]["type"] == "object")
         );
         assert!(tools.iter().any(|t| t["name"] == "skill_set"));
+    }
+
+    #[test]
+    fn stdio_frames_are_newline_delimited_json() {
+        let mut buf = Vec::new();
+        write_msg(&mut buf, &json!({ "jsonrpc": "2.0", "id": 1, "result": {} })).unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        assert!(
+            !text.contains("Content-Length"),
+            "LSP framing breaks OpenCode's stdio client: {text:?}"
+        );
+        assert!(text.ends_with("}\n"), "one JSON object per line: {text:?}");
+        let mut reader = BufReader::new(text.as_bytes());
+        let parsed = read_msg(&mut reader).unwrap();
+        assert_eq!(parsed["id"], 1);
     }
 
     #[test]
