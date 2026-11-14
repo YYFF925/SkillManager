@@ -369,14 +369,23 @@ mod tests {
             .unwrap()
             .map(std::result::Result::unwrap)
             .collect();
-        // 本机状态表固定为这七张；技能清单、预设、工具资料等共享资产不入库。
+        // 本机状态表固定为这十二张（003 入口层加 host_identity / operation_plans /
+        // agent_sessions / agent_messages / agent_runtime，见 state/migrate.rs；
+        // sqlite_sequence 是 agent_messages 自增主键的 SQLite 伴随表）；
+        // 技能清单、预设、工具资料等共享资产不入库。
         assert_eq!(
             names,
             vec![
+                "agent_messages",
+                "agent_runtime",
+                "agent_sessions",
                 "agents",
                 "deployments",
                 "hermes_enables",
+                "host_identity",
+                "operation_plans",
                 "settings",
+                "sqlite_sequence",
                 "tool_checks",
                 "tool_installs",
                 "upstream_checks",
