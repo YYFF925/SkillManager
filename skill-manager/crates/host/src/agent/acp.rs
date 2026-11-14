@@ -1274,6 +1274,20 @@ fn recv_chunk(proc: &mut AcpProc, until: Instant) -> Result<String, String> {
                 if proc.child.wait_exit(Duration::ZERO).is_some() {
                     return Err(describe_cli_exit(proc));
                 }
+                // OpenCode 1.19.5 的 session/new 不在 stdout 刷 JSON result，`created
+                // id=ses_…` 只打在 stderr。200ms tick 时把 stderr 的 created 日志补进
+                // pending_json，命中立即返回；等满 until 会被看门狗杀进程，下一步
+                // broken pipe。不把 stderr 文本当 chunk 返回——ingest_stdout 会把它
+                // 回写 stderr，每 tick 累积一份，日志和缓冲都会翻倍增长。
+                let sid = proc
+                    .stderr
+                    .lock()
+                    .ok()
+                    .and_then(|text| session_id_from_created_log(&text));
+                if let Some(sid) = sid {
+                    proc.pending_json.push_back(json!({ "sessionId": sid }));
+                    return Ok(String::new());
+                }
                 continue;
             }
             Err(RecvTimeoutError::Disconnected) => return Err(describe_cli_exit(proc)),
@@ -1291,6 +1305,11 @@ fn read_msg(proc: &mut AcpProc, until: Instant) -> Result<Value, String> {
         }
         let chunk = recv_chunk(proc, until)?;
         if chunk.is_empty() {
+            // recv_chunk 的 stderr 补偿命中时以空 chunk 返回、消息已进 pending_json；
+            // 真正的 EOF（进程退出）没有遗留消息，维持原有退出报错。
+            if let Some(value) = proc.pending_json.pop_front() {
+                return Ok(value);
+            }
             return Err(describe_cli_exit(proc));
         }
         ingest_stdout(proc, &chunk);
@@ -1348,7 +1367,25 @@ fn request(
             );
             return Err("cancelled".to_string());
         }
-        let msg = read_msg(proc, until)?;
+        let msg = match read_msg(proc, until) {
+            Ok(msg) => msg,
+            Err(err) => {
+                // OpenCode 1.19.5 的 session/new 在 stdout 不刷 JSON result，只在 stderr
+                // 打 INFO `created id=ses_…`（GUI/serve 里日志都走 stderr）。T096 的补偿
+                // 只挂在 stdout 的 ingest_stdout，会话其实已建成却报「握手超时」。
+                if method == "session/new" {
+                    if let Some(sid) = proc
+                        .stderr
+                        .lock()
+                        .ok()
+                        .and_then(|text| session_id_from_created_log(&text))
+                    {
+                        return Ok(json!({ "sessionId": sid }));
+                    }
+                }
+                return Err(err);
+            }
+        };
         merge_models(&mut proc.models, parse_session_models(&msg));
         if is_echoed_client_request(&msg) || is_unsolicited_rpc_error(&msg, id) {
             continue;
@@ -2591,6 +2628,43 @@ mod tests {
             Some("ses_e30524520ffejRezFgcl2quFUa")
         );
         assert!(session_id_from_created_log("INFO  bootstrapping qa-vault-a").is_none());
+    }
+
+    #[test]
+    fn session_new_recovers_session_id_from_stderr_created_log() {
+        // OpenCode 1.19.5：session/new 的 JSON result 不上 stdout，`created id=ses_…`
+        // 只出现在 stderr。stdout 挂住（真管道）时 recv_chunk 的 200ms tick 必须从
+        // stderr 喂回补偿管道，否则等满看门狗阈值，进程被杀、下一步 broken pipe。
+        let mut child = Command::new("sleep")
+            .arg("5")
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let mut proc = acp_proc(
+            CliChild::Std(child),
+            Box::new(std::io::Cursor::new(Vec::new())),
+            Box::new(stdout),
+            Arc::new(Mutex::new(String::from(
+                "timestamp=2026-11-14T11:32:52.864Z level=INFO message=created id=ses_e262b11ffffe4Vx9hvEHbSjQLN slug=qa",
+            ))),
+            Arc::new(AtomicBool::new(false)),
+            Instant::now(),
+        );
+        let cancel = Arc::new(AtomicBool::new(false));
+        let payload = request(
+            &mut proc,
+            "session/new",
+            json!({ "cwd": "/tmp" }),
+            Instant::now() + Duration::from_millis(400),
+            &cancel,
+            None,
+            None,
+            None,
+        )
+        .expect("stderr created log must recover the session id");
+        assert_eq!(payload["sessionId"], "ses_e262b11ffffe4Vx9hvEHbSjQLN");
+        kill_child(&mut proc.child);
     }
 
     #[test]
