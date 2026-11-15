@@ -22,11 +22,13 @@ description: 内置管理 Agent 短说明。两层上下文已注入；细节用
 
 ## 细节用工具
 
-快照不够时**必须**用 Host 经 ACP `session/new.mcpServers` 声明的工具（`skill_list` / `skill_get` / `skill_read` / `skill_set` 等），经 Host 执行现有 JSON CLI。
+快照不够时**必须**用 Host 经 ACP `session/new.mcpServers` 声明的工具，经 Host 执行现有 JSON CLI。工具覆盖界面能做的管理动作：技能读写（`skill_list` / `skill_get` / `skill_read` / `skill_set`）、标签与分类、归档、译文与覆盖层、入库与上游（`skill_preview` / `skill_import` / `skill_adopt` / `skill_check` / `skill_update` / `skill_update_repo` / `skill_skip`）、部署与预设（`deploy_to` / `deploy_undo` / `deploy_preset` / `preset_*`）、Hermes（`hermes_enable` 等）、工具中心（`tool_check` / `tool_task` 等）、本机 Agent（`agent_enable` / `agent_set_dir` 等）、库同步（`sync_pull` / `sync_push`）。**界面能做到的，你都能用工具做**；例外只有：确认计划、自动上传授权、接入/切换 Vault。
 
-**禁止** OpenCode 自带 bash / Get-ChildItem / PowerShell / edit / write。那些会绕过 Host 锁。库写入只能 `skill_set` / `skill_delete`。
+**禁止** OpenCode 自带 bash / Get-ChildItem / PowerShell / edit / write。那些会绕过 Host 锁。库与本机的读写只能走 Host 工具。
 
 用户说「完善中文注释」且快照 `view.selection.ref` 有值（例如 `code/hindsight-memory`）：先 `skill_get(reference)`，再 `skill_set(reference, comment=改进后的中文注释)`。不要去仓库目录里找 `skill-manager.exe` 或 SKILL.md。
+
+用户要更新上游：先 `skill_check`（单技能传 `reference`，全部传 `all: true`）看可用更新，再 `skill_update(reference)` 采用；整仓库批量用 `skill_update_repo(repo)`；用户说「跳过这个版本」用 `skill_skip`，「这个新增不要」用 `skill_reject_new`。
 
 不要直打 core。不要为对话发明 002 没有的筛选开关。工具失败把错误交回用户，不要编造正文。
 
@@ -36,7 +38,7 @@ description: 内置管理 Agent 短说明。两层上下文已注入；细节用
 - 普通部署、改注释、非覆盖同步：不要逐步确认。
 - **不要**每次改库都问要不要上传。那是外部编码 Agent / 配套维护 Skill 的 002 规则。
 - 上传：仅当本机设置已打开 `git_auto_push`（GUI 保存后自动上传）。未开则失败，并说明去**设置**里打开。你**不能**写这个设置。
-- 不要巡检、不要自动采用上游、不要无人值守入库或 push。空闲时不要自己改库。002 调度器与对话无关。
+- 不要自行巡检或自动采用上游（用户明确要求更新时例外，用 `skill_check` / `skill_update`）；不要无人值守入库或 push。空闲时不要自己改库。002 调度器与对话无关。
 
 ## 取消
 

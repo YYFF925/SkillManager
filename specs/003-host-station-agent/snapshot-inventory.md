@@ -1,9 +1,9 @@
 # 内置管理 Agent 快照对照（core / GUI / 工具）
 
-**Date**: 2026-11-11 | 对照 [spec.md](spec.md) FR-015、[contracts/agent-bridge.md](contracts/agent-bridge.md)。  
+**Date**: 2026-11-11（2026-11-15 更新对话工具开放面，见 T100）| 对照 [spec.md](spec.md) FR-015、[contracts/agent-bridge.md](contracts/agent-bridge.md)。  
 原则：GUI 当时能回答的管理事实，对话里不必再由用户复述。举例不是穷尽清单；本表按 **当前** core JSON CLI、Host invoke 与 GUI 页面核对。
 
-本表**不宣称齐全**。只读事实均指向快照字段或 Agent 工具；写入类命令以 Host invoke / GUI / CLI 为准，仅部分对内置 Agent 开放（见命令表「对话工具」列）。
+本表**不宣称齐全**。只读事实均指向快照字段或 Agent 工具；写入类命令同样对内置 Agent 开放（FR-015「界面能做的管理动作 Agent 也能做」）。刻意不开放仅四类：`plans_confirm`（不能代替用户确认破坏性操作）、`settings_set_git_auto_push`（授权仅 GUI）、`vault_open`（切换整个库，路径来自界面选择器）、`agent_post_message` 等 Agent 运行时命令（对话基础设施自身）。
 
 快照由 `assemble_snapshot` 在发消息时从 **当前 Host 的 core** 组装：`global` 为摘要 + 计数 + 引用，`view` 按当前页补齐该页 GUI 已知对象。不含 `SKILL.md` / 指南 / 译文全文（正文走 `skill_read` / `hermes_read` / `agent_read_local`）。
 
@@ -16,22 +16,22 @@
 | `skill list` | 技能库列表、分类、标签候选 | `global.skills`；`view.pageObjects`（library-*） | `skill_list` |
 | `skill get` | 技能详情（资料、文件树、部署位置） | `view.opened`（有 skill ref；正文已省略） | `skill_get`；正文 `skill_read` / `skill_file_read` |
 | `skill read` | 详情阅读原文/译文 | 无正文 | `skill_read` |
-| `skill create/copy/import/adopt/preview` | 入库/自建对话框 | 无（动作） | 未开放；走 GUI/CLI |
-| `skill set` / `tag *` / `move` / `category rename` | 详情与批量编辑 | 结果反映在下次 `global.skills` | `skill_set`；tag/move 未开放 |
+| `skill create/copy/import/adopt/preview` | 入库/自建对话框 | 无（动作） | `skill_create`、`skill_copy`、`skill_import`、`skill_adopt`、`skill_preview`（+`skill_fetch_cancel`） |
+| `skill set` / `tag *` / `move` / `category rename` | 详情与批量编辑 | 结果反映在下次 `global.skills` | `skill_set`、`skill_tag_add/detach/rename/remove`、`skill_move`、`skill_category_rename` |
 | `skill delete` | 删除确认 | 确认计划 | `skill_delete`（须界面确认） |
-| `skill archive *` | 设置页归档 | `skill_archive_list` 工具 | `skill_archive_list`；写入未开放 |
-| `skill translation *` / `overlay *` | 详情译文/覆盖层 | 无正文 | `skill_translation_get`、`skill_overlay_list`、`skill_overlay_get`；写入未开放 |
-| `skill check` | 设置「立即检查」、技能库上游对话框 | 检查后：`global.pendingUpdates`、`global.newCandidates`、`global.failedChecks` | `environment_schedule_current` 读最近一次；检查动作走 GUI |
-| `skill update*` / `reject-new` / `skip*` | 上游对话框 | `global.newCandidates`、`skill_rejected` / `skill_skipped` | `skill_rejected`、`skill_skipped`；写入未开放 |
+| `skill archive *` | 设置页归档 | `skill_archive_list` 工具 | `skill_archive_list`、`skill_archive`、`skill_archive_restore`、`skill_archive_delete` |
+| `skill translation *` / `overlay *` | 详情译文/覆盖层 | 无正文 | `skill_translation_get/set/remove`、`skill_overlay_list/get/set/remove` |
+| `skill check` | 设置「立即检查」、技能库上游对话框 | 检查后：`global.pendingUpdates`、`global.newCandidates`、`global.failedChecks` | `skill_check`；`environment_schedule_current` 读最近一次 |
+| `skill update*` / `reject-new` / `skip*` | 上游对话框 | `global.newCandidates`、`skill_rejected` / `skill_skipped` | `skill_update`、`skill_update_repo`、`skill_reject_new`、`skill_skip`、`skill_unskip`、`skill_rejected`、`skill_skipped` |
 | `skill task` | 生成维护任务 | 无 | `skill_task` |
-| `deploy to/undo/sync/status` | 部署对话框、Agent 页暂停条 | `global.deployments`、`global.pausedDeployments`（含 `paused_local_change` + 路径 + 原因） | `deploy_status`、`deploy_to`、`deploy_sync`；undo 未开放 |
-| `preset *` | 预设页 / 侧栏 | `global.presets`；`view.pageObjects`（presets）；打开的预设 `view.opened` | `preset_list`、`preset_get`；写入未开放 |
-| `hermes profiles/list/read/enable/disable` | Hermes 页 | `global.hermes`；`view.pageObjects`（hermes） | `hermes_profiles`、`hermes_list`、`hermes_read`；启停未开放 |
-| `tool list/get/check` | 工具中心 | `global.tools`；`view.pageObjects`（tools） | `tool_list`、`tool_get`、`tool_skill_candidates`；check 走 GUI |
-| `sync pull/push/status/conflicts` | 顶栏同步、设置页 | `global.pullConflicts`（路径 + `git status` 原文）；设置页 `view.pageObjects.sync` | `sync_status`、`sync_conflicts`、`sync_push`（须已开自动上传） |
-| `agent list/detect/local-skills/read-local` | Agent 页 | `global.agents`；`view.pageObjects`（agents-*）；打开目标 `view.opened` | `agent_list`、`agent_local_skills`、`agent_read_local` |
-| `instruction get/set` | 设置里的指令编辑 | 无全文 | `instruction_get`；写入未开放 |
-| `settings get` / `diagnostics` / `capacity` | 设置页 | `view.pageObjects`（settings）；`global.lastCommandFailures`（错误原文） | `settings_get`、`environment_diagnostics`、`environment_capacity` |
+| `deploy to/undo/sync/status` | 部署对话框、Agent 页暂停条 | `global.deployments`、`global.pausedDeployments`（含 `paused_local_change` + 路径 + 原因） | `deploy_status`、`deploy_to`、`deploy_sync`、`deploy_undo`（discard 须界面确认） |
+| `preset *` | 预设页 / 侧栏 | `global.presets`；`view.pageObjects`（presets）；打开的预设 `view.opened` | `preset_list/get/create/delete/rename/set_icon/reorder/members_*`、`deploy_preset`、`deploy_undo_preset` |
+| `hermes profiles/list/read/enable/disable` | Hermes 页 | `global.hermes`；`view.pageObjects`（hermes） | `hermes_profiles`、`hermes_list`、`hermes_read`、`hermes_enable/disable/adopt` |
+| `tool list/get/check` | 工具中心 | `global.tools`；`view.pageObjects`（tools） | `tool_list`、`tool_get`、`tool_skill_candidates`、`tool_check`、`tool_task`、`tool_register/set/set_install/skill_link` |
+| `sync pull/push/status/conflicts` | 顶栏同步、设置页 | `global.pullConflicts`（路径 + `git status` 原文）；设置页 `view.pageObjects.sync` | `sync_pull`、`sync_status`、`sync_conflicts`、`sync_push`（须已开自动上传） |
+| `agent list/detect/local-skills/read-local` | Agent 页 | `global.agents`；`view.pageObjects`（agents-*）；打开目标 `view.opened` | `agent_list`、`agent_detect`、`agent_enable/disable/reorder/set_dir/reset_dir`、`agent_local_skills`、`agent_read_local`、`agent_delete_local` |
+| `instruction get/set` | 设置里的指令编辑 | 无全文 | `instruction_get`、`instruction_set` |
+| `settings get` / `diagnostics` / `capacity` | 设置页 | `view.pageObjects`（settings）；`global.lastCommandFailures`（错误原文） | `settings_get`、`settings_set_theme/font_scale/auto_check`（git_auto_push 不开放）、`environment_check/os/diagnostics/diagnostics_export/capacity` |
 | `vault current` / `host status` | 壳层库路径、Host 状态 | settings 的 `vault` | `vault_current`、`host_status` |
 | `environment_schedule_current` | 设置检查结果、技能库「新增」 | `global.newCandidates`、`global.failedChecks[].error` | `environment_schedule_current` |
 
