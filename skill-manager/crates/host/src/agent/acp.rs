@@ -62,7 +62,7 @@ pub(crate) fn windows_acp_create_flags() -> (u32, u16, u32) {
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const ACP_CONPTY_INHERIT_HANDLES: i32 = 0;
 
-const INIT_TIMEOUT: Duration = Duration::from_secs(12);
+const INIT_TIMEOUT: Duration = Duration::from_secs(30);
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const FS_READ_MAX: usize = 200_000;
 
@@ -121,6 +121,41 @@ fn session_slot(host_session: &str) -> Arc<Mutex<Option<LiveAcp>>> {
     map.entry(host_session.to_string())
         .or_insert_with(|| Arc::new(Mutex::new(None)))
         .clone()
+}
+
+fn model_cache() -> &'static Mutex<HashMap<String, SessionModels>> {
+    static MODEL_CACHE: std::sync::OnceLock<Mutex<HashMap<String, SessionModels>>> =
+        std::sync::OnceLock::new();
+    MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cache_models(host_session: &str, models: &SessionModels) {
+    if models.available.is_empty() && models.current_id.is_none() {
+        return;
+    }
+    if let Ok(mut map) = model_cache().lock() {
+        map.insert(host_session.to_string(), models.clone());
+    }
+}
+
+/// 会话槽位是否正被进行中的对话轮次占用。
+pub(crate) fn is_session_busy(host_session: &str) -> bool {
+    let slot = session_slot(host_session);
+    matches!(slot.try_lock(), Err(std::sync::TryLockError::WouldBlock))
+}
+
+/// 非阻塞读取会话模型列表；会话忙时回退到最近一次缓存的列表，避免界面卡在「正在获取…」。
+pub(crate) fn try_cached_models(host_session: &str) -> Option<Value> {
+    let slot = session_slot(host_session);
+    if let Ok(guard) = slot.try_lock() {
+        if let Some(live) = guard.as_ref() {
+            if !live.proc.models.available.is_empty() || live.proc.models.current_id.is_some() {
+                return Some(models_json(&live.proc.models));
+            }
+        }
+    }
+    let map = model_cache().lock().ok()?;
+    map.get(host_session).map(models_json)
 }
 
 pub fn register_task(task_id: &str) -> Arc<AtomicBool> {
@@ -450,17 +485,19 @@ pub(crate) fn strip_ansi(input: &str) -> String {
                         i += 1;
                     }
                 }
-                b'(' | b')' | b'#' => i += 3,
+                b'(' | b')' | b'#' => i = (i + 3).min(bytes.len()),
                 _ => i += 2,
             }
             continue;
         }
-        if b == 0x9b {
-            i += 1;
+        if b == 0xc2 && i + 1 < bytes.len() && bytes[i + 1] == 0x9b {
+            i += 2;
             while i < bytes.len() && !(0x40..=0x7e).contains(&bytes[i]) {
                 i += 1;
             }
-            i += 1;
+            if i < bytes.len() {
+                i += 1;
+            }
             continue;
         }
         out.push(b);
@@ -1526,6 +1563,56 @@ pub(crate) fn session_update_text(msg: &Value) -> Option<String> {
         .or_else(|| params.get("content").and_then(content_text))
 }
 
+pub(crate) fn session_update_activity(msg: &Value) -> Option<Value> {
+    let params = msg.get("params").unwrap_or(msg);
+    let update = params.get("update").unwrap_or(params);
+    let kind = update
+        .get("sessionUpdate")
+        .or_else(|| update.get("session_update"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    match kind {
+        "agent_thought_chunk" | "agent_thought" => {
+            let text = update
+                .get("content")
+                .and_then(content_text)
+                .or_else(|| params.get("content").and_then(content_text))?;
+            Some(json!({ "kind": "thought", "text": text }))
+        }
+        "tool_call" | "tool_call_update" => {
+            let tool_call_id = update
+                .get("toolCallId")
+                .or_else(|| update.get("tool_call_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let title = update
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let tool_kind = update
+                .get("kind")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let status = update
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("in_progress")
+                .to_string();
+            Some(json!({
+                "kind": "tool",
+                "toolCallId": tool_call_id,
+                "title": title,
+                "toolKind": tool_kind,
+                "status": status,
+            }))
+        }
+        _ => None,
+    }
+}
+
 fn collect_session_update(
     proc: &mut AcpProc,
     msg: &Value,
@@ -1535,6 +1622,14 @@ fn collect_session_update(
     let parsed = parse_session_models(msg);
     if !parsed.available.is_empty() || parsed.current_id.is_some() {
         merge_models(&mut proc.models, parsed);
+    }
+    if let Some(runtime) = runtime {
+        if let Some(mut activity) = session_update_activity(msg) {
+            if let Some(obj) = activity.as_object_mut() {
+                obj.insert("sessionId".into(), json!(host_session.unwrap_or("")));
+            }
+            runtime.emit(crate::events::AGENT_ACTIVITY_EVENT, &activity);
+        }
     }
     let Some(text) = session_update_text(msg) else {
         return;
@@ -2024,6 +2119,7 @@ pub(crate) fn ensure_session(
     merge_models(&mut proc.models, models);
     // OpenCode 先打 INFO `created id=ses_`，configOptions 要等 loadSessionMode 列完模型才写 JSON。
     enrich_session_models(&mut proc, Duration::from_secs(8));
+    cache_models(host_session, &proc.models);
     *guard = Some(LiveAcp {
         proc,
         acp_session_id: acp_session,
@@ -2056,6 +2152,7 @@ pub(crate) fn refresh_session_models(host_session: &str, wait: Duration) -> Valu
     match guard.as_mut() {
         Some(live) => {
             enrich_session_models(&mut live.proc, wait);
+            cache_models(host_session, &live.proc.models);
             models_json(&live.proc.models)
         }
         None => models_json(&SessionModels::default()),
@@ -2117,6 +2214,7 @@ pub(crate) fn apply_session_model(
             name: model_id.to_string(),
         });
     }
+    cache_models(host_session, &live.proc.models);
     Ok(models_json(&live.proc.models))
 }
 
@@ -2429,6 +2527,15 @@ mod tests {
     }
 
     #[test]
+    fn strip_ansi_preserves_utf8_chars_containing_0x9b_byte() {
+        // 围(E5 9B B4)、更(E6 9B B4)、因(E5 9B A0)、回(E5 9B 9E)、直(E7 9B B4) 的 UTF-8 均含 0x9B
+        let raw = "候选范围 B：全部更新后返回原因与直接相关说明";
+        assert_eq!(strip_ansi(raw), raw);
+        let with_c1_csi = "前\u{009b}31m后";
+        assert_eq!(strip_ansi(with_c1_csi), "前后");
+    }
+
+    #[test]
     fn dll_init_failure_is_not_unknown_or_login() {
         let last = format_cli_exit(false, Duration::from_millis(80), Some(-1073741502), 9);
         assert!(last.contains("0xC0000142"), "{last}");
@@ -2695,6 +2802,46 @@ mod tests {
         assert!(hint.contains("skill_set"));
         assert!(hint.contains("code/hindsight-memory"));
         assert!(hint.contains("禁止 bash"));
+    }
+
+    #[test]
+    fn session_update_activity_parses_thought_and_tool_calls() {
+        let thought = json!({
+            "method": "session/update",
+            "params": {
+                "update": {
+                    "sessionUpdate": "agent_thought_chunk",
+                    "content": { "type": "text", "text": "先检查上游状态" }
+                }
+            }
+        });
+        assert_eq!(
+            session_update_activity(&thought),
+            Some(json!({ "kind": "thought", "text": "先检查上游状态" }))
+        );
+
+        let tool = json!({
+            "method": "session/update",
+            "params": {
+                "update": {
+                    "sessionUpdate": "tool_call_update",
+                    "toolCallId": "call_1",
+                    "title": "skill_check",
+                    "kind": "execute",
+                    "status": "completed"
+                }
+            }
+        });
+        assert_eq!(
+            session_update_activity(&tool),
+            Some(json!({
+                "kind": "tool",
+                "toolCallId": "call_1",
+                "title": "skill_check",
+                "toolKind": "execute",
+                "status": "completed"
+            }))
+        );
     }
 
     #[test]

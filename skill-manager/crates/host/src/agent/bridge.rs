@@ -628,6 +628,9 @@ pub fn list_models(runtime: &HostRuntime, body: Value) -> Result<Value, String> 
         payload["message"] = json!(resolved.message);
         return Ok(payload);
     };
+    if acp::is_session_busy(&session_id) {
+        return Ok(acp::try_cached_models(&session_id).unwrap_or_else(empty_models));
+    }
     let skill_dir = tools::prepare_opencode_config(runtime.state_dir())
         .unwrap_or_else(|_| tools::builtin_skill_dir());
     let skill_text = builtin_skill_text();
@@ -775,46 +778,48 @@ pub fn post_message(runtime: &HostRuntime, body: Value) -> Result<Value, String>
     let skill_text = builtin_skill_text();
     let history = context::prior_transcript(runtime, &session_id, &task_id);
     let cancel = acp::register_task(&task_id);
-    if let Err(err) = acp::ensure_session(
-        &detected,
-        &skill_dir,
-        &skill_text,
-        runtime,
-        &session_id,
-        &cancel,
-    ) {
-        acp::forget_task(&task_id);
-        let needs_login = looks_like_auth_text(&err);
-        let message = if needs_login {
-            format!(
-                "{DEFAULT_CLI_NAME} 尚未完成登录。请在对话面板点「打开登录」，或在本机执行：{}。{LOGIN_HINT}",
-                login_command(&detected)
-            )
-        } else {
-            err.clone()
-        };
-        context::push_message(
+    if !acp::is_session_busy(&session_id) {
+        if let Err(err) = acp::ensure_session(
+            &detected,
+            &skill_dir,
+            &skill_text,
             runtime,
             &session_id,
-            AgentMessage {
-                role: "assistant".to_string(),
-                text: message.clone(),
-                task_id: Some(task_id.clone()),
-                created_at: now_rfc3339(),
-            },
-        )?;
-        return Ok(json!({
-            "taskId": task_id,
-            "status": "failed",
-            "message": message,
-            "snapshot": snapshot,
-            "cli": detected.cli_id,
-            "cliId": detected.cli_id,
-            "needsLogin": needs_login,
-            "needsInstall": false,
-            "loginCommand": login_command(&detected),
-            "ready": false,
-        }));
+            &cancel,
+        ) {
+            acp::forget_task(&task_id);
+            let needs_login = looks_like_auth_text(&err);
+            let message = if needs_login {
+                format!(
+                    "{DEFAULT_CLI_NAME} 尚未完成登录。请在对话面板点「打开登录」，或在本机执行：{}。{LOGIN_HINT}",
+                    login_command(&detected)
+                )
+            } else {
+                err.clone()
+            };
+            context::push_message(
+                runtime,
+                &session_id,
+                AgentMessage {
+                    role: "assistant".to_string(),
+                    text: message.clone(),
+                    task_id: Some(task_id.clone()),
+                    created_at: now_rfc3339(),
+                },
+            )?;
+            return Ok(json!({
+                "taskId": task_id,
+                "status": "failed",
+                "message": message,
+                "snapshot": snapshot,
+                "cli": detected.cli_id,
+                "cliId": detected.cli_id,
+                "needsLogin": needs_login,
+                "needsInstall": false,
+                "loginCommand": login_command(&detected),
+                "ready": false,
+            }));
+        }
     }
     let runtime_bg = runtime.clone();
     let session_bg = session_id.clone();

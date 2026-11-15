@@ -173,8 +173,9 @@ fn basename(name: &str) -> Option<String> {
         .map(|item| (*item).to_string())
 }
 
-/// OpenCode 1.19.5 默认 `permission.bash * = allow`，不会发 `session/request_permission`。
-/// Host 写入 `$OPENCODE_CONFIG_DIR/opencode.json`：bash/edit 须询问 ACP，由 Host 拒绝。
+/// OpenCode 1.19.5 默认 `permission.bash * = allow`。
+/// Host 写入 `$OPENCODE_CONFIG_DIR/opencode.json`：直接 `deny` bash/edit/write，
+/// 避免触发 `session/request_permission` 被拒后导致 OpenCode 立刻 `end_turn` 中止整轮对话。
 pub fn opencode_host_config() -> Value {
     json!({
         "$schema": "https://opencode.ai/config.json",
@@ -184,9 +185,13 @@ pub fn opencode_host_config() -> Value {
             "write": false
         },
         "permission": {
-            "bash": { "*": "ask" },
-            "edit": { "*": "ask" },
-            "write": { "*": "ask" }
+            "bash": { "*": "deny" },
+            "edit": { "*": "deny" },
+            "write": { "*": "deny" },
+            "external_directory": {
+                "*/.local/share/opencode/*": "allow",
+                "*/opencode/tool-output/*": "allow"
+            }
         }
     })
 }
@@ -1052,15 +1057,20 @@ mod tests {
     }
 
     #[test]
-    fn opencode_config_asks_before_native_bash() {
+    fn opencode_config_denies_native_bash_and_edit() {
         let tmp = tempfile::tempdir().unwrap();
         let config = prepare_opencode_config(tmp.path()).unwrap();
         let written: Value = serde_json::from_str(
             &std::fs::read_to_string(config.join("opencode.json")).unwrap(),
         )
         .unwrap();
-        assert_eq!(written["permission"]["bash"]["*"], "ask");
-        assert_eq!(written["permission"]["edit"]["*"], "ask");
+        assert_eq!(written["permission"]["bash"]["*"], "deny");
+        assert_eq!(written["permission"]["edit"]["*"], "deny");
+        assert_eq!(written["permission"]["write"]["*"], "deny");
+        assert_eq!(
+            written["permission"]["external_directory"]["*/.local/share/opencode/*"],
+            "allow"
+        );
         assert_eq!(written["tools"]["bash"], false);
         assert_eq!(written["tools"]["edit"], false);
         assert!(config

@@ -14,6 +14,8 @@ pub const FETCH_PROGRESS_EVENT: &str = "skill-fetch-progress";
 pub const HOST_PLAN_EVENT: &str = "host-plan";
 /// ACP `session/update` 的助手可见文本块。
 pub const AGENT_MESSAGE_CHUNK_EVENT: &str = "agent_message_chunk";
+/// ACP `session/update` 的思考过程与工具执行进度。
+pub const AGENT_ACTIVITY_EVENT: &str = "agent_activity";
 
 /// 一条发给界面的事件。
 #[derive(Clone, Debug)]

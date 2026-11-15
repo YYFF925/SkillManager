@@ -89,10 +89,13 @@ fn call_host(listen: &str, session: &str, name: &str, args: Value) -> Result<Val
             Some(session)
         },
     ) {
-        Ok(value) => Ok(json!({
-            "content": [{ "type": "text", "text": value.to_string() }],
-            "isError": false
-        })),
+        Ok(value) => {
+            let text = serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string());
+            Ok(json!({
+                "content": [{ "type": "text", "text": text }],
+                "isError": false
+            }))
+        }
         Err(err) => Ok(mcp_error(err)),
     }
 }

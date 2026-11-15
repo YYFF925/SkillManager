@@ -16,7 +16,8 @@ pub mod serve;
 pub mod service;
 
 pub use events::{
-    AGENT_MESSAGE_CHUNK_EVENT, BroadcastSink, EventSink, FanoutSink, HOST_PLAN_EVENT, NoopSink,
+    AGENT_ACTIVITY_EVENT, AGENT_MESSAGE_CHUNK_EVENT, BroadcastSink, EventSink, FanoutSink,
+    HOST_PLAN_EVENT, NoopSink,
 };
 pub use invoke::{InvokeError, InvokeSource};
 pub use lock::{HostLock, LockError, LockMeta, peek_meta};

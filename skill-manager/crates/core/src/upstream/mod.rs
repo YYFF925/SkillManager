@@ -77,13 +77,20 @@ impl<'a> UpstreamService<'a> {
         on_progress: &mut dyn FnMut(&GitProgress),
         cancel: &AtomicBool,
     ) -> Result<PreviewReport> {
+        let (repo, reference) = normalize_repo_and_ref(repo, reference);
         (|| {
-            let fetched = fetch::fetch_repo(&self.state_dir(), repo, reference, on_progress, cancel)?;
+            let fetched = fetch::fetch_repo(
+                &self.state_dir(),
+                &repo,
+                reference.as_deref(),
+                on_progress,
+                cancel,
+            )?;
             let candidates = discover::scan_repo(&fetched.path)?;
-            let default_category = CategoryChoice::Default.resolve(repo, candidates.len())?;
+            let default_category = CategoryChoice::Default.resolve(&repo, candidates.len())?;
             Ok(PreviewReport {
-                repo: repo.to_string(),
-                reference: reference.map(str::to_string),
+                repo: repo.clone(),
+                reference,
                 remote_version: fetched.oid,
                 skill_count: candidates.len(),
                 default_category,
@@ -105,14 +112,21 @@ impl<'a> UpstreamService<'a> {
         on_progress: &mut dyn FnMut(&GitProgress),
         cancel: &AtomicBool,
     ) -> Result<ImportOutcome> {
+        let (repo, reference) = normalize_repo_and_ref(repo, reference);
         (|| {
-            let fetched = fetch::fetch_repo(&self.state_dir(), repo, reference, on_progress, cancel)?;
+            let fetched = fetch::fetch_repo(
+                &self.state_dir(),
+                &repo,
+                reference.as_deref(),
+                on_progress,
+                cancel,
+            )?;
             let candidates = discover::scan_repo(&fetched.path)?;
             let outcome = acquire::import_skills(
                 &self.vault_root,
                 domain,
-                repo,
-                reference,
+                &repo,
+                reference.as_deref(),
                 &fetched.oid,
                 &fetched.path,
                 subpaths,
@@ -120,7 +134,7 @@ impl<'a> UpstreamService<'a> {
             )?;
             // 首次观察建立基线：首次已存在的候选（含未被选中的 C）不随后被当作“后来新增”。
             let observed: Vec<String> = candidates.iter().map(|c| c.subpath.clone()).collect();
-            decisions::seed_baseline(&self.vault_root, repo, domain, &observed)?;
+            decisions::seed_baseline(&self.vault_root, &repo, domain, &observed)?;
             Ok(outcome)
         })().inspect_err(|err: &CoreError| {
             let _ = crate::diagnostics::record(self.state, "error", "acquire.import", &format!("{repo}：{err}"));
@@ -278,4 +292,65 @@ pub fn no_source(reference: &SkillRef) -> CoreError {
     CoreError::other(format!(
         "技能没有上游来源记录（自建技能）：{reference}；无法检查或更新上游"
     ))
+}
+
+/// 将 GitHub `/tree/<branch>` 或 GitLab `/-/tree/<branch>` 网页链接拆分为仓库地址与分支引用。
+pub fn normalize_repo_and_ref(raw_repo: &str, raw_ref: Option<&str>) -> (String, Option<String>) {
+    let trimmed = raw_repo.trim().trim_end_matches('/');
+    let explicit_ref = raw_ref.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    if let Some(scheme_end) = trimmed.find("://") {
+        let rest = &trimmed[scheme_end + 3..];
+        if let Some(slash) = rest.find('/') {
+            let origin = &trimmed[..scheme_end + 3 + slash];
+            let path = rest[slash + 1..].trim_end_matches('/');
+            let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+            if parts.len() == 4 && parts[2] == "tree" {
+                let repo = format!("{origin}/{}/{}", parts[0], parts[1]);
+                return (repo, explicit_ref.or_else(|| Some(parts[3].to_string())));
+            }
+            if parts.len() == 5 && parts[2] == "-" && parts[3] == "tree" {
+                let repo = format!("{origin}/{}/{}", parts[0], parts[1]);
+                return (repo, explicit_ref.or_else(|| Some(parts[4].to_string())));
+            }
+        }
+    }
+    (trimmed.to_string(), explicit_ref)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_repo_and_ref;
+
+    #[test]
+    fn parses_github_tree_branch_url() {
+        let (repo, branch) = normalize_repo_and_ref(
+            "https://github.com/YYFF925/ComfyUI-Lora-Manager/tree/custom/",
+            None,
+        );
+        assert_eq!(repo, "https://github.com/YYFF925/ComfyUI-Lora-Manager");
+        assert_eq!(branch.as_deref(), Some("custom"));
+    }
+
+    #[test]
+    fn parses_gitlab_tree_branch_url() {
+        let (repo, branch) =
+            normalize_repo_and_ref("https://gitlab.com/org/repo/-/tree/dev", None);
+        assert_eq!(repo, "https://gitlab.com/org/repo");
+        assert_eq!(branch.as_deref(), Some("dev"));
+    }
+
+    #[test]
+    fn preserves_plain_repo_and_explicit_ref() {
+        let (repo, branch) =
+            normalize_repo_and_ref("https://github.com/YYFF925/ComfyUI-Lora-Manager", None);
+        assert_eq!(repo, "https://github.com/YYFF925/ComfyUI-Lora-Manager");
+        assert_eq!(branch, None);
+
+        let (repo2, branch2) = normalize_repo_and_ref(
+            "https://github.com/YYFF925/ComfyUI-Lora-Manager/tree/custom",
+            Some("main"),
+        );
+        assert_eq!(repo2, "https://github.com/YYFF925/ComfyUI-Lora-Manager");
+        assert_eq!(branch2.as_deref(), Some("main"));
+    }
 }

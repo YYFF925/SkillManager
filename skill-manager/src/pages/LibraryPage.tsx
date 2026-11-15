@@ -175,6 +175,12 @@ export function LibraryPage({
   /** 生成维护任务的目标技能（单项或多选）。 */
   const [taskTargets, setTaskTargets] = useState<string[] | null>(null);
   const upstream = useUpstream(scheduledReport);
+  const { reconcileSkills } = upstream;
+  useEffect(() => {
+    if (all?.skills) {
+      reconcileSkills(all.skills);
+    }
+  }, [all, reconcileSkills]);
 
   // 搜索输入去抖：core 每次查询都会重扫库文件。
   useEffect(() => {

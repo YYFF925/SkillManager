@@ -1,18 +1,37 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ChatPanel } from "./ChatPanel";
 import { getTransport, resetTransportForTests } from "../services/transport";
 
+const listeners = new Map<string, Set<(payload: unknown) => void>>();
+
 vi.mock("../services/transport", () => {
   const invoke = vi.fn();
   return {
-    getTransport: () => ({ invoke, subscribe: async () => () => undefined }),
+    getTransport: () => ({
+      invoke,
+      subscribe: async (event: string, handler: (payload: unknown) => void) => {
+        const set = listeners.get(event) ?? new Set();
+        set.add(handler);
+        listeners.set(event, set);
+        return () => {
+          set.delete(handler);
+        };
+      },
+    }),
     resetTransportForTests: () => {
       invoke.mockReset();
+      listeners.clear();
     },
   };
 });
+
+function emitTransportEvent(event: string, payload: unknown) {
+  for (const handler of listeners.get(event) ?? []) {
+    handler(payload);
+  }
+}
 
 function transportInvoke() {
   return getTransport().invoke as unknown as ReturnType<typeof vi.fn>;
@@ -62,6 +81,7 @@ beforeEach(() => {
 
 afterEach(() => {
   sessionStorage.clear();
+  localStorage.clear();
 });
 
 it("does not flash login before runtime status arrives", async () => {
@@ -246,9 +266,11 @@ it("lists OpenCode models and applies a selection", async () => {
     return { messages: [] };
   });
   render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
-  const select = await screen.findByRole("combobox", { name: "当前模型" });
-  expect((select as HTMLSelectElement).value).toBe("opencode/gpt-5");
-  fireEvent.change(select, { target: { value: "opencode/claude-sonnet-4" } });
+  const trigger = await screen.findByRole("combobox", { name: "当前模型" });
+  expect(trigger).toHaveTextContent("GPT-5");
+  fireEvent.click(trigger);
+  const option = await screen.findByRole("option", { name: "Claude Sonnet 4" });
+  fireEvent.click(option);
   await waitFor(() =>
     expect(transportInvoke()).toHaveBeenCalledWith("agent_set_model", {
       sessionId: expect.any(String),
@@ -377,4 +399,164 @@ it("renders assistant markdown and fills quick prompts into the composer", async
   const quick = await screen.findByRole("button", { name: "检查上游更新" });
   fireEvent.click(quick);
   expect((screen.getByPlaceholderText(/完善中文注释/) as HTMLTextAreaElement).value).toBe("检查上游更新");
+});
+
+it("edits visible models and hides disabled ones from the model list", async () => {
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    if (command === "agent_models_get") {
+      return {
+        currentModelId: "opencode/gpt-5",
+        models: [
+          { id: "opencode/gpt-5", name: "GPT-5" },
+          { id: "opencode/claude-sonnet-4", name: "Claude Sonnet 4" },
+        ],
+      };
+    }
+    return { messages: [] };
+  });
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  const trigger = await screen.findByRole("combobox", { name: "当前模型" });
+  fireEvent.click(trigger);
+  fireEvent.click(await screen.findByRole("button", { name: "编辑模型…" }));
+  const toggle = await screen.findByRole("switch", { name: "启用 Claude Sonnet 4" });
+  expect(toggle).toHaveAttribute("aria-checked", "true");
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute("aria-checked", "false");
+
+  const selectAll = screen.getByRole("checkbox", { name: "全选" });
+  fireEvent.click(selectAll);
+  expect(toggle).toHaveAttribute("aria-checked", "true");
+  expect(screen.getByRole("switch", { name: "启用 GPT-5" })).toHaveAttribute("aria-checked", "true");
+
+  fireEvent.click(selectAll);
+  expect(toggle).toHaveAttribute("aria-checked", "false");
+  expect(screen.getByRole("switch", { name: "启用 GPT-5" })).toHaveAttribute("aria-checked", "false");
+
+  fireEvent.click(screen.getByRole("switch", { name: "启用 GPT-5" }));
+  expect(screen.getByRole("switch", { name: "启用 GPT-5" })).toHaveAttribute("aria-checked", "true");
+  expect(toggle).toHaveAttribute("aria-checked", "false");
+  fireEvent.click(screen.getByRole("button", { name: "完成" }));
+
+  fireEvent.click(screen.getByRole("combobox", { name: "当前模型" }));
+  expect(screen.getByRole("option", { name: "GPT-5" })).toBeTruthy();
+  expect(screen.queryByRole("option", { name: "Claude Sonnet 4" })).toBeNull();
+});
+
+it("supports /new slash command to start a new conversation", async () => {
+  const posted: string[] = [];
+  const listedSessions: string[] = [];
+  transportInvoke().mockImplementation(async (command: string, args?: unknown) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    if (command === "agent_models_get") {
+      return { currentModelId: "opencode/gpt-5", models: [{ id: "opencode/gpt-5", name: "GPT-5" }] };
+    }
+    if (command === "agent_list_messages") {
+      const sid = String((args as { sessionId?: string })?.sessionId ?? "");
+      listedSessions.push(sid);
+      if (listedSessions.length === 1) {
+        return { messages: [{ role: "assistant", text: "上一轮对话内容" }] };
+      }
+      return { messages: [] };
+    }
+    if (command === "agent_post_message") {
+      posted.push(String((args as { text?: string })?.text ?? ""));
+      return { status: "done", message: "ok" };
+    }
+    return {};
+  });
+
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  expect(await screen.findByText("上一轮对话内容")).toBeTruthy();
+  const initialSession = sessionStorage.getItem("sm-agent-session");
+
+  const input = screen.getByPlaceholderText(/完善中文注释/);
+  fireEvent.change(input, { target: { value: "/" } });
+  expect(screen.getByRole("listbox", { name: "快捷命令" })).toBeTruthy();
+  expect(screen.getByRole("option", { name: /\/new/ })).toBeTruthy();
+
+  fireEvent.change(input, { target: { value: "/new" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+
+  await waitFor(() => {
+    expect(screen.queryByText("上一轮对话内容")).toBeNull();
+  });
+  expect(sessionStorage.getItem("sm-agent-session")).not.toBe(initialSession);
+  expect(posted).toEqual([]);
+  expect((input as HTMLTextAreaElement).value).toBe("");
+});
+
+it("displays streaming thinking and tool execution progress", async () => {
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    if (command === "agent_models_get") {
+      return { currentModelId: "opencode/gpt-5", models: [{ id: "opencode/gpt-5", name: "GPT-5" }] };
+    }
+    return { messages: [] };
+  });
+
+  render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  await screen.findByRole("combobox", { name: "当前模型" });
+  const sid = sessionStorage.getItem("sm-agent-session");
+
+  await act(async () => {
+    emitTransportEvent("agent_activity", {
+      sessionId: sid,
+      kind: "thought",
+      text: "先检查上游状态",
+    });
+    emitTransportEvent("agent_activity", {
+      sessionId: sid,
+      kind: "tool",
+      toolCallId: "call_1",
+      title: "skill_check",
+      status: "in_progress",
+    });
+  });
+
+  expect(screen.getByText("思考与执行过程（1 步）")).toBeTruthy();
+  expect(screen.getByText("skill_check")).toBeTruthy();
+  expect(screen.getByText("进行中")).toBeTruthy();
+  expect(screen.getByText("先检查上游状态")).toBeTruthy();
+
+  await act(async () => {
+    emitTransportEvent("agent_activity", {
+      sessionId: sid,
+      kind: "tool",
+      toolCallId: "call_1",
+      title: "skill_check",
+      status: "completed",
+    });
+  });
+  expect(screen.getByText("已完成")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: /思考与执行过程/ }));
+  expect(screen.queryByText("先检查上游状态")).toBeNull();
 });

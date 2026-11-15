@@ -4,7 +4,7 @@
  * 只调用 client.ts 的类型化封装；检查范围、采用版本、跳过/拒绝规则都由 core 决定，
  * 前端不复制业务判断。应用（更新/批量更新）始终由用户显式触发，本模块不自动应用。
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   checkUpstream,
@@ -18,6 +18,7 @@ import {
   type Domain,
   type FetchProgress,
   type SkillCheckView,
+  type SkillSummary,
   type UpdateItemView,
   type UpdateRepoView,
 } from "../services/client";
@@ -63,6 +64,82 @@ export interface UpstreamController {
   skip: (reference: string, version?: string) => Promise<void>;
   /** 恢复提醒；成功后按版本对比恢复提示状态。 */
   unskip: (reference: string) => Promise<void>;
+  /**
+   * 用库列表的最新快照对账本地检查报告（例如 Agent 或后台更新写入后）。
+   * 不触发网络请求；仅在版本或入库状态变化时更新对应条目。
+   */
+  reconcileSkills: (skills: SkillSummary[]) => void;
+}
+
+/**
+ * 将上游检查报告与最新库技能摘要对账，消除外部/Agent 更新后的陈旧角标。
+ */
+export function reconcileReportWithSkills(
+  prev: CheckReportView,
+  skills: SkillSummary[],
+): CheckReportView {
+  if (skills.length === 0) return prev;
+  const byRef = new Map<string, SkillSummary>();
+  const importedKeys = new Set<string>();
+  for (const skill of skills) {
+    byRef.set(`${skill.domain}/${skill.name}`, skill);
+    if (skill.source) {
+      importedKeys.add(`${skill.domain}\0${skill.source.repo}\0${skill.source.subpath}`);
+    }
+  }
+
+  let skillsChanged = false;
+  const nextSkills = prev.skills.map((item) => {
+    const current = byRef.get(item.skill);
+    if (!current?.source) return item;
+
+    const currentVersion = current.source.version;
+    const upToDate =
+      item.remote_version !== undefined && item.remote_version === currentVersion;
+    const skipped =
+      item.remote_version !== undefined &&
+      current.source.skipped_version === item.remote_version;
+
+    if (upToDate && item.result !== "up_to_date") {
+      skillsChanged = true;
+      return {
+        ...item,
+        adopted_version: currentVersion,
+        result: "up_to_date" as const,
+        changes: undefined,
+      };
+    }
+    if (skipped && item.result !== "skipped") {
+      skillsChanged = true;
+      return {
+        ...item,
+        adopted_version: currentVersion,
+        result: "skipped" as const,
+        changes: undefined,
+      };
+    }
+    if (currentVersion !== item.adopted_version) {
+      skillsChanged = true;
+      return {
+        ...item,
+        adopted_version: currentVersion,
+      };
+    }
+    return item;
+  });
+
+  const nextCandidates = prev.candidates.filter(
+    (candidate) =>
+      !importedKeys.has(`${candidate.domain}\0${candidate.repo}\0${candidate.subpath}`),
+  );
+  const candidatesChanged = nextCandidates.length !== prev.candidates.length;
+
+  if (!skillsChanged && !candidatesChanged) return prev;
+  return {
+    ...prev,
+    skills: skillsChanged ? nextSkills : prev.skills,
+    candidates: candidatesChanged ? nextCandidates : prev.candidates,
+  };
 }
 
 export function useUpstream(scheduledReport?: CheckReportView | null): UpstreamController {
@@ -240,5 +317,20 @@ export function useUpstream(scheduledReport?: CheckReportView | null): UpstreamC
     );
   }
 
-  return { report, busy, progress, checkAll, update, updateRepo, reject, skip, unskip };
+  const reconcileSkills = useCallback((skills: SkillSummary[]) => {
+    setReport((prev) => (prev ? reconcileReportWithSkills(prev, skills) : prev));
+  }, []);
+
+  return {
+    report,
+    busy,
+    progress,
+    checkAll,
+    update,
+    updateRepo,
+    reject,
+    skip,
+    unskip,
+    reconcileSkills,
+  };
 }
