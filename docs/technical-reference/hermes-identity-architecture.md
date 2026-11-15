@@ -113,17 +113,26 @@ flowchart TB
 
 ---
 
-## 7. 分期
+## 7. 范围与工作量（只改 SOUL）
 
-| 阶段 | 内容 |
-|---|---|
-| 0 规格 | `specs/004-hermes-identity/`；修订 002 FR-028、US6-6、FR-043 末句 |
-| 1 core | 源读写、compose、原子写、导入、哈希暂停 |
-| 2 入口 | CLI + Tauri + Host |
-| 3 界面 | 设计层 + 档案页编辑器 |
-| 4 同步 | pull 时源变则分发 |
+用户 2026-11-15 再收窄：**暂时只管理 `SOUL.md`。** 不改 `config.yaml`、`agent.system_prompt`、`profile.yaml`、`.env`、技能启停、档案生命周期。角色和规范作为用户写在 SOUL 正文里的内容，不单独建源文件或分段。
 
-其它配置 overlay、显示名编辑、迁到 `system_prompt` 均不在本功能。
+复杂度：**中低**。不是新架构，是把已交付的指令管道（T069–T072）换目标路径。侵入点少，现有档案技能启停可以不动。
+
+对照物：`vault/instructions.rs` 约 300 行、`InstructionEditor.tsx` 约 230 行、CLI `instruction.rs`、Tauri 薄封装、`pull.rs` 一段签名刷新。SOUL 版几乎同构，多两件指令没有的事：现网 `SOUL.md` 收编、外部修改暂停。
+
+| 块 | 动什么 | 体量 |
+|---|---|---|
+| 规格 | 修订 002 的 FR-028 / US6-6 / FR-043 末句、data-model、CLI 契约、需求记录。不新开 004（只加档案中心一项能力，不必新功能目录） | 小，但必须先做，否则实现与现行排除条款冲突 |
+| core | 新 `hermes/identity.rs`：源读写、四态 compose、原子写 `SOUL.md`、签名 | 与 `instructions.rs` 同级 |
+| 收编 / 暂停 | 磁盘已有 SOUL 导入；`last_dispatched_hash` | 比指令多的主要风险点 |
+| CLI / Tauri / Host | `hermes identity get\|set\|import\|distribute`，规则在 core | 薄，但三条入口都要有（宪章 V） |
+| 界面 | 档案页一个按钮 + 克隆指令编辑器（左全局/档案，右一块文本，一个保存） | 主要可见工作；须改原型再改 React |
+| 同步 | `pull.rs` 在身份源签名变化时分发 | 在指令刷新旁加一段 |
+
+**不做（本轮）**：`config.yaml` 任何键、显示名编辑、人格预设、项目 `AGENTS.md`、Markdown 预览/历史。
+
+主要风险不是算法，是第一次写入会不会覆盖现网人格——收编和哈希暂停就是为这个。合成本身无新发明。
 
 ---
 
