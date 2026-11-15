@@ -3,7 +3,7 @@
 **日期**：2026-11-15（Asia/Shanghai）  
 **状态**：调查结论。用户倾向已采纳为**方案 1**（角色与规范都写入 `SOUL.md`）。**尚未实现、尚未写入正式规格。**
 
-本页不是规格。落地前须走 speckit（建议 `specs/004-hermes-identity/`），并修订 002 中排除 SOUL 管理的条目。
+本页不是规格。落地时修订 002 中排除 SOUL 管理的条目即可，不新开功能目录。
 
 ---
 
@@ -25,7 +25,7 @@ SkillManagerVault/hermes-identity/
   ~/.hermes/profiles/<id>/SOUL.md
 ```
 
-`<profile-id>` 用 Hermes 目录 id（含 URL 编码名），不用显示名。文件不存在 = 空。源随库同步；上次写入哈希留本机 SQLite。
+`<profile-id>` 用 Hermes 目录 id（含 URL 编码名），不用显示名。文件不存在 = 空。源随库同步。磁盘上的 `SOUL.md` **不是**真值：每次分发都覆盖，不做冲突检测、不收编现网文件。用户自行把现有人格迁进库；bot 内禁止自改 SOUL。
 
 ```mermaid
 flowchart LR
@@ -74,9 +74,7 @@ GPT 说对的部分仍然成立，只是**不必为此分槽**：
 
 `SOUL.md` 用 tmp+rename。单档案失败不中断其余。
 
-**收编**：现网非空且不像内置 seed 的 `SOUL.md`，在该档案库内源为空时收入 `<id>.md`。未认领且磁盘有内容 → 保存前阻止覆盖。本机记 `last_dispatched_hash`，外部改过则暂停该项。
-
-空合成且已认领 → 写空文件（Hermes 回退默认人格）。未认领 → 不写。
+**覆盖合同（用户 2026-11-15 确认）**：库内合成结果是唯一真值。保存或拉取刷新时**无条件覆盖**该档案 `SOUL.md`，包括第一次写入。手改磁盘、bot 自改、Hermes seed，下次分发一律被盖掉。不做 `paused_local_change`、不导入现网文件、不判断 seed。空合成也覆盖成空文件（Hermes 回退默认人格）。现有人格由用户迁进 `hermes-identity/` 后再分发。
 
 ---
 
@@ -96,6 +94,7 @@ Hermes 对 SOUL 做扫描后注入，超长则头 70% + 尾 20% 截断（中间�
 | `USER.md` / `MEMORY.md` / `.env` / `auth.json` | 记忆或密钥 |
 | 整份 `config.yaml` | 注释与其它键 |
 | 技能正文 | 能力层已有 |
+| 磁盘冲突检测 / 导入现网 SOUL | 用户自行迁移；分发无条件覆盖 |
 
 ---
 
@@ -109,7 +108,7 @@ flowchart TB
   PULL["vault pull 签名变化"] --> C
 ```
 
-实现落点：`crates/core/src/hermes/identity.rs`；CLI `hermes identity get|set|import|distribute`；前端新组件，不扩 `InstructionEditor`。设计层先改原型。
+实现落点：`crates/core/src/hermes/identity.rs`；CLI `hermes identity get|set|distribute`；前端新组件，不扩 `InstructionEditor`。设计层先改原型。无 `import`。
 
 ---
 
@@ -119,29 +118,27 @@ flowchart TB
 
 复杂度：**中低**。不是新架构，是把已交付的指令管道（T069–T072）换目标路径。侵入点少，现有档案技能启停可以不动。
 
-对照物：`vault/instructions.rs` 约 300 行、`InstructionEditor.tsx` 约 230 行、CLI `instruction.rs`、Tauri 薄封装、`pull.rs` 一段签名刷新。SOUL 版几乎同构，多两件指令没有的事：现网 `SOUL.md` 收编、外部修改暂停。
+对照物：`vault/instructions.rs` 约 300 行、`InstructionEditor.tsx` 约 230 行、CLI `instruction.rs`、Tauri 薄封装、`pull.rs` 一段签名刷新。覆盖合同与指令相同（清空也覆盖），**不再**多收编和外部修改暂停，体量对齐指令、略少。
 
 | 块 | 动什么 | 体量 |
 |---|---|---|
-| 规格 | 修订 002 的 FR-028 / US6-6 / FR-043 末句、data-model、CLI 契约、需求记录。不新开 004（只加档案中心一项能力，不必新功能目录） | 小，但必须先做，否则实现与现行排除条款冲突 |
-| core | 新 `hermes/identity.rs`：源读写、四态 compose、原子写 `SOUL.md`、签名 | 与 `instructions.rs` 同级 |
-| 收编 / 暂停 | 磁盘已有 SOUL 导入；`last_dispatched_hash` | 比指令多的主要风险点 |
-| CLI / Tauri / Host | `hermes identity get\|set\|import\|distribute`，规则在 core | 薄，但三条入口都要有（宪章 V） |
-| 界面 | 档案页一个按钮 + 克隆指令编辑器（左全局/档案，右一块文本，一个保存） | 主要可见工作；须改原型再改 React |
+| 规格 | 修订 002 的 FR-028 / US6-6 / FR-043 末句、data-model、CLI 契约、需求记录。不新开 004 | 小，但必须先做 |
+| core | 新 `hermes/identity.rs`：源读写、四态 compose、原子写 `SOUL.md`、签名 | 与 `instructions.rs` 同级或更短 |
+| CLI / Tauri / Host | `hermes identity get\|set\|distribute`，规则在 core | 薄，三条入口都要有（宪章 V） |
+| 界面 | 档案页一个按钮 + 克隆指令编辑器 | 主要可见工作；须改原型再改 React |
 | 同步 | `pull.rs` 在身份源签名变化时分发 | 在指令刷新旁加一段 |
 
-**不做（本轮）**：`config.yaml` 任何键、显示名编辑、人格预设、项目 `AGENTS.md`、Markdown 预览/历史。
+**不做（本轮）**：`config.yaml` 任何键、显示名编辑、人格预设、项目 `AGENTS.md`、Markdown 预览/历史、磁盘冲突检测、从现网 SOUL 导入。
 
-主要风险不是算法，是第一次写入会不会覆盖现网人格——收编和哈希暂停就是为这个。合成本身无新发明。
+合成本身无新发明。覆盖现网文件是预期行为，不是风险项。
 
 ---
 
 ## 8. 待核对（实现前）
 
-- 本机默认人格全文（判断 seed）。
-- 发行版锁定的 SOUL 是否出现（有则拒绝覆盖）。
-- Windows 档案 home。
-- 用户是否确认：分发全部已发现档案；现网 SOUL 自动收编非 seed。
+- Windows 档案 home 仍按现有 Hermes 根解析。
+- 分发范围维持「本机全部已发现档案」（与全局规范语义一致）。
+- 发行版锁定的 SOUL（`hermes profile install`）本机是否出现：出现则覆盖仍按本项目为准，实现时如实报告写入结果即可。
 
 ---
 
