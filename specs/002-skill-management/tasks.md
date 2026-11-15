@@ -488,5 +488,5 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 
 - [X] T145 [US6] 在 `skill-manager/crates/core/src/hermes/identity.rs` 实现源读写、四态 compose、签名与原子覆盖 `SOUL.md`；档案 home 不是目录则跳过，避免把 `SOUL.md` 写成身份标记。
 - [X] T146 [US6] CLI `hermes identity get|set|distribute`、Host `hermes_identity_*`、`sync pull` 源签名变化后刷新；桌面走 host_invoke，不新增 Tauri 直连命令。
-- [X] T147 [US6] 原型 Hermes 工具栏「人格与规范」与 `IdentityEditor`（克隆指令编辑器布局）；档案选择显示名读取链保持不变。
+- [X] T147 [US6] 原型 Hermes 工具栏「SOUL」与 `IdentityEditor`（克隆指令编辑器布局）；档案选择显示名读取链保持不变。
 - [X] T148 [US6] 修订 002 spec / data-model / CLI 契约、需求记录、H02、GLOSSARY、ADR 0001、hermes-integration；`tests/cli_hermes.rs` 与 `cli_sync.rs` 覆盖覆盖合同。

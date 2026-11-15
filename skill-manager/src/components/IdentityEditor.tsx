@@ -108,7 +108,7 @@ export function IdentityEditor({ profiles, onClose, onSaved }: IdentityEditorPro
 
   return (
     <Dialog
-      title="人格与规范"
+      title="SOUL"
       width="w-[880px]"
       onClose={onClose}
       footer={

@@ -498,7 +498,7 @@ export function HermesPage({
         </div>
         <div className="flex items-center gap-2.5">
           <Button compact onClick={() => setIdentityOpen(true)}>
-            人格与规范
+            SOUL
           </Button>
           <Button compact onClick={() => setVersion((value) => value + 1)}>
             <RefreshCw className="size-3.5" strokeWidth={1.75} />

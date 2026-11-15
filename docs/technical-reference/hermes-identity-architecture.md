@@ -1,7 +1,7 @@
 # Hermes 档案身份管理：调查与架构
 
 **日期**：2026-11-15（Asia/Shanghai）  
-**状态**：已落地（2026-11-15）。方案 1（角色与规范都写入 `SOUL.md`）已写入 002 FR-061 / US6-6/7；实现见 `hermes/identity.rs`、CLI `hermes identity`、Host `hermes_identity_*`、Hermes 页「人格与规范」。
+**状态**：已落地（2026-11-15）。方案 1（角色与规范都写入 `SOUL.md`）已写入 002 FR-061 / US6-6/7；实现见 `hermes/identity.rs`、CLI `hermes identity`、Host `hermes_identity_*`、Hermes 页「SOUL」。
 
 本页保留调查结论与覆盖合同，正式行为以 002 规格为准。
 
@@ -103,7 +103,7 @@ Hermes 对 SOUL 做扫描后注入，超长则头 70% + 尾 20% 截断（中间�
 
 ```mermaid
 flowchart TB
-  UI["HermesPage「人格与规范」· 单编辑区"] --> T["CLI / Tauri / Host"]
+  UI["HermesPage「SOUL」· 单编辑区"] --> T["CLI / Tauri / Host"]
   T --> C["hermes/identity.rs 读源 compose 签名"]
   C --> W["原子写各档案 SOUL.md"]
   PULL["vault pull 签名变化"] --> C

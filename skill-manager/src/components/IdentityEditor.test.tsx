@@ -68,6 +68,6 @@ describe("IdentityEditor", () => {
     fireEvent.click(saveButtons[0]);
 
     await waitFor(() => expect(container.textContent).toContain("已覆盖 空白模板"));
-    expect(screen.getByText("人格与规范")).toBeTruthy();
+    expect(screen.getByText("SOUL")).toBeTruthy();
   });
 });
