@@ -134,11 +134,15 @@ flowchart TB
 
 ---
 
-## 8. 待核对（实现前）
+## 8. 还剩什么
 
-- Windows 档案 home 仍按现有 Hermes 根解析。
-- 分发范围维持「本机全部已发现档案」（与全局规范语义一致）。
-- 发行版锁定的 SOUL（`hermes profile install`）本机是否出现：出现则覆盖仍按本项目为准，实现时如实报告写入结果即可。
+产品口径已够落地：方案 1、只管 `SOUL.md`、库是唯一真值、无条件覆盖、用户自行迁移。下列不是未决，实现时按现有代码即可：Windows 档案 home 用现有 Hermes 根解析；保存/拉取对**本机全部已发现档案**写入（Hermes 没有「停用档案」这层，对标指令管道的「已检测目标」）；发行版锁定的 SOUL 若出现仍覆盖，失败如实报告。
+
+**唯一值得拍板的副作用**：档案选择显示名今天是 `profile.yaml` 的 `ui_meta.hermes-bots.title` → `SOUL.md` 首个 `# ` 标题 → 目录 id。开始管理 SOUL 后，若全局稿以 `# 角色` 这类共用标题开头，没设 `profile.yaml` title 的 bot 会在选择器里变成同一个名字。本项目不改 `profile.yaml`。
+
+建议（未锁定）：管理 SOUL 之后，**本项目显示名不再用 SOUL 标题当回退**，只认 `profile.yaml` title，否则目录 id。这只改 Skill Manager 的列表，不改 Hermes。
+
+「禁止 bot 自改 SOUL」由用户写进各 bot 正文，本项目不代写、不注入。空库第一次保存会把现网 SOUL 盖成空文件——已按覆盖合同接受，迁移完成前不要点保存。
 
 ---
 
