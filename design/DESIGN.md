@@ -60,7 +60,7 @@ Agent 改界面前读本文。视觉画布是可操作原型，不是本文的�
 
 - 窗口圆角 14px；标题栏 28px。
 - 卡片：白底、1px 边框、轻阴影；悬停边框略深、阴影略抬。
-- 弹窗默认宽 860px，紧凑弹窗 400px；指令编辑器更大、圆角 28px。
+- 弹窗默认宽 860px，紧凑弹窗 400px；指令编辑器与人格编辑器更大、圆角 28px。
 - 不要用厚阴影、玻璃拟态或全屏营销 Hero。
 
 ## 6. Layout
@@ -132,7 +132,7 @@ Agent 改界面前读本文。视觉画布是可操作原型，不是本文的�
 - Agent：`agents` / `agent-pill` → `AgentPage.tsx`、`AgentPresetPills.tsx`
 - 设置：`settings` → `SettingsPage.tsx` + `AgentSettings` / `SyncStatus` / `DiagnosticsPanel`
 - 共用控件：`.btn` `.seg` `.badge` `.dialog` → `components/ui.tsx`
-- 弹窗：`skillDialog` `deployDialog` `intakeDialog` `drawInstructions` 等 → 同名职责的 `components/*.tsx`
+- 弹窗：`skillDialog` `deployDialog` `intakeDialog` `drawInstructions` `drawIdentity` 等 → 同名职责的 `components/*.tsx`
 - 管理站登录：`login-screen` / `login-card` → `pages/LoginPage.tsx`
 - 管理站首次接入：`first-connect-card` / `first-connect-steps` → `App.tsx` VaultWelcome（远程、尚无库）；先对接并选择当前设备，再接入 Host 上的路径
 - 设备条（仅远程壳）：`device-bar` → `components/DeviceBar.tsx`；含生成对接码、改名、解除对接；首次接入欢迎页也显示；桌面原型不得出现「切换其它设备」

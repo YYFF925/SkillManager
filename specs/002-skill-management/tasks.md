@@ -16,7 +16,7 @@ description: "Skill Manager 正式产品开发任务，按用户故事组织"
 
 **Input**：本目录的 `spec.md`、`plan.md`、`research.md`、`data-model.md`、`contracts/cli.md`、`quickstart.md`；约束依据 `.specify/memory/constitution.md` v2.0.2。
 
-**范围**：全部 10 个 User Story（用户故事）与 FR-001～060；构建真实桌面应用与 CLI（命令行接口），不把 `001` 原型的模拟行为当作实现。所有源文件路径均相对仓库根目录，正式产品代码位于 `skill-manager/`。
+**范围**：全部 10 个 User Story（用户故事）与 FR-001～061；构建真实桌面应用与 CLI（命令行接口），不把 `001` 原型的模拟行为当作实现。所有源文件路径均相对仓库根目录，正式产品代码位于 `skill-manager/`。
 
 **组织**：按故事优先级分阶段；同为 P1 的 US3 在 US2 前，先实现部署与接管能力，再接入获取链路。阶段是工作归属，不强制按文档顺序串行；实际执行按末尾 M1～M5 与依赖关系安排。阶段检查用于确认方向，**全部功能完成后才投入使用**，不把 MVP（最小可验证范围）作为提前交付承诺。
 
@@ -481,3 +481,12 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 - [X] T142 [US1] 分类栏顺序改为「全部分类」→「未分类」→具名分类；未分类不拖拽、不重命名。原型 `rail()` 与 `CategoryRail.tsx` 同步；`LibraryPage.test.tsx` 断言文档顺序。
 - [X] T143 [US1] [US6] [US7] 预设成员浏览与 Hermes 档案技能列表使用可编辑 `CategoryRail`，重命名调用 `renameCategory`（Hermes 固定龙虾库）。`PresetPage.test.tsx` / `HermesPage.test.tsx` 断言「新建分类」。
 - [X] T144 [US1] 实现库内归档：`vault/archive.rs`、`DeploymentService::archive_skills`（先卸载）、CLI `skill archive *`、Tauri `skill_archive_*`、技能库归档入口、设置页「查看归档」与 `ArchiveDialog`。core / CLI 测试覆盖隐藏、还原保元数据、卸载、外改中止、删除；设置页测试覆盖入口。
+
+## Phase 24: 增量 — Hermes 人格源（SOUL.md）（2026-11-15）
+
+**目标**：库内 `hermes-identity/` 为唯一真值，保存或拉取后无条件覆盖本机全部已发现档案的 `SOUL.md`（FR-061、US6-6/7）。不改档案生命周期、显示名读取链、`config.yaml` 或 `agent.system_prompt`。
+
+- [X] T145 [US6] 在 `skill-manager/crates/core/src/hermes/identity.rs` 实现源读写、四态 compose、签名与原子覆盖 `SOUL.md`；档案 home 不是目录则跳过，避免把 `SOUL.md` 写成身份标记。
+- [X] T146 [US6] CLI `hermes identity get|set|distribute`、Host `hermes_identity_*`、`sync pull` 源签名变化后刷新；桌面走 host_invoke，不新增 Tauri 直连命令。
+- [X] T147 [US6] 原型 Hermes 工具栏「SOUL」与 `IdentityEditor`（克隆指令编辑器布局）；档案选择显示名读取链保持不变。
+- [X] T148 [US6] 修订 002 spec / data-model / CLI 契约、需求记录、H02、GLOSSARY、ADR 0001、hermes-integration；`tests/cli_hermes.rs` 与 `cli_sync.rs` 覆盖覆盖合同。

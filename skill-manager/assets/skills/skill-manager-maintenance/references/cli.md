@@ -202,10 +202,14 @@ hermes list <profile> [--query <text>] [--category <c> | --uncategorized] [--tag
 hermes read <profile> <name> [--file <path>]
 hermes enable <profile> <name>...
 hermes disable <profile> <name>...
+hermes identity get global|<profile>
+hermes identity set global|<profile> (--file <path> | --stdin)
+hermes identity distribute
 ```
 
 `default` 档案即部署记录（`hermes:default`）；其他档案的启用是本机状态，内容更新不重置。
 `read` 读取档案内实际正文或文件，未入库技能也可先查看；阅读不收编，不改变库、部署或启用名单。
+`identity get` 返回源内容与合成预览；`set` 写入库内 `hermes-identity/` 后立即无条件覆盖本机全部已发现档案的 `SOUL.md`；空合成写成空文件。`distribute` 不改源，只按当前源刷新。不创建档案、不改启用名单。
 
 ## tool — 工具中心
 

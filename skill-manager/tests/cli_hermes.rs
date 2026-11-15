@@ -53,9 +53,27 @@ fn read_profile_local_skill_does_not_adopt_or_change_enable_state() {
     let before = env.cli_json(&["hermes", "list", "blank"]);
     let body = env.cli_json(&["hermes", "read", "blank", "local-only"]);
     assert_eq!(body["text"], "# 档案独有正文\n");
-    let file = env.cli_json(&["hermes", "read", "blank", "local-only", "--file", "references/guide.md"]);
+    let file = env.cli_json(&[
+        "hermes",
+        "read",
+        "blank",
+        "local-only",
+        "--file",
+        "references/guide.md",
+    ]);
     assert_eq!(file["text"], "独有文件");
-    assert_ne!(env.cli_json_raw(&["hermes", "read", "blank", "local-only", "--file", "../../config.yaml"]).0, 0);
+    assert_ne!(
+        env.cli_json_raw(&[
+            "hermes",
+            "read",
+            "blank",
+            "local-only",
+            "--file",
+            "../../config.yaml"
+        ])
+        .0,
+        0
+    );
     assert!(!env.path("lobster/local-only").exists());
     assert!(!env.hermes_root().join("skills/local-only").exists());
     assert_eq!(env.cli_json(&["hermes", "list", "blank"]), before);
@@ -103,9 +121,7 @@ fn enable_is_explicit_and_does_not_spread() {
     let result = env.cli_json(&["hermes", "enable", "blank", "alpha"]);
     assert_eq!(result["items"][0]["ok"], true, "{result}");
 
-    let link = env
-        .hermes_root()
-        .join("profiles/blank/skills/alpha");
+    let link = env.hermes_root().join("profiles/blank/skills/alpha");
     assert!(TestEnv::is_symlink(&link), "应建立指向 default 副本的链接");
     assert_eq!(
         std::fs::canonicalize(&link).unwrap(),
@@ -122,8 +138,16 @@ fn enable_is_explicit_and_does_not_spread() {
     );
 
     let list = env.cli_json(&["hermes", "list", "blank"]);
-    assert_eq!(profile_item(&list["skills"], "alpha")["enabled"], true, "{list}");
-    assert_eq!(profile_item(&list["skills"], "beta")["enabled"], false, "{list}");
+    assert_eq!(
+        profile_item(&list["skills"], "alpha")["enabled"],
+        true,
+        "{list}"
+    );
+    assert_eq!(
+        profile_item(&list["skills"], "beta")["enabled"],
+        false,
+        "{list}"
+    );
 }
 
 #[test]
@@ -136,7 +160,10 @@ fn hermes_agent_deploy_is_default_pool_for_other_profiles() {
 
     let list = env.cli_json(&["hermes", "list", "blank"]);
     let item = profile_item(&list["skills"], "painter");
-    assert_eq!(item["in_default_pool"], true, "已安装进 Hermes 的技能应出现在每个档案列表：{list}");
+    assert_eq!(
+        item["in_default_pool"], true,
+        "已安装进 Hermes 的技能应出现在每个档案列表：{list}"
+    );
     assert_eq!(item["enabled"], false, "看见不等于启用：{list}");
     assert_eq!(item["category"], "AI绘画", "{item}");
 
@@ -191,7 +218,9 @@ fn support_narrowing_keeps_existing_enable_and_blocks_new() {
     let item = profile_item(&list["skills"], "gamma");
     assert_eq!(item["enabled"], true, "已有启用应保留：{list}");
     assert!(
-        item["warning"].as_str().is_some_and(|text| text.contains("支持")),
+        item["warning"]
+            .as_str()
+            .is_some_and(|text| text.contains("支持")),
         "应给出支持收窄警告：{item}"
     );
 
@@ -200,20 +229,17 @@ fn support_narrowing_keeps_existing_enable_and_blocks_new() {
     assert_ne!(code, 0, "不支持的目标不得新增启用：{result}");
     assert_eq!(result["result"], "failed", "{result}");
     assert!(
-        result["errors"]
-            .as_array()
-            .is_some_and(|errors| errors
-                .iter()
-                .any(|error| error["message"]
-                    .as_str()
-                    .is_some_and(|text| text.contains("禁止新增启用")))),
+        result["errors"].as_array().is_some_and(|errors| errors
+            .iter()
+            .any(|error| error["message"]
+                .as_str()
+                .is_some_and(|text| text.contains("禁止新增启用")))),
         "应报告禁止新增启用：{result}"
     );
-    assert!(
-        !env.hermes_root()
-            .join("profiles/drawing/skills/gamma")
-            .exists()
-    );
+    assert!(!env
+        .hermes_root()
+        .join("profiles/drawing/skills/gamma")
+        .exists());
 }
 
 #[test]
@@ -225,13 +251,24 @@ fn adopt_profile_skill_into_lobster_and_default() {
     assert_eq!(result["items"][0]["ok"], true, "{result}");
 
     // 进入龙虾库并部署到 default。
-    assert!(env.vault.join("lobster/mydog/SKILL.md").exists(), "应收编进龙虾库");
+    assert!(
+        env.vault.join("lobster/mydog/SKILL.md").exists(),
+        "应收编进龙虾库"
+    );
     let list = env.cli_json(&["hermes", "list", "default"]);
-    assert_eq!(profile_item(&list["skills"], "mydog")["enabled"], true, "{list}");
+    assert_eq!(
+        profile_item(&list["skills"], "mydog")["enabled"],
+        true,
+        "{list}"
+    );
 
     // 原档案启用状态保持（仍可用）。
     let blank = env.cli_json(&["hermes", "list", "blank"]);
-    assert_eq!(profile_item(&blank["skills"], "mydog")["enabled"], true, "{blank}");
+    assert_eq!(
+        profile_item(&blank["skills"], "mydog")["enabled"],
+        true,
+        "{blank}"
+    );
 
     // 同名阻止：再次收编失败。
     let (code, again) = env.cli_json_raw(&["skill", "adopt-hermes", "blank", "mydog"]);
@@ -269,5 +306,49 @@ fn batch_enable_disable() {
     assert!(
         !env.hermes_root().join("profiles/blank/skills/a").exists(),
         "禁用应移除档案内的启用链接"
+    );
+}
+
+#[test]
+fn identity_save_overwrites_all_discovered_souls() {
+    let env = hermes_env();
+    std::fs::write(env.hermes_root().join("SOUL.md"), "旧 default").unwrap();
+    std::fs::write(env.hermes_root().join("profiles/blank/SOUL.md"), "旧 blank").unwrap();
+
+    let saved = env.cli_json_stdin(
+        &["hermes", "identity", "set", "global", "--stdin"],
+        "全局人格",
+    );
+    assert_eq!(saved["targets"].as_array().unwrap().len(), 3, "{saved}");
+    assert_eq!(env.hermes_read("SOUL.md").as_deref(), Some("全局人格"));
+    assert_eq!(
+        env.hermes_read("profiles/blank/SOUL.md").as_deref(),
+        Some("全局人格")
+    );
+    assert_eq!(
+        env.hermes_read("profiles/drawing/SOUL.md").as_deref(),
+        Some("全局人格")
+    );
+
+    env.cli_json_stdin(
+        &["hermes", "identity", "set", "blank", "--stdin"],
+        "blank 专属",
+    );
+    assert_eq!(
+        env.hermes_read("profiles/blank/SOUL.md").as_deref(),
+        Some("全局人格\n\nblank 专属")
+    );
+    assert_eq!(env.hermes_read("SOUL.md").as_deref(), Some("全局人格"));
+
+    let view = env.cli_json(&["hermes", "identity", "get", "blank"]);
+    assert_eq!(view["source"], "blank 专属");
+    assert_eq!(view["composed"], "全局人格\n\nblank 专属");
+
+    env.cli_json_stdin(&["hermes", "identity", "set", "global", "--stdin"], "");
+    env.cli_json_stdin(&["hermes", "identity", "set", "blank", "--stdin"], "");
+    assert_eq!(env.hermes_read("SOUL.md").as_deref(), Some(""));
+    assert_eq!(
+        env.hermes_read("profiles/blank/SOUL.md").as_deref(),
+        Some("")
     );
 }

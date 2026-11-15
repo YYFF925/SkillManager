@@ -28,7 +28,7 @@ vi.mock("./services/client", async (importOriginal) => ({
 
 const pulled: PullReportView = {
   outcome: "pulled", connected: true, remote: "test", conflicts: [], deployments: [],
-  deployment_errors: [], instructions_changed: false, instruction_targets: [], errors: [],
+  deployment_errors: [], instructions_changed: false, instruction_targets: [], identity_changed: false, identity_targets: [], errors: [],
   message: "已拉取最新技能库",
 };
 

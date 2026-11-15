@@ -842,6 +842,38 @@ export async function hermesAdopt(
   return invoke<HermesAdoptView>("hermes_adopt", { profile, names });
 }
 
+/** 人格作用域：`global` 或档案 id。 */
+export type IdentityScope = string;
+
+/** 某作用域的人格源与合成预览。 */
+export interface IdentitySourceView {
+  scope: string;
+  source: string;
+  composed: string;
+}
+
+/** 一个本机已发现档案的 SOUL.md 写入结果。 */
+export interface IdentityTargetResult {
+  profile: string;
+  path: string;
+  ok: boolean;
+  chars: number;
+  error?: string | null;
+}
+
+export async function hermesIdentityGet(
+  scope: IdentityScope,
+): Promise<IdentitySourceView> {
+  return invoke<IdentitySourceView>("hermes_identity_get", { scope });
+}
+
+export async function hermesIdentitySet(
+  scope: IdentityScope,
+  content: string,
+): Promise<IdentityTargetResult[]> {
+  return invoke<IdentityTargetResult[]>("hermes_identity_set", { scope, content });
+}
+
 // ---------------------------------------------------------------------------
 // 获取与上游维护（US2/US4；页面由 T038/T048 接入）
 // ---------------------------------------------------------------------------
@@ -1267,6 +1299,8 @@ export interface PullReportView {
   deployment_errors: ItemErrorView[];
   instructions_changed: boolean;
   instruction_targets: InstructionTargetResult[];
+  identity_changed?: boolean;
+  identity_targets?: IdentityTargetResult[];
   connection_error?: string | null;
   message: string;
 }

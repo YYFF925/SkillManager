@@ -1,8 +1,9 @@
 //! SkillManagerVault 拉取（T051，FR-037）。
 //!
 //! 无冲突时静默应用库文件，随后刷新**已有**部署（不新增目标、不首次部署），并在指令源
-//! 变化时刷新本机**已有启用**指令目标；冲突暂停本次同步并保留 Git 冲突现场，交 Agent
-//! 检查、用户裁决后再次 `sync pull` 继续；远端不可用时显示未连接，本地操作继续。
+//! 变化时刷新本机**已有启用**指令目标、人格源变化时覆盖本机已发现档案的 `SOUL.md`；
+//! 冲突暂停本次同步并保留 Git 冲突现场，交 Agent 检查、用户裁决后再次 `sync pull` 继续；
+//! 远端不可用时显示未连接，本地操作继续。
 //!
 //! 不提供克隆修复、断开远端或历史恢复入口；后台/手动拉取都不提交、不推送。
 
@@ -10,6 +11,7 @@ use serde::Serialize;
 
 use crate::deploy::apply::{DeployItemView, DeploymentService};
 use crate::error::Result;
+use crate::hermes::{IdentityService, IdentityTargetResult};
 use crate::output::ItemError;
 use crate::vault::instructions::{InstructionTargetResult, InstructionsService};
 
@@ -39,6 +41,10 @@ pub struct PullReport {
     pub instructions_changed: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub instruction_targets: Vec<InstructionTargetResult>,
+    /// 本次拉取是否改变了 Hermes 人格源。
+    pub identity_changed: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub identity_targets: Vec<IdentityTargetResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub connection_error: Option<String>,
     pub message: String,
@@ -60,6 +66,8 @@ impl PullReport {
             deployment_errors: Vec::new(),
             instructions_changed: false,
             instruction_targets: Vec::new(),
+            identity_changed: false,
+            identity_targets: Vec::new(),
             connection_error: None,
             message: message.into(),
             errors: Vec::new(),
@@ -94,13 +102,10 @@ impl SyncService<'_> {
         }
 
         let branch = git.current_branch()?;
-        let before_signature = InstructionsService::new(
-            root.clone(),
-            self.home.clone(),
-            self.catalog,
-            self.state,
-        )
-        .signature()?;
+        let before_signature =
+            InstructionsService::new(root.clone(), self.home.clone(), self.catalog, self.state)
+                .signature()?;
+        let before_identity = IdentityService::new(root.clone(), self.home.clone()).signature()?;
 
         git.ok(&["fetch", &remote_name])?;
 
@@ -123,7 +128,12 @@ impl SyncService<'_> {
                 return Ok(self.conflict_report(remote, branch, upstream, behind, conflicts));
             }
             // 上一次冲突已由用户/Agent 在 Git 层处理完毕，完成合并后继续刷新。
-            git.ok(&["commit", "--no-edit", "-m", "合并远端 SkillManagerVault 变更"])?;
+            git.ok(&[
+                "commit",
+                "--no-edit",
+                "-m",
+                "合并远端 SkillManagerVault 变更",
+            ])?;
         } else {
             let Some(upstream_ref) = upstream.clone() else {
                 return Ok(PullReport {
@@ -164,7 +174,11 @@ impl SyncService<'_> {
                         "error",
                         format!(
                             "拉取合并失败（未进入冲突状态）：{}",
-                            if detail.is_empty() { "git merge 失败" } else { detail }
+                            if detail.is_empty() {
+                                "git merge 失败"
+                            } else {
+                                detail
+                            }
                         ),
                     )
                 });
@@ -178,12 +192,8 @@ impl SyncService<'_> {
             .sync(None, None, false)?;
 
         // 指令源变化时刷新本机已有启用指令目标（不改启用名单/指令路径）。
-        let instructions = InstructionsService::new(
-            root.clone(),
-            self.home.clone(),
-            self.catalog,
-            self.state,
-        );
+        let instructions =
+            InstructionsService::new(root.clone(), self.home.clone(), self.catalog, self.state);
         let after_signature = instructions.signature()?;
         let instructions_changed = before_signature != after_signature;
         let instruction_targets = if instructions_changed {
@@ -192,26 +202,77 @@ impl SyncService<'_> {
             Vec::new()
         };
 
+        let identity = IdentityService::new(root.clone(), self.home.clone());
+        let after_identity = identity.signature()?;
+        let identity_changed = before_identity != after_identity;
+        let identity_targets = if identity_changed {
+            identity.distribute()?
+        } else {
+            Vec::new()
+        };
+
         self.state
             .set_last_sync_at(&crate::deploy::apply::now_iso())?;
 
         let mut errors = deploy.failures.clone();
-        errors.extend(instruction_targets.iter().filter(|target| !target.ok).map(|target| {
-            ItemError::new(target.error.clone().unwrap_or_else(|| "指令刷新失败".to_string()))
-                .target(format!("agent:{}", target.agent))
-                .path(target.path.clone())
-        }));
+        errors.extend(
+            instruction_targets
+                .iter()
+                .filter(|target| !target.ok)
+                .map(|target| {
+                    ItemError::new(
+                        target
+                            .error
+                            .clone()
+                            .unwrap_or_else(|| "指令刷新失败".to_string()),
+                    )
+                    .target(format!("agent:{}", target.agent))
+                    .path(target.path.clone())
+                }),
+        );
+        errors.extend(
+            identity_targets
+                .iter()
+                .filter(|target| !target.ok)
+                .map(|target| {
+                    ItemError::new(
+                        target
+                            .error
+                            .clone()
+                            .unwrap_or_else(|| "人格刷新失败".to_string()),
+                    )
+                    .target(format!("hermes:{}", target.profile))
+                    .path(target.path.clone())
+                }),
+        );
         let mut message = format!(
             "已拉取并应用库变更；刷新已有部署 {} 项{}",
             deploy.items.len(),
             if instructions_changed {
-                format!("；指令源已变化，刷新 {} 个已启用目标", instruction_targets.iter().filter(|target| target.ok).count())
+                format!(
+                    "；指令源已变化，刷新 {} 个已启用目标",
+                    instruction_targets
+                        .iter()
+                        .filter(|target| target.ok)
+                        .count()
+                )
             } else {
                 String::new()
             }
         );
+        if identity_changed {
+            message.push_str(&format!(
+                "；人格源已变化，覆盖 {} 个已发现档案",
+                identity_targets.iter().filter(|target| target.ok).count()
+            ));
+        }
         for error in &errors {
-            message.push_str(&format!("\n未完成：{} {} {}", error.target.as_deref().unwrap_or(""), error.path.as_deref().unwrap_or(""), error.message));
+            message.push_str(&format!(
+                "\n未完成：{} {} {}",
+                error.target.as_deref().unwrap_or(""),
+                error.path.as_deref().unwrap_or(""),
+                error.message
+            ));
         }
 
         Ok(PullReport {
@@ -226,6 +287,8 @@ impl SyncService<'_> {
             deployment_errors: deploy.failures,
             instructions_changed,
             instruction_targets,
+            identity_changed,
+            identity_targets,
             connection_error: None,
             message,
             errors,

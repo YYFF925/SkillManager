@@ -78,7 +78,8 @@ const frames = [
   ['49-station-device-selected', 'view=code&firstConnect=1&device=1&selected=1'],
   ['50-station-vault-attached', 'view=code&firstConnect=1&vault=1'],
   ['51-chat-cli-setup', 'view=code&chat=1'],
-  ['52-chat-conversation', 'view=code&chat=1&chatDemo=1']
+  ['52-chat-conversation', 'view=code&chat=1&chatDemo=1'],
+  ['53-hermes-identity', 'view=hermes&modal=identity']
 ];
 const requestedFrames = process.argv.slice(2);
 const selectedFrames = requestedFrames.length ? frames.filter(([name]) => requestedFrames.includes(name)) : frames;

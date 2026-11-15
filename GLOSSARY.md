@@ -9,7 +9,7 @@ Skill Manager 管理用户维护的 Skill 库，并将 Skill 部署到 Code Agen
 
 **SkillManagerVault（统一技能库）**:
 名称于 2026-10-16 由用户统一。
-用户拥有并持续维护的唯一逻辑技能库，内含编码与龙虾两个管理域以及预设、指令源、工具共享资料。各电脑的本地克隆属于同一个 SkillManagerVault，通过它自己的远端共享内容，不是彼此的技能上游，也不各建一套独立中央库。
+用户拥有并持续维护的唯一逻辑技能库，内含编码与龙虾两个管理域以及预设、指令源、Hermes 人格源、工具共享资料。各电脑的本地克隆属于同一个 SkillManagerVault，通过它自己的远端共享内容，不是彼此的技能上游，也不各建一套独立中央库。
 
 **Library（技能库）**:
 SkillManagerVault 中按管理域划分的 Skill 集合，包含技能内容及其 Manager layer（管理层）；编码库与龙虾库属于同一个 SkillManagerVault，不是两个独立的 Git 仓库。两域分别管理技能与部署范围，编码库技能需先明确进入龙虾库，才能部署给龙虾 Agent。
@@ -62,6 +62,9 @@ _Avoid_: overly
 
 **Hermes profile（Hermes 档案）**:
 Hermes 中独立的配置与数据目录，各 Agent 可使用各自档案运行；管理器按档案查看和配置启用的技能，各档案共用库内一份内容；档案详情只读，编辑在技能库进行。定义参见 [Hermes 官方档案说明](https://hermes-agent.nousresearch.com/docs/user-guide/profiles)。
+
+**Hermes identity（Hermes 人格源）**:
+SkillManagerVault 中的 `hermes-identity/`（`global.md` 与 `<档案id>.md`）。保存或拉取后按「全局在前、专属在后」无条件覆盖本机已发现档案的 `SOUL.md`。磁盘上的 `SOUL.md` 不是真值。档案选择显示名仍优先读 `profile.yaml` 的 title。不管理 `config.yaml`、`agent.system_prompt` 或档案生命周期。
 
 **Tool record（工具登记）**:
 工具中心的共享资料（登记条目、简介、维护指南、版本检查命令）与本机安装记录（版本、安装方式、路径、检查状态）的组合；共享部分随 SkillManagerVault 同步，安装记录各机独立。工具程序本身不在同步范围，实际安装由外部 Agent 执行。版本检查命令由 Agent 按工具实际情况编写，软件执行命令并对比版本，不内置按来源类型的解析。

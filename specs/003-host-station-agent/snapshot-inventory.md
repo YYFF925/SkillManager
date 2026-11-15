@@ -27,6 +27,7 @@
 | `deploy to/undo/sync/status` | 部署对话框、Agent 页暂停条 | `global.deployments`、`global.pausedDeployments`（含 `paused_local_change` + 路径 + 原因） | `deploy_status`、`deploy_to`、`deploy_sync`、`deploy_undo`（discard 须界面确认） |
 | `preset *` | 预设页 / 侧栏 | `global.presets`；`view.pageObjects`（presets）；打开的预设 `view.opened` | `preset_list/get/create/delete/rename/set_icon/reorder/members_*`、`deploy_preset`、`deploy_undo_preset` |
 | `hermes profiles/list/read/enable/disable` | Hermes 页 | `global.hermes`；`view.pageObjects`（hermes） | `hermes_profiles`、`hermes_list`、`hermes_read`、`hermes_enable/disable/adopt` |
+| `hermes identity get/set/distribute` | Hermes「SOUL」 | 无全文 | `hermes_identity_get`、`hermes_identity_set`、`hermes_identity_distribute` |
 | `tool list/get/check` | 工具中心 | `global.tools`；`view.pageObjects`（tools） | `tool_list`、`tool_get`、`tool_skill_candidates`、`tool_check`、`tool_task`、`tool_register/set/set_install/skill_link` |
 | `sync pull/push/status/conflicts` | 顶栏同步、设置页 | `global.pullConflicts`（路径 + `git status` 原文）；设置页 `view.pageObjects.sync` | `sync_pull`、`sync_status`、`sync_conflicts`、`sync_push`（须已开自动上传） |
 | `agent list/detect/local-skills/read-local` | Agent 页 | `global.agents`；`view.pageObjects`（agents-*）；打开目标 `view.opened` | `agent_list`、`agent_detect`、`agent_enable/disable/reorder/set_dir/reset_dir`、`agent_local_skills`、`agent_read_local`、`agent_delete_local` |

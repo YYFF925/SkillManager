@@ -6,7 +6,7 @@
  *
  * 保存走 core 的 `instruction set`：写源并按“全局在前、专属在后”覆盖本机已启用目标。
  * 拼接规则与分发范围由 core 决定，前端不复制；不加分发勾选、不加第二个分发按钮。
- * 指令路径与技能路径独立（由 Agents 的本机指令目标决定）。不扩展 Hermes 档案指令。
+ * 指令路径与技能路径独立（由 Agents 的本机指令目标决定）。不写入 Hermes 档案 `SOUL.md`（人格源见 IdentityEditor）。
  */
 import { useEffect, useMemo, useState } from "react";
 

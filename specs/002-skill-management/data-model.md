@@ -26,6 +26,9 @@ SkillManagerVault/                     # 用户已有 Git 仓库，首次接入�
 ├── instructions/               # Agent 指令源
 │   ├── global.md               # 全局内容
 │   └── <agent-key>.md          # 逐 Agent 专属内容（仅有专属时存在）
+├── hermes-identity/            # Hermes 人格源
+│   ├── global.md               # 全局人格
+│   └── <profile-id>.md         # 逐档案专属（仅有专属时存在）
 ├── upstream-decisions.yaml     # 按仓库/管理域记录明确不入库的上游子路径
 └── tools/                      # 工具中心共享资料
     └── <tool-slug>/
@@ -146,6 +149,18 @@ skills:                             # 配套 Skill 关联（技能名引用）
 
 `upstream_checks` 表（§2.5）按仓库去重键存库地址；该文件与本机检查时间无关。该文件不是“所有未入库技能”的清单，也不保存全仓检查历史，只保存一份一次性集合，不记录时间序列。
 
+### 1.7 Hermes 人格源 `hermes-identity/`
+
+```text
+hermes-identity/
+├── global.md           # 全局人格；文件不存在 = 空
+└── <profile-id>.md     # 逐档案专属；档案 id 与 Hermes 目录 id 一致（含 URL 编码名），不用显示名
+```
+
+- 拼接与 `instructions/` 相同四态：去空白；双空→空；单侧有→只用该侧；双有→全局后空一行再专属（core 复用 `compose_instructions`）。
+- 保存任一作用域，或 `sync pull` 发现源签名变化后，对**本机全部已发现档案**无条件覆盖 `<home>/SOUL.md`（同目录 tmp+rename）。空合成写成空文件。档案 home 不是目录则跳过，避免把 `SOUL.md` 写成身份标记。
+- 磁盘上的 `SOUL.md` 不是真值：不检测冲突、不导入现网文件、不暂停。不写 `config.yaml`、`agent.system_prompt` 或项目 `AGENTS.md`，不改档案显示名读取链（`profile.yaml` title → `SOUL.md` 首标题 → 目录 id）。
+
 ## 二、本机状态（SQLite，`skill-manager.db`）
 
 > 只存本机状态，无外键技能表——技能引用一律存 `(domain, name)` 字符串（D1/D2）。丢失后果：部署可重部署、启用可重选、设置可重填。
@@ -264,6 +279,7 @@ default 是否已安装以该目录下实际存在技能目录为准，不要求
 | 预设成员 | 技能名（同文件所属域） | 界面标注"缺失成员"，不阻塞其他成员 |
 | 工具配套 Skill | `(domain, name)` | 显示"未入库"，可前往入库 |
 | 指令源 | `<agent-key>.md` 文件名 | 无专属文件 → 仅全局内容 |
+| 人格源 | `<profile-id>.md` 文件名 | 无专属文件 → 仅全局内容 |
 
 - 所有共享文件的写入者（GUI、CLI、Agent 手改）地位平等：文件监听触发索引刷新，无"谁是权威来源"的区分（宪章 V）。
 - 库同步冲突 = Git 层冲突，暂停同步交 Agent/用户（FR-039），应用层不做合并。
