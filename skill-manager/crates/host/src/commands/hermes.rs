@@ -3,7 +3,10 @@
 //! 薄封装 core：协议与业务规则都在 `skill_manager_core::hermes`；前端只调用这里。
 
 use serde::Serialize;
-use skill_manager_core::hermes::{AdoptItem, HermesItem, HermesService, ProfileSkillsView, ProfileView};
+use skill_manager_core::hermes::{
+    AdoptItem, HermesItem, HermesService, IdentityScope, IdentityService, IdentitySourceView,
+    IdentityTargetResult, ProfileSkillsView, ProfileView,
+};
 use skill_manager_core::vault::index::{CategoryFilter, SearchQuery};
 
 use crate::HostRuntime;
@@ -73,8 +76,17 @@ fn run_with<T>(
     run(&service)
 }
 
-pub fn hermes_read(runtime: &HostRuntime, profile: String, name: String, file: Option<String>) -> Result<skill_manager_core::deploy::local_skills::LocalSkillRead, String> {
-    run_with(runtime, |service| service.read(&profile, &name, file.as_deref()).map_err(|err| err.to_string()))
+pub fn hermes_read(
+    runtime: &HostRuntime,
+    profile: String,
+    name: String,
+    file: Option<String>,
+) -> Result<skill_manager_core::deploy::local_skills::LocalSkillRead, String> {
+    run_with(runtime, |service| {
+        service
+            .read(&profile, &name, file.as_deref())
+            .map_err(|err| err.to_string())
+    })
 }
 
 /// 本机现有档案（default 与具名档案）。
@@ -167,4 +179,49 @@ pub fn hermes_adopt(
             adopted,
         })
     })
+}
+
+fn identity_service(runtime: &HostRuntime) -> Result<IdentityService, String> {
+    let ctx = runtime.get()?;
+    let root = ctx
+        .vault()
+        .map_err(|err| err.to_string())?
+        .root()
+        .to_path_buf();
+    Ok(IdentityService::new(
+        root,
+        ctx.home().map_err(|err| err.to_string())?,
+    ))
+}
+
+/// 读取人格源与合成预览（`scope` 为 `global` 或档案 id）。
+pub fn hermes_identity_get(
+    runtime: &HostRuntime,
+    scope: String,
+) -> Result<IdentitySourceView, String> {
+    let scope = IdentityScope::parse(&scope).map_err(|err| err.to_string())?;
+    identity_service(runtime)?
+        .get(&scope)
+        .map_err(|err| err.to_string())
+}
+
+/// 保存人格源并覆盖本机全部已发现档案的 SOUL.md。
+pub fn hermes_identity_set(
+    runtime: &HostRuntime,
+    scope: String,
+    content: String,
+) -> Result<Vec<IdentityTargetResult>, String> {
+    let scope = IdentityScope::parse(&scope).map_err(|err| err.to_string())?;
+    identity_service(runtime)?
+        .save(&scope, &content)
+        .map_err(|err| err.to_string())
+}
+
+/// 按当前人格源刷新本机全部已发现档案。
+pub fn hermes_identity_distribute(
+    runtime: &HostRuntime,
+) -> Result<Vec<IdentityTargetResult>, String> {
+    identity_service(runtime)?
+        .distribute()
+        .map_err(|err| err.to_string())
 }

@@ -58,6 +58,7 @@ description: 前端设计层｜在 design/ 看与改可操作原型，再把正�
 | 收编 | `adoptDialog` | `components/AdoptDialog.tsx` |
 | 上游更新 | `updatesDialog` `singleSkillUpdateDialog` | `components/UpstreamDialog.tsx` |
 | Agent 指令 | `drawInstructions` | `components/InstructionEditor.tsx` |
+| Hermes 人格与规范 | `drawIdentity` | `components/IdentityEditor.tsx` |
 | 标签／分类 | `addSkillTagsDialog` `tagsDialog` `categoryDialog` | `components/SkillDialogs.tsx`、`ManagerEditor.tsx` |
 | 维护／工具任务 | `maintenanceDialog` `toolTaskDialog` `toolRegisterDialog` | `components/TaskDialog.tsx` |
 | 工具配套 Skill | `toolSkillIntakeDialog` | `components/ToolSkillCandidates.tsx` |

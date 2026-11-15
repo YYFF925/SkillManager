@@ -126,6 +126,8 @@ vi.mock("../services/client", () => ({
     deployment_errors: [],
     instructions_changed: false,
     instruction_targets: [],
+    identity_changed: false,
+    identity_targets: [],
     message: "与远端一致，无需拉取。",
   })),
 }));

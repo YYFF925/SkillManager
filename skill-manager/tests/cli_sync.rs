@@ -41,21 +41,42 @@ impl TwoMachines {
         write_gitconfig(&home_a);
         write_gitconfig(&home_b);
 
-        git(base, &["init", "--bare", "--initial-branch=main", bare.to_str().unwrap()], &home_a);
+        git(
+            base,
+            &[
+                "init",
+                "--bare",
+                "--initial-branch=main",
+                bare.to_str().unwrap(),
+            ],
+            &home_a,
+        );
 
         let a = Machine {
             vault: vault_a,
             state: state_a,
             home: home_a,
         };
-        git(&a.vault, &["init", "--quiet", "--initial-branch=main"], &a.home);
-        git(&a.vault, &["remote", "add", "origin", bare.to_str().unwrap()], &a.home);
+        git(
+            &a.vault,
+            &["init", "--quiet", "--initial-branch=main"],
+            &a.home,
+        );
+        git(
+            &a.vault,
+            &["remote", "add", "origin", bare.to_str().unwrap()],
+            &a.home,
+        );
         write(&a.vault, "README.md", "# 测试库\n");
         commit(&a.vault, &a.home, "初始化");
         git(&a.vault, &["push", "-u", "origin", "main"], &a.home);
 
         std::fs::create_dir_all(&vault_b).unwrap();
-        git(base, &["clone", bare.to_str().unwrap(), vault_b.to_str().unwrap()], &home_b);
+        git(
+            base,
+            &["clone", bare.to_str().unwrap(), vault_b.to_str().unwrap()],
+            &home_b,
+        );
         let b = Machine {
             vault: vault_b,
             state: state_b,
@@ -112,7 +133,11 @@ fn git_ok(dir: &Path, args: &[&str], home: &Path) -> String {
 
 fn commit(dir: &Path, home: &Path, message: &str) {
     git_ok(dir, &["add", "-A"], home);
-    git_ok(dir, &["commit", "--quiet", "--allow-empty", "-m", message], home);
+    git_ok(
+        dir,
+        &["commit", "--quiet", "--allow-empty", "-m", message],
+        home,
+    );
 }
 
 fn head(dir: &Path, home: &Path) -> String {
@@ -206,7 +231,16 @@ fn pull_reports_deployment_and_instruction_failures_as_partial() {
     let blocker = env.b.home.join("blocked");
     std::fs::write(&blocker, "不能作为目录").unwrap();
     let instruction_target = blocker.join("AGENTS.md");
-    cli_json(&env.b, &["agent", "set-dir", "codex", "--instructions", instruction_target.to_str().unwrap()]);
+    cli_json(
+        &env.b,
+        &[
+            "agent",
+            "set-dir",
+            "codex",
+            "--instructions",
+            instruction_target.to_str().unwrap(),
+        ],
+    );
     cli_json(&env.b, &["agent", "enable", "codex"]);
     write(&env.a.vault, "code/alpha/SKILL.md", "v2\n");
     write(&env.a.vault, "instructions/global.md", "新指令\n");
@@ -218,10 +252,23 @@ fn pull_reports_deployment_and_instruction_failures_as_partial() {
     assert_eq!(result["result"], "partial");
     assert_eq!(result["data"]["outcome"], "pulled");
     assert_eq!(result["errors"].as_array().unwrap().len(), 2);
-    assert!(result["errors"].as_array().unwrap().iter().all(|e| e["path"].is_string()));
-    assert_eq!(read(&env.b.vault, "code/alpha/SKILL.md").as_deref(), Some("v2\n"));
-    assert_eq!(read(&env.b.home, ".codex/skills/alpha/SKILL.md").as_deref(), Some("本地修改\n"));
-    assert!(result["data"]["message"].as_str().unwrap().contains("未完成"));
+    assert!(result["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|e| e["path"].is_string()));
+    assert_eq!(
+        read(&env.b.vault, "code/alpha/SKILL.md").as_deref(),
+        Some("v2\n")
+    );
+    assert_eq!(
+        read(&env.b.home, ".codex/skills/alpha/SKILL.md").as_deref(),
+        Some("本地修改\n")
+    );
+    assert!(result["data"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("未完成"));
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +279,13 @@ fn pull_reports_deployment_and_instruction_failures_as_partial() {
 fn pull_refreshes_existing_deployment_but_not_new() {
     let env = TwoMachines::new();
     // A：建立 alpha 并推送。
-    add_skill(&env.a.vault, &env.a.home, "alpha", "# alpha\n", Some("甲版"));
+    add_skill(
+        &env.a.vault,
+        &env.a.home,
+        "alpha",
+        "# alpha\n",
+        Some("甲版"),
+    );
     git_ok(&env.a.vault, &["push"], &env.a.home);
     // B：拉取（首次同步库内容）。
     let pulled = cli_json(&env.b, &["sync", "pull"]);
@@ -245,7 +298,13 @@ fn pull_refreshes_existing_deployment_but_not_new() {
     assert!(alpha_copy.join("SKILL.md").exists());
 
     // A：修改 alpha 注释并新增 beta，一起推送。
-    add_skill(&env.a.vault, &env.a.home, "alpha", "# alpha\n", Some("乙版"));
+    add_skill(
+        &env.a.vault,
+        &env.a.home,
+        "alpha",
+        "# alpha\n",
+        Some("乙版"),
+    );
     add_skill(&env.a.vault, &env.a.home, "beta", "# beta\n", None);
     git_ok(&env.a.vault, &["push"], &env.a.home);
 
@@ -254,9 +313,7 @@ fn pull_refreshes_existing_deployment_but_not_new() {
     assert_eq!(pulled["outcome"], "pulled");
     let deployments = pulled["deployments"].as_array().unwrap();
     assert!(
-        deployments
-            .iter()
-            .any(|item| item["skill"] == "code/alpha"),
+        deployments.iter().any(|item| item["skill"] == "code/alpha"),
         "已有部署 alpha 应被刷新：{pulled}"
     );
     assert!(
@@ -316,7 +373,10 @@ fn pull_conflict_pauses_then_continues() {
     let (code, body) = cli_json_raw(&env.b, &["sync", "pull"]);
     assert_eq!(code, 0, "冲突处理后应继续成功：{body}");
     assert_eq!(body["data"]["outcome"], "pulled");
-    assert_eq!(read(&env.b.vault, "code/alpha/SKILL.md").unwrap(), "# resolved\n");
+    assert_eq!(
+        read(&env.b.vault, "code/alpha/SKILL.md").unwrap(),
+        "# resolved\n"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +403,11 @@ fn disconnected_remote_keeps_local_operations() {
 
     // 本地管理、部署与 deploy sync 继续可用。
     let list = cli_json(&env.b, &["skill", "list", "--domain", "code"]);
-    assert!(list["skills"].as_array().unwrap().iter().any(|s| s["name"] == "alpha"));
+    assert!(list["skills"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["name"] == "alpha"));
     let deploy = cli_json(&env.b, &["deploy", "to", "codex", "code/alpha"]);
     assert_eq!(deploy["items"].as_array().unwrap().len(), 1);
     let (_code, sync) = cli_json_raw(&env.b, &["deploy", "sync"]);
@@ -367,7 +431,11 @@ fn push_commits_all_workspace_changes_to_own_vault_only() {
     // 技能来源仓库：vault 内的技能登记其来源；push 不应改动它。
     let upstream = env.root.path().join("skill-upstream");
     std::fs::create_dir_all(&upstream).unwrap();
-    git_ok(&upstream, &["init", "--quiet", "--initial-branch=main"], &env.a.home);
+    git_ok(
+        &upstream,
+        &["init", "--quiet", "--initial-branch=main"],
+        &env.a.home,
+    );
     write(&upstream, "src/SKILL.md", "# upstream\n");
     commit(&upstream, &env.a.home, "upstream init");
     let upstream_head = head(&upstream, &env.a.home);
@@ -445,11 +513,23 @@ fn instruction_compose_save_and_pull_refresh() {
     cli_json(&env.b, &["agent", "disable", "zcode"]);
 
     // A：设置全局 + codex 专属，检查目标 AGENTS.md 为“全局 + 空行 + 专属”。
-    let out = cli_stdin(&env.a, &["instruction", "set", "global", "--stdin"], "全局指令");
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let out = cli_stdin(
+        &env.a,
+        &["instruction", "set", "global", "--stdin"],
+        "全局指令",
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert_eq!(read(&env.a.home, ".codex/AGENTS.md").unwrap(), "全局指令");
 
-    let out = cli_stdin(&env.a, &["instruction", "set", "codex", "--stdin"], "codex 专属");
+    let out = cli_stdin(
+        &env.a,
+        &["instruction", "set", "codex", "--stdin"],
+        "codex 专属",
+    );
     assert!(out.status.success());
     assert_eq!(
         read(&env.a.home, ".codex/AGENTS.md").unwrap(),
@@ -490,4 +570,49 @@ fn instruction_compose_save_and_pull_refresh() {
         .find(|a| a["key"] == "zcode")
         .unwrap();
     assert_eq!(zcode["enabled"], false);
+}
+
+fn hermes_root(home: &Path) -> PathBuf {
+    home.join(".hermes")
+}
+
+fn hermes_init(home: &Path) {
+    let root = hermes_root(home);
+    std::fs::create_dir_all(root.join("skills")).unwrap();
+    std::fs::write(root.join("config.yaml"), "skills:\n  disabled:\n").unwrap();
+    let blank = root.join("profiles/blank");
+    std::fs::create_dir_all(blank.join("skills")).unwrap();
+    std::fs::write(blank.join("config.yaml"), "skills:\n  disabled:\n").unwrap();
+}
+
+#[test]
+fn identity_save_and_pull_overwrites_discovered_souls() {
+    let env = TwoMachines::new();
+    hermes_init(&env.a.home);
+    hermes_init(&env.b.home);
+    std::fs::write(hermes_root(&env.b.home).join("SOUL.md"), "B 旧人格").unwrap();
+
+    let out = cli_stdin(
+        &env.a,
+        &["hermes", "identity", "set", "global", "--stdin"],
+        "全局人格",
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(read(&env.a.home, ".hermes/SOUL.md").unwrap(), "全局人格");
+
+    commit(&env.a.vault, &env.a.home, "设置人格源");
+    git_ok(&env.a.vault, &["push"], &env.a.home);
+
+    let pulled = cli_json(&env.b, &["sync", "pull"]);
+    assert_eq!(pulled["outcome"], "pulled");
+    assert_eq!(pulled["identity_changed"], true);
+    assert_eq!(read(&env.b.home, ".hermes/SOUL.md").unwrap(), "全局人格");
+    assert_eq!(
+        read(&env.b.home, ".hermes/profiles/blank/SOUL.md").unwrap(),
+        "全局人格"
+    );
 }

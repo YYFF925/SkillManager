@@ -54,10 +54,7 @@ pub fn run(
 }
 
 /// 在已接入的库上构造同步服务并执行闭包（解析器生命周期随闭包）。
-fn with_service<T>(
-    ctx: &AppContext,
-    f: impl FnOnce(&SyncService<'_>) -> Result<T>,
-) -> Result<T> {
+fn with_service<T>(ctx: &AppContext, f: impl FnOnce(&SyncService<'_>) -> Result<T>) -> Result<T> {
     let vault = ctx.vault()?;
     let home = ctx.home()?;
     let resolver = ctx.target_resolver()?;
@@ -71,7 +68,9 @@ fn pull(ctx: &AppContext) -> Result<(CliResult, String)> {
     let data = serde_json::to_value(&report).unwrap_or(serde_json::Value::Null);
 
     let result = match report.outcome.as_str() {
-        "pulled" | "up_to_date" if !report.errors.is_empty() => CliResult::partial(data, report.errors.clone()),
+        "pulled" | "up_to_date" if !report.errors.is_empty() => {
+            CliResult::partial(data, report.errors.clone())
+        }
         "pulled" | "up_to_date" => CliResult::success(data),
         "conflict" => {
             let mut errors = vec![ItemError::new(&report.message)];
@@ -95,7 +94,23 @@ fn pull_human(report: &PullReport) -> String {
         text.push_str(&format!(
             "\n- 指令目标 {}：{}{}",
             target.agent,
-            if target.ok { "已刷新" } else { "刷新失败" },
+            if target.ok {
+                "已刷新"
+            } else {
+                "刷新失败"
+            },
+            target.path
+        ));
+    }
+    for target in &report.identity_targets {
+        text.push_str(&format!(
+            "\n- 人格 {}：{}{}",
+            target.profile,
+            if target.ok {
+                "已覆盖"
+            } else {
+                "覆盖失败"
+            },
             target.path
         ));
     }

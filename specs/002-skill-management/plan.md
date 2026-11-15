@@ -309,3 +309,11 @@ CLI 的手动检查由 `skill check --all`、`sync pull`、`tool check --all` �
 - 构建时 `bundle.createUpdaterArtifacts = true`，用 Infisical 路径 `/service/skillmanager/updater` 的 `TAURI_SIGNING_PRIVATE_KEY` 签名；公钥写入 `tauri.conf.json`。
 - 启动后静默检查，有更新才弹窗；设置页展示当前版本并提供手动检查。安装走 `downloadAndInstall` + `relaunch`。
 - 发布脚本 `skill-manager/scripts/publish-github-update.mjs` 上传当前平台产物并更新对应清单。版本脚本 `skill-manager/scripts/bump-version.mjs` 同步三处 SemVer。
+
+## Hermes 人格源（2026-11-15）
+
+对应 spec.md FR-061 / US6-6/7。调查结论见 [hermes-identity-architecture.md](../../docs/technical-reference/hermes-identity-architecture.md)；落地修订 002，不新开功能目录。
+
+- 库内 `hermes-identity/global.md` 与 `<档案id>.md` 为唯一真值，随 SkillManagerVault 同步。拼接复用指令四态。保存或拉取源变化后无条件覆盖本机全部已发现档案的 `SOUL.md`（tmp+rename），含第一次写入与空合成。
+- CLI `hermes identity get|set|distribute`，Host `hermes_identity_*`；桌面走 `host_invoke`。GUI 入口在 Hermes 档案页「人格与规范」，布局克隆指令编辑器。
+- 不做：档案生命周期、显示名编辑、`config.yaml` / `agent.system_prompt` / 项目 `AGENTS.md`、磁盘冲突检测、从现网 SOUL 导入。档案选择显示名读取链保持 `profile.yaml` title → `SOUL.md` 首标题 → 目录 id。

@@ -1,12 +1,15 @@
-//! `hermes` 子命令：本机单 Hermes 根下的档案与技能启用（T060）。
+//! `hermes` 子命令：本机单 Hermes 根下的档案、技能启用与人格源（T060 / T145）。
 //!
 //! 参数与输出遵循 `specs/002-skill-management/contracts/cli.md`；业务规则全部在 core。
 //! default 档案由 `hermes:default` 部署记录表达（`deploy` 维护）；其他档案在此明确启停。
-//! 不提供档案创建/删除/改名、活动切换、多实例或 `SOUL.md` 管理。
+//! 不提供档案创建/删除/改名、活动切换或多实例。`SOUL.md` 由库内 `hermes-identity` 源无条件覆盖。
+
+use std::io::Read;
+use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
-use serde_json::{Value, json};
-use skill_manager_core::hermes::HermesService;
+use serde_json::{json, Value};
+use skill_manager_core::hermes::{HermesService, IdentityScope, IdentityService, LONG_SOUL_CHARS};
 use skill_manager_core::output::BatchOutcome;
 use skill_manager_core::{AppContext, CliResult, CoreError, GlobalOptions};
 
@@ -28,6 +31,44 @@ pub enum HermesAction {
     Enable(NamesArgs),
     /// 为某具名档案禁用技能（可多个）。
     Disable(NamesArgs),
+    /// 档案人格源（SOUL.md）：读取、保存并覆盖本机全部已发现档案。
+    Identity(IdentityCommand),
+}
+
+#[derive(Args, Debug)]
+pub struct IdentityCommand {
+    #[command(subcommand)]
+    pub action: IdentityAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum IdentityAction {
+    /// 读取某作用域的源内容与合成预览（global 或档案 id）。
+    Get(IdentityScopeArgs),
+    /// 保存某作用域的源内容并覆盖本机全部已发现档案的 SOUL.md。
+    Set(IdentitySetArgs),
+    /// 按当前源内容刷新本机全部已发现档案（不改源）。
+    Distribute,
+}
+
+#[derive(Args, Debug)]
+pub struct IdentityScopeArgs {
+    /// 作用域：`global` 或档案 id。
+    #[arg(value_name = "global|profile")]
+    pub scope: String,
+}
+
+#[derive(Args, Debug)]
+pub struct IdentitySetArgs {
+    /// 作用域：`global` 或档案 id。
+    #[arg(value_name = "global|profile")]
+    pub scope: String,
+    /// 从文件读取内容。
+    #[arg(long, value_name = "path", conflicts_with = "stdin")]
+    pub file: Option<PathBuf>,
+    /// 从标准输入读取内容。
+    #[arg(long, conflicts_with = "file")]
+    pub stdin: bool,
 }
 
 #[derive(Args, Debug)]
@@ -86,13 +127,19 @@ fn dispatch(action: HermesAction, ctx: &AppContext) -> Result<(CliResult, String
     match action {
         HermesAction::Profiles => profiles(ctx),
         HermesAction::Read(args) => {
-            let view = with_service(ctx, |service| service.read(&args.profile, &args.name, args.file.as_deref()))?;
-            let human = view.text.clone().unwrap_or_else(|| format!("该文件不是 UTF-8 文本（{} 字节）", view.size));
+            let view = with_service(ctx, |service| {
+                service.read(&args.profile, &args.name, args.file.as_deref())
+            })?;
+            let human = view
+                .text
+                .clone()
+                .unwrap_or_else(|| format!("该文件不是 UTF-8 文本（{} 字节）", view.size));
             Ok((CliResult::from_data(&view), human))
-        },
+        }
         HermesAction::List(args) => list(ctx, args),
         HermesAction::Enable(args) => set_enabled(ctx, args, true),
         HermesAction::Disable(args) => set_enabled(ctx, args, false),
+        HermesAction::Identity(command) => identity(ctx, command),
     }
 }
 
@@ -154,14 +201,24 @@ fn list(ctx: &AppContext, args: ListArgs) -> Result<(CliResult, String)> {
         }
     );
     if let Some(error) = &view.config_error {
-        human.push_str(&format!("\n[档案配置读取失败，启用状态不作有效结论：{error}]"));
+        human.push_str(&format!(
+            "\n[档案配置读取失败，启用状态不作有效结论：{error}]"
+        ));
     }
     for skill in &view.skills {
         human.push_str(&format!(
             "\n- {} [{}]{}",
             skill.name,
-            if skill.enabled { "已启用" } else { "未启用" },
-            if skill.needs_adoption { "（档案独有，可收编）" } else { "" }
+            if skill.enabled {
+                "已启用"
+            } else {
+                "未启用"
+            },
+            if skill.needs_adoption {
+                "（档案独有，可收编）"
+            } else {
+                ""
+            }
         ));
         if let Some(warning) = &skill.warning {
             human.push_str(&format!(" {warning}"));
@@ -178,7 +235,9 @@ fn list(ctx: &AppContext, args: ListArgs) -> Result<(CliResult, String)> {
 // ---------------------------------------------------------------------------
 
 fn set_enabled(ctx: &AppContext, args: NamesArgs, enabled: bool) -> Result<(CliResult, String)> {
-    let items = with_service(ctx, |service| service.set_enabled(&args.profile, &args.names, enabled))?;
+    let items = with_service(ctx, |service| {
+        service.set_enabled(&args.profile, &args.names, enabled)
+    })?;
 
     let mut batch = BatchOutcome::default();
     for item in &items {
@@ -187,7 +246,9 @@ fn set_enabled(ctx: &AppContext, args: NamesArgs, enabled: bool) -> Result<(CliR
         } else {
             batch.push_err(
                 skill_manager_core::ItemError::new(
-                    item.message.clone().unwrap_or_else(|| "未知原因".to_string()),
+                    item.message
+                        .clone()
+                        .unwrap_or_else(|| "未知原因".to_string()),
                 )
                 .skill(format!("{}/{}", args.profile, item.name)),
             );
@@ -240,7 +301,9 @@ pub fn adopt(ctx: &AppContext, profile: &str, names: &[String]) -> Result<(CliRe
         } else {
             batch.push_err(
                 skill_manager_core::ItemError::new(
-                    item.message.clone().unwrap_or_else(|| "未知原因".to_string()),
+                    item.message
+                        .clone()
+                        .unwrap_or_else(|| "未知原因".to_string()),
                 )
                 .skill(format!("{profile}/{}", item.name)),
             );
@@ -262,8 +325,128 @@ pub fn adopt(ctx: &AppContext, profile: &str, names: &[String]) -> Result<(CliRe
     }
     for item in &items {
         if item.ok {
-            human.push_str(&format!("\n- {} → {}（default）", item.name, item.library_skill.as_deref().unwrap_or("-")));
+            human.push_str(&format!(
+                "\n- {} → {}（default）",
+                item.name,
+                item.library_skill.as_deref().unwrap_or("-")
+            ));
         }
     }
+    Ok((result, human))
+}
+
+// ---------------------------------------------------------------------------
+// identity
+// ---------------------------------------------------------------------------
+
+fn identity_service(ctx: &AppContext) -> Result<IdentityService> {
+    let root = ctx.vault()?.root().to_path_buf();
+    Ok(IdentityService::new(root, ctx.home()?))
+}
+
+fn identity(ctx: &AppContext, command: IdentityCommand) -> Result<(CliResult, String)> {
+    match command.action {
+        IdentityAction::Get(args) => identity_get(ctx, &args.scope),
+        IdentityAction::Set(args) => identity_set(ctx, args),
+        IdentityAction::Distribute => identity_distribute(ctx),
+    }
+}
+
+fn identity_get(ctx: &AppContext, scope: &str) -> Result<(CliResult, String)> {
+    let scope = IdentityScope::parse(scope)?;
+    let view = identity_service(ctx)?.get(&scope)?;
+    let data = json!({
+        "scope": view.scope,
+        "source": view.source,
+        "composed": view.composed,
+    });
+    let human = format!(
+        "作用域 {}（源 {} 字符；合成后 {} 字符）",
+        view.scope,
+        view.source.chars().count(),
+        view.composed.chars().count()
+    );
+    Ok((CliResult::from_data(&data), human))
+}
+
+fn identity_content(args: &IdentitySetArgs) -> Result<String> {
+    match (&args.file, args.stdin) {
+        (Some(path), false) => {
+            std::fs::read_to_string(path).map_err(|err| CoreError::io(path.clone(), err))
+        }
+        (None, true) => {
+            let mut buffer = String::new();
+            std::io::stdin()
+                .read_to_string(&mut buffer)
+                .map_err(|err| CoreError::io(PathBuf::from("<stdin>"), err))?;
+            Ok(buffer)
+        }
+        _ => Err(CoreError::other(
+            "必须且只能指定 --file <path> 或 --stdin 之一",
+        )),
+    }
+}
+
+fn identity_set(ctx: &AppContext, args: IdentitySetArgs) -> Result<(CliResult, String)> {
+    let scope = IdentityScope::parse(&args.scope)?;
+    let content = identity_content(&args)?;
+    let results = identity_service(ctx)?.save(&scope, &content)?;
+    identity_results(scope.as_str(), results, true)
+}
+
+fn identity_distribute(ctx: &AppContext) -> Result<(CliResult, String)> {
+    let results = identity_service(ctx)?.distribute()?;
+    identity_results("current", results, false)
+}
+
+fn identity_results(
+    scope: &str,
+    results: Vec<skill_manager_core::hermes::IdentityTargetResult>,
+    saved: bool,
+) -> Result<(CliResult, String)> {
+    let failures: Vec<skill_manager_core::ItemError> = results
+        .iter()
+        .filter(|result| !result.ok)
+        .map(|result| {
+            skill_manager_core::ItemError::new(
+                result
+                    .error
+                    .clone()
+                    .unwrap_or_else(|| "写入失败".to_string()),
+            )
+            .target(result.profile.clone())
+            .path(result.path.clone())
+        })
+        .collect();
+    let long = results
+        .iter()
+        .filter(|result| result.ok && result.chars >= LONG_SOUL_CHARS)
+        .count();
+    let data = json!({
+        "scope": scope,
+        "targets": results,
+    });
+    let mut human = if saved {
+        format!(
+            "已保存 {} 人格源；覆盖 {} 个本机已发现档案",
+            scope,
+            results.len()
+        )
+    } else {
+        format!("已按当前人格源覆盖 {} 个本机已发现档案", results.len())
+    };
+    if !failures.is_empty() {
+        human.push_str(&format!("，{} 个档案写入失败", failures.len()));
+    }
+    if long > 0 {
+        human.push_str(&format!(
+            "；{long} 个合成稿达到约 {LONG_SOUL_CHARS} 字符，Hermes 可能截断中段"
+        ));
+    }
+    let result = if failures.is_empty() {
+        CliResult::success(data)
+    } else {
+        CliResult::partial(data, failures)
+    };
     Ok((result, human))
 }

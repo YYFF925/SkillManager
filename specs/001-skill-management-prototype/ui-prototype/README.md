@@ -22,6 +22,7 @@
 | 共享 Agent | ?view=shared | [03-shared-agent.png](renders/03-shared-agent.png) |
 | Codex | ?view=codex | [04-codex-agent.png](renders/04-codex-agent.png) |
 | Hermes 档案 | ?view=hermes | [05-hermes-profiles.png](renders/05-hermes-profiles.png) |
+| Hermes 人格与规范 | ?view=hermes&modal=identity | [53-hermes-identity.png](renders/53-hermes-identity.png) |
 | 档案选择展开 | ?view=hermes&picker=1 | [06-hermes-profile-picker.png](renders/06-hermes-profile-picker.png) |
 | 上游变化预览 | ?view=code&modal=updates | [07-upstream-changes.png](renders/07-upstream-changes.png) |
 | 预设管理 | ?view=presets | [08-preset-overview.png](renders/08-preset-overview.png) |
@@ -122,6 +123,7 @@
 - 系统不支持时卡片灰显、不能部署，但仍可查看。支持声明改变不自动撤销既有部署，保留副本并显示不适用警告；这是用户已确认要求。
 - 电脑 A／B、系统切换、重置和情境按钮仅用于评审，不引入正式产品的远程设备管理能力。
 - 指令编辑器沿用旧版样式，不再使用分发目标勾选和双保存按钮。指令源内容放在模拟 SkillManagerVault 中；模拟结果使用 `AGENTS.md`，示例指令目录复用旧版工具目录资料，与可修改的技能路径独立；不实际写入文件或验证工具读取能力。
+- Hermes 档案页工具栏「人格与规范」沿用指令编辑器布局（全局人格 + 档案列表、单编辑区、单保存）。源在模拟库 `identity`；保存模拟覆盖各档案 `SOUL.md`，不实际写磁盘。
 
 本轮模拟操作的结果可在对应页面及操作记录中查看。真实端到端验收在正式实现后进行。
 

@@ -257,7 +257,7 @@ grep `adopt` 在 `src/` 只命中 `AppContext.tsx` / `installFilter.ts` / `error
 | 剥离项 | 旧位置 | 理由 |
 |---|---|---|
 | 档案创建/改名/删除、切换活动档案 | `discover_profiles` 只发现；`active_profile` 只读 | 需求「Hermes 档案」不做生命周期与活动切换（U04） |
-| 档案指令编辑 | 旧有只读 `SOUL.md` 标题回退 | 本轮不扩展为档案指令管理；不把只读发现标记误判为指令编辑 |
+| 档案指令编辑 | 旧有只读 `SOUL.md` 标题回退 | 已改为库内 `hermes-identity/` 覆盖 `SOUL.md`（FR-061）；显示名仍可读 SOUL 首标题，不把发现标记当成编辑入口 |
 | "已挂载档案自动可见新增技能" | 懒初始化 disabled 名单（`toggle_skill_unlocked:562`） | 需求：新技能不自动在其他档案启用 |
 | 一次挂载后不再协调新增技能 | `is_mounted:399`、`toggle_skill_unlocked:562` | 管理器须维持明确选择；`external_dirs` 与 `skills.disabled` 是外部配置语义，是否及如何使用留给适配设计，不能当旧产品行为一并删除 |
 | GUI-only（无 CLI） | `legacy-skill-capabilities.md` H01/H02、CLI 能力参考 | 已确定核心操作 CLI 可达，包括 Hermes 档案技能管理 |

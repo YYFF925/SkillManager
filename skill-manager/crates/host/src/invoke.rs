@@ -5,13 +5,13 @@ use std::collections::HashMap;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
-use crate::HostRuntime;
 use crate::commands;
 use crate::commands::acquire::MetaInput;
 use crate::commands::skill::{LangArg, SupportArg};
 use crate::commands::tool::ToolListParams;
 use crate::events::HOST_PLAN_EVENT;
 use crate::plans::{self, DestructiveAction};
+use crate::HostRuntime;
 
 /// 调用来源：图形界面、CLI、内置管理 Agent。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -362,6 +362,21 @@ fn dispatch(runtime: &HostRuntime, command: &str, body: &Value) -> Result<Value,
         )
         .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null))
         .map_err(InvokeError::Failed),
+        "hermes_identity_get" => {
+            commands::hermes::hermes_identity_get(runtime, req_string(body, "scope")?)
+                .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null))
+                .map_err(InvokeError::Failed)
+        }
+        "hermes_identity_set" => commands::hermes::hermes_identity_set(
+            runtime,
+            req_string(body, "scope")?,
+            req_string(body, "content")?,
+        )
+        .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null))
+        .map_err(InvokeError::Failed),
+        "hermes_identity_distribute" => commands::hermes::hermes_identity_distribute(runtime)
+            .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null))
+            .map_err(InvokeError::Failed),
         "preset_list" => commands::preset::preset_list(runtime, opt_string(body, "domain")?)
             .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null))
             .map_err(InvokeError::Failed),
@@ -781,8 +796,12 @@ fn dispatch(runtime: &HostRuntime, command: &str, body: &Value) -> Result<Value,
             crate::agent::install_default_cli(runtime).map_err(InvokeError::Failed)
         }
         "agent_runtime_login" => crate::agent::launch_login(runtime).map_err(InvokeError::Failed),
-        "agent_models_get" => crate::agent::list_models(runtime, body.clone()).map_err(InvokeError::Failed),
-        "agent_set_model" => crate::agent::set_model(runtime, body.clone()).map_err(InvokeError::Failed),
+        "agent_models_get" => {
+            crate::agent::list_models(runtime, body.clone()).map_err(InvokeError::Failed)
+        }
+        "agent_set_model" => {
+            crate::agent::set_model(runtime, body.clone()).map_err(InvokeError::Failed)
+        }
         _ => Err(InvokeError::Unknown(command.to_string())),
     }
 }

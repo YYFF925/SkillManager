@@ -3,7 +3,7 @@
  * 明确启停与批量启停、只读技能详情（前往技能库编辑）与档案独有技能收编。
  *
  * 筛选、分类联动的标签候选与启用准入都由 core 决定；前端只提交条件与展示结果。
- * 不提供档案生命周期（创建/删除/改名）、活动切换、多实例或 `SOUL.md` 管理。
+ * 不提供档案生命周期（创建/删除/改名）、活动切换或多实例。人格源在档案页编辑，覆盖各档案 SOUL.md。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -42,6 +42,7 @@ import { LocalSkillDetail } from "../components/LocalSkillDetail";
 import { HermesSkillDetail } from "../components/HermesSkillDetail";
 import { QuickDeploy } from "../components/QuickDeploy";
 import { CategoryRail, CATEGORY_UNCATEGORIZED } from "../components/CategoryRail";
+import { IdentityEditor } from "../components/IdentityEditor";
 import { Badge, Button, ConfirmDialog, Notice, Segmented } from "../components/ui";
 
 const UNCATEGORIZED = CATEGORY_UNCATEGORIZED;
@@ -138,6 +139,7 @@ export function HermesPage({
   const [detail, setDetail] = useState<string | null>(null);
   const [localDetail, setLocalDetail] = useState<HermesSkillView | null>(null);
   const [adoptTarget, setAdoptTarget] = useState<HermesSkillView | null>(null);
+  const [identityOpen, setIdentityOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -495,6 +497,9 @@ export function HermesPage({
           />
         </div>
         <div className="flex items-center gap-2.5">
+          <Button compact onClick={() => setIdentityOpen(true)}>
+            人格与规范
+          </Button>
           <Button compact onClick={() => setVersion((value) => value + 1)}>
             <RefreshCw className="size-3.5" strokeWidth={1.75} />
             刷新
@@ -842,6 +847,16 @@ export function HermesPage({
           confirmLabel="收编"
           onCancel={() => setAdoptTarget(null)}
           onConfirm={() => void confirmAdopt([adoptTarget.name])}
+        />
+      )}
+
+      {identityOpen && (
+        <IdentityEditor
+          profiles={profiles}
+          onClose={() => setIdentityOpen(false)}
+          onSaved={() => {
+            void onLibrarySaved?.();
+          }}
         />
       )}
     </div>

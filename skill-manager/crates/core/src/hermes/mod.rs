@@ -6,6 +6,7 @@
 pub mod adopt;
 pub mod disabled;
 pub mod enables;
+pub mod identity;
 pub mod profiles;
 
 use std::path::{Path, PathBuf};
@@ -13,6 +14,10 @@ use std::path::{Path, PathBuf};
 pub use adopt::AdoptItem;
 pub use disabled::{config_path, read_disabled, DisabledState};
 pub use enables::{HermesItem, HermesService, ProfileSkillView, ProfileSkillsView, ProfileView};
+pub use identity::{
+    compose_identity, IdentityScope, IdentityService, IdentitySourceView, IdentityTargetResult,
+    IDENTITY_DIR, LONG_SOUL_CHARS,
+};
 pub use profiles::{
     discover_profiles, is_valid_profile_id, resolve_profile, ProfileInfo, ProfileKind,
     DEFAULT_PROFILE,

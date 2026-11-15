@@ -112,10 +112,14 @@ preset reorder-members <domain> <id> --order <name,...>
 hermes profiles | hermes list <profile>
 hermes read <profile> <name> [--file <path>]
 hermes enable <profile> <name>... | hermes disable <profile> <name>...
+hermes identity get global|<profile>
+hermes identity set global|<profile> (--file <path> | --stdin)
+hermes identity distribute
 ```
 
 只管理现有单根下的档案技能；default 部署与其他档案明确启用分开。启用沿用龙虾域/支持声明，新内容不重置已有选择。
 `read` 只读该档案的实际技能正文或目录内文件；不要求先收编，不改变库、部署或启用名单。
+`identity get` 返回该作用域的源内容（`hermes-identity/global.md` 或 `hermes-identity/<profile>.md`；文件不存在按空内容）以及按拼接规则得到的合成预览；`identity set` 写入源后立即按「全局在前、专属在后」无条件覆盖本机**全部已发现档案**的 `<home>/SOUL.md`，空合成写成空文件。单档案写入失败不中断其余，逐项如实报告。`distribute` 不改源，只按当前源刷新。不创建档案、不改启用名单、不改显示名读取链。
 
 ### tool — 工具中心
 
@@ -140,7 +144,7 @@ tool skill-link <slug> <ref>                                 # 配套 Skill 来�
 ### sync — SkillManagerVault 跨机同步
 
 ```text
-sync pull                                                   # 拉取同一 SkillManagerVault，刷新已有部署/指令目标
+sync pull                                                   # 拉取同一 SkillManagerVault，刷新已有部署/指令目标/人格 SOUL
 sync push [--message <text>]                                # 获同意后显式上传工作区全部改动
 sync status                                                 # 连接/未提交/未拉取事实
 sync conflicts                                              # Git 冲突信息供 Agent 检查
@@ -150,7 +154,7 @@ sync conflicts                                              # Git 冲突信息�
 - 已同意的上传失败可由用户主动重试（再次 `sync push`）；后台路径不提交或推送。冲突由 Agent 按用户裁决完成 Git 层处理后，再 `sync pull` 继续；不新增应用内合并流程或“保留本地/远端/双方”选项。冲突时本次同步暂停并保留 Git 冲突现场，`sync conflicts` 输出未合并路径与状态供 Agent 检查。
 - `sync status` 只读事实：连接状态（远端可用/不可用）、未提交改动、相对 upstream 的未拉取提交数、进行中的冲突；不提交、不推送、不改库。
 - 远端不可用时 `sync pull`/`sync push` 明确报“未连接”，本地库管理、部署与 `deploy sync` 继续可用；不提供断开远端或重新克隆修复入口。
-- 库同步与技能上游更新分开；拉取新增只让库内容一致，不产生首次部署/档案启用/工具安装。拉取到指令源变化后按同一拼接规则刷新本机已有启用指令目标（不新增启用目标、不改本机路径）。
+- 库同步与技能上游更新分开；拉取新增只让库内容一致，不产生首次部署/档案启用/工具安装。拉取到指令源变化后按同一拼接规则刷新本机已有启用指令目标（不新增启用目标、不改本机路径）。拉取到人格源变化后按同一拼接规则无条件覆盖本机全部已发现档案的 `SOUL.md`（不创建档案、不改启用名单）。
 
 ### agent / instruction — 本机配置与指令
 
@@ -245,6 +249,7 @@ settings capacity
 | 标签/分类/注释/支持范围 | `skill tag add/detach/rename/remove`、`skill set`、`skill move`、`skill category rename` | 实际执行；`--agents all/none/csv` 写回核对 | 通过 |
 | 译文/覆盖层维护 | `skill translation get/set/remove`、`skill overlay list/get/set/remove` | 实际执行；`set` 缺 `--file/--stdin` 报错退出 1 | 通过 |
 | Hermes | `hermes profiles/list/enable/disable`，`skill adopt-hermes` | 实际执行（假根 + 具名档案） | 通过 |
+| Hermes 人格源（2026-11-15） | `hermes identity get/set/distribute` | 假根 + 具名档案；保存覆盖全部已发现档案 `SOUL.md`；`sync pull` 源变化后刷新 | 见 `tests/cli_hermes.rs`、`cli_sync.rs` |
 | 技能维护任务 | `skill task <ref>... [--requirement <text>]` | 实际执行；任务引用维护 Skill **真实库内路径** | 通过 |
 | 工具清单/状态/检查 | `tool list`（`--status` 八态）/`get`/`check`（单项/`--all`） | 实际执行 | 通过 |
 | 工具登记/修改/本机回写 | `tool register/set`（`--dir`/`--stdin`）/`set-install`/`skill-link` | 实际执行；`--version ""` 清记录并重置检查 | 通过 |

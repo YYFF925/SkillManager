@@ -65,6 +65,8 @@ vi.mock("../services/client", () => ({
   hermesDisable: vi.fn(),
   hermesAdopt: vi.fn(),
   hermesRead: vi.fn(async () => ({ name: "local-only", path: "/tmp/profile/skills/local-only", file: "SKILL.md", text: "# 独有正文", size: 20, files: ["SKILL.md"] })),
+  hermesIdentityGet: vi.fn(async () => ({ scope: "global", source: "", composed: "" })),
+  hermesIdentitySet: vi.fn(async () => []),
   deployStatus: vi.fn(async () => []),
   renameCategory: vi.fn(async () => ({ domain: "lobster", from: "a", to: "b", affected: 0 })),
 }));
@@ -104,5 +106,6 @@ describe("HermesPage", () => {
     expect(screen.queryByText("本机已发现的档案，不管理档案生命周期。")).toBeNull();
     expect(screen.getByText("其他档案从 default 候选池显式启用，新增到 default 的技能不会自动启用到其他档案。")).toBeTruthy();
     expect(screen.getByRole("button", { name: "新建分类" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "人格与规范" })).toBeTruthy();
   });
 });

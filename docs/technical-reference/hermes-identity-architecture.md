@@ -1,9 +1,9 @@
 # Hermes 档案身份管理：调查与架构
 
 **日期**：2026-11-15（Asia/Shanghai）  
-**状态**：调查结论。用户倾向已采纳为**方案 1**（角色与规范都写入 `SOUL.md`）。**尚未实现、尚未写入正式规格。**
+**状态**：已落地（2026-11-15）。方案 1（角色与规范都写入 `SOUL.md`）已写入 002 FR-061 / US6-6/7；实现见 `hermes/identity.rs`、CLI `hermes identity`、Host `hermes_identity_*`、Hermes 页「人格与规范」。
 
-本页不是规格。落地时修订 002 中排除 SOUL 管理的条目即可，不新开功能目录。
+本页保留调查结论与覆盖合同，正式行为以 002 规格为准。
 
 ---
 
@@ -147,4 +147,4 @@ flowchart TB
 
 ## 9. 规格修订清单（落地时做）
 
-002 FR-028 / US6-6、需求记录、H02、GLOSSARY、ADR 0001、hermes-integration、CLI 契约。本调查不改正式规格。
+002 FR-028 / US6-6/7 / FR-061、需求记录、H02、GLOSSARY、ADR 0001、hermes-integration、CLI 契约已随 Phase 24 修订。

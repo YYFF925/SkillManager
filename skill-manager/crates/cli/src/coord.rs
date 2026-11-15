@@ -1,14 +1,13 @@
 //! Host 在场时写入类命令转发到本机 Host；不在场时直连 core 并占同一把锁。
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use skill_manager_core::GlobalOptions;
 use skill_manager_host::lock::HostLock;
-use skill_manager_host::{InvokeSource, http};
+use skill_manager_host::{http, InvokeSource};
 
-use crate::Command;
 use crate::commands::agent::AgentAction;
 use crate::commands::deploy::DeployAction;
-use crate::commands::hermes::HermesAction;
+use crate::commands::hermes::{HermesAction, IdentityAction, IdentityCommand};
 use crate::commands::instruction::InstructionAction;
 use crate::commands::preset::PresetAction;
 use crate::commands::settings::SettingsAction;
@@ -17,6 +16,7 @@ use crate::commands::skill::{
 };
 use crate::commands::sync::SyncAction;
 use crate::commands::tool::ToolAction;
+use crate::Command;
 
 pub enum Coordination {
     Forward { listen: String },
@@ -364,6 +364,27 @@ pub fn to_invoke(command: &Command) -> Option<(String, Value)> {
                 "hermes_disable".into(),
                 json!({ "profile": args.profile, "names": args.names }),
             )),
+            HermesAction::Identity(command) => match &command.action {
+                IdentityAction::Set(args) => {
+                    let content = if let Some(path) = &args.file {
+                        std::fs::read_to_string(path).ok()?
+                    } else if args.stdin {
+                        let mut buffer = String::new();
+                        std::io::Read::read_to_string(&mut std::io::stdin(), &mut buffer).ok()?;
+                        buffer
+                    } else {
+                        return None;
+                    };
+                    Some((
+                        "hermes_identity_set".into(),
+                        json!({ "scope": args.scope, "content": content }),
+                    ))
+                }
+                IdentityAction::Distribute => {
+                    Some(("hermes_identity_distribute".into(), json!({})))
+                }
+                IdentityAction::Get(_) => None,
+            },
             HermesAction::Profiles | HermesAction::Read(_) | HermesAction::List(_) => None,
         },
         Command::Instruction(cmd) => match &cmd.action {
@@ -461,7 +482,11 @@ pub fn is_write(command: &Command) -> bool {
         ),
         Command::Hermes(cmd) => matches!(
             cmd.action,
-            HermesAction::Enable(_) | HermesAction::Disable(_)
+            HermesAction::Enable(_)
+                | HermesAction::Disable(_)
+                | HermesAction::Identity(IdentityCommand {
+                    action: IdentityAction::Set(_) | IdentityAction::Distribute
+                })
         ),
         Command::Instruction(cmd) => matches!(cmd.action, InstructionAction::Set(_)),
         Command::Tool(cmd) => !matches!(

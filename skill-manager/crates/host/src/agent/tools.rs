@@ -3,10 +3,10 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
-use crate::HostRuntime;
 use crate::invoke::{self, InvokeError, InvokeSource};
+use crate::HostRuntime;
 
 /// Agent 可用工具 = Host invoke 同名命令。原则（FR-015）：界面能做的管理动作，Agent 也能做。
 /// 刻意不开放：`plans_confirm`（不能代替用户确认破坏性操作）、`settings_set_git_auto_push`
@@ -85,6 +85,9 @@ const ALLOWED: &[&str] = &[
     "hermes_enable",
     "hermes_disable",
     "hermes_adopt",
+    "hermes_identity_get",
+    "hermes_identity_set",
+    "hermes_identity_distribute",
     // 工具中心
     "tool_list",
     "tool_get",
@@ -648,6 +651,15 @@ fn tool_input_schema(name: &str) -> Value {
                 "names": str_array("技能名"),
             }),
         ),
+        "hermes_identity_get" => (&["scope"], json!({ "scope": str_prop("global 或档案 id") })),
+        "hermes_identity_set" => (
+            &["scope", "content"],
+            json!({
+                "scope": str_prop("global 或档案 id"),
+                "content": str_prop("人格源 Markdown"),
+            }),
+        ),
+        "hermes_identity_distribute" => (&[], json!({})),
         "tool_check" => (
             &[],
             json!({
@@ -784,7 +796,9 @@ fn tool_description(name: &str) -> &'static str {
         "skill_get" => "读取一个技能的详情（含文件树与部署位置；正文请用 skill_read）",
         "skill_read" => "读取技能正文片段",
         "skill_file_read" => "读取技能目录内指定相对路径文件",
-        "skill_set" => "修改技能中文注释、分类、标签或支持声明。完善中文注释必须用本工具的 comment 字段，禁止 bash/edit",
+        "skill_set" => {
+            "修改技能中文注释、分类、标签或支持声明。完善中文注释必须用本工具的 comment 字段，禁止 bash/edit"
+        }
         "skill_delete" => "删除技能；须经界面确认计划，口头同意无效",
         "skill_create" => "创建自建技能骨架",
         "skill_copy" => "把技能复制到另一管理域",
@@ -844,6 +858,9 @@ fn tool_description(name: &str) -> &'static str {
         "hermes_enable" => "启用 Hermes 档案技能",
         "hermes_disable" => "停用 Hermes 档案技能",
         "hermes_adopt" => "收编 Hermes 档案技能入库",
+        "hermes_identity_get" => "读取 Hermes 人格源与合成预览",
+        "hermes_identity_set" => "写人格源并覆盖各档案 SOUL.md",
+        "hermes_identity_distribute" => "按当前人格源覆盖各档案 SOUL.md",
         "tool_list" => "工具中心清单（不含指南正文）",
         "tool_get" => "工具详情",
         "tool_check" => "检查工具版本与安装状态",
@@ -885,8 +902,8 @@ fn tool_description(name: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::HostRuntime;
     use crate::invoke::InvokeSource;
+    use crate::HostRuntime;
     use serde_json::json;
     use skill_manager_core::AppContext;
 
@@ -902,7 +919,12 @@ mod tests {
             Some("agent"),
         );
         assert!(denied.unwrap_err().contains("不能代替用户确认"));
-        let unknown = run_tool(&runtime, "vault_open", json!({ "path": "/tmp" }), Some("agent"));
+        let unknown = run_tool(
+            &runtime,
+            "vault_open",
+            json!({ "path": "/tmp" }),
+            Some("agent"),
+        );
         assert!(unknown.unwrap_err().contains("未知或不允许"));
         let invoke_denied = invoke::invoke(
             &runtime,
@@ -937,13 +959,11 @@ mod tests {
             .iter()
             .find(|item| item["name"] == "skill_delete")
             .unwrap();
-        assert!(
-            delete["inputSchema"]["required"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|v| v == "references")
-        );
+        assert!(delete["inputSchema"]["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "references"));
         assert_eq!(
             delete["inputSchema"]["properties"]["references"]["type"],
             "array"
@@ -987,6 +1007,7 @@ mod tests {
             "deploy_preset",
             "preset_create",
             "hermes_enable",
+            "hermes_identity_set",
             "tool_check",
             "tool_register",
             "sync_pull",
@@ -1060,10 +1081,9 @@ mod tests {
     fn opencode_config_denies_native_bash_and_edit() {
         let tmp = tempfile::tempdir().unwrap();
         let config = prepare_opencode_config(tmp.path()).unwrap();
-        let written: Value = serde_json::from_str(
-            &std::fs::read_to_string(config.join("opencode.json")).unwrap(),
-        )
-        .unwrap();
+        let written: Value =
+            serde_json::from_str(&std::fs::read_to_string(config.join("opencode.json")).unwrap())
+                .unwrap();
         assert_eq!(written["permission"]["bash"]["*"], "deny");
         assert_eq!(written["permission"]["edit"]["*"], "deny");
         assert_eq!(written["permission"]["write"]["*"], "deny");

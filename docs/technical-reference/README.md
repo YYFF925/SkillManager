@@ -12,7 +12,7 @@
 | Agent 检测、目录与图标 | [Agent 接入资料](agent-integration.md) | 53 项目录数据、50 个图标、已知目录差异 |
 | Agent 检测/指令/刷新/外壳 | [本机运行时与桌面外壳](local-runtime-and-shell.md) | 检测条件、目录配置、指令源与分发、外部修改自动刷新、偏好与托盘 |
 | Hermes 档案接入 | [Hermes 对接参考](hermes-integration.md) + [预设与档案状态](presets-hermes-and-browsing.md) | 外部结构与配置语义；管理器候选池、明确选择与外部配置适配的区别 |
-| Hermes 档案身份（SOUL / 角色 / 规范） | [档案身份管理架构](hermes-identity-architecture.md) | 2026-11-15 已选方案 1：库内全局+专属源合成写入各档案 `SOUL.md`（角色与规范写在同一份里）。尚未实现 |
+| Hermes 档案身份（SOUL / 角色 / 规范） | [档案身份管理架构](hermes-identity-architecture.md) | 2026-11-15 方案 1 已落地：库内 `hermes-identity/` 全局+专属源合成写入各档案 `SOUL.md`（角色与规范写在同一份里）。正式行为见 002 FR-061 |
 | 管理层与 `.manager` 格式 | [管理层数据模型](manager-layer-data-model.md) | 六项资料的存储/消费边界、标签与分类、上游保留及旧限制 |
 | 注释与覆盖层合成 | [内容合成参考](content-composition.md) | 注释注入的文本变换、覆盖层合成案例、指令合成、原子写 |
 | 部署与同步链路 | [部署链路参考](deployment-pipeline.md) | 目标解析、产物合成、部署记录、撤销、本地变更检测、域边界、库间复制 |
