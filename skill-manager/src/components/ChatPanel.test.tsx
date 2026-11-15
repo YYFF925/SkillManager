@@ -305,7 +305,7 @@ it("shows a model-list error instead of hiding the control", async () => {
   });
   render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
   expect(await screen.findByText(/agent_models_get超时/)).toBeTruthy();
-  expect(screen.getByText("模型")).toBeTruthy();
+  expect(screen.getByLabelText("当前模型")).toBeTruthy();
   expect(screen.queryByRole("combobox", { name: "当前模型" })).toBeNull();
 });
 
@@ -332,4 +332,49 @@ it("walks install then login before enabling send", async () => {
       return { messages: [] };
     });
   });
+});
+
+it("renders assistant markdown and fills quick prompts into the composer", async () => {
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    if (command === "agent_list_messages") {
+      return {
+        messages: [
+          { role: "assistant", text: "**状态**\n- 已检查 `skill_update`" },
+        ],
+      };
+    }
+    return { messages: [] };
+  });
+  const { rerender } = render(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  expect(await screen.findByText("状态")).toBeTruthy();
+  expect(screen.getByText("skill_update").tagName).toBe("CODE");
+
+  transportInvoke().mockImplementation(async (command: string) => {
+    if (command === "agent_runtime_get") {
+      return {
+        cliId: "opencode",
+        displayName: "OpenCode",
+        ready: true,
+        installed: true,
+        needsInstall: false,
+        needsLogin: false,
+      };
+    }
+    return { messages: [] };
+  });
+  rerender(<ChatPanel open={false} view={{ page: "code" }} onClose={() => undefined} />);
+  rerender(<ChatPanel open view={{ page: "code" }} onClose={() => undefined} />);
+  const quick = await screen.findByRole("button", { name: "检查上游更新" });
+  fireEvent.click(quick);
+  expect((screen.getByPlaceholderText(/完善中文注释/) as HTMLTextAreaElement).value).toBe("检查上游更新");
 });

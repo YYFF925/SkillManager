@@ -1,6 +1,8 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { Bot, SendHorizontal, X } from "lucide-react";
 
-import { Button, Notice } from "./ui";
+import { Button, Notice, buttonClass } from "./ui";
+import { MarkdownView } from "./MarkdownView";
 import { getTransport } from "../services/transport";
 
 export interface ChatViewRef {
@@ -61,9 +63,13 @@ function viewLabel(view: ChatViewRef): string {
   return view.selection?.ref || view.selection?.refs?.[0] || view.page || "当前界面";
 }
 
+const QUICK_PROMPTS = ["检查上游更新", "有哪些译文待更新", "查看当前部署状态"];
+
 /** 对话只上报页面与选中引用，正文由 Host 组装。 */
 export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
   const [sessionId] = useState(() => sessionStorage.getItem("sm-agent-session") ?? crypto.randomUUID());
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [text, setText] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -352,57 +358,59 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
     }
   }
 
+  function applyQuickPrompt(prompt: string) {
+    setText(prompt);
+    requestAnimationFrame(() => {
+      const el = composerRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(prompt.length, prompt.length);
+    });
+  }
+
+  useEffect(() => {
+    if (!open || !bodyRef.current) return;
+    bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [open, messages.length, taskId]);
+
   if (!open) return null;
 
   const loginCommand = runtime?.loginCommand || "opencode auth login";
+  const focusLabel = viewLabel(view);
 
   return (
-    <aside className="chat-panel flex h-full w-[340px] shrink-0 flex-col border-l border-line-soft bg-panel">
-      <div className="flex items-center justify-between border-b border-line-soft px-3 py-2">
-        <div>
-          <h2 className="text-[13px] font-semibold">管理对话</h2>
-          <p className="text-[11px] text-muted">{viewLabel(view)}</p>
+    <aside className="chat-panel flex h-full w-[380px] shrink-0 flex-col border-l border-line-soft">
+      <div className="chat-panel-head">
+        <div className="chat-panel-title">
+          <span className="chat-panel-badge" aria-hidden="true">
+            <Bot size={14} strokeWidth={1.7} />
+          </span>
+          <div className="chat-panel-title-text">
+            <h2>管理对话</h2>
+            <span className="chat-context-pill" title={focusLabel}>
+              {focusLabel}
+            </span>
+          </div>
         </div>
-        <div className="chat-panel-head-actions flex items-center gap-2">
-          {canSend && (
-            <label className="chat-model flex items-center gap-1.5 text-[11px] text-muted">
-              <span>模型</span>
-              {models.length > 0 ? (
-                <select
-                  className="max-w-[140px] rounded-md border border-line bg-app px-1.5 py-0.5 text-[11px] text-ink-2"
-                  value={currentModelId ?? models[0]?.id ?? ""}
-                  disabled={busy || modelBusy}
-                  aria-label="当前模型"
-                  onChange={(event) => void changeModel(event.target.value)}
-                >
-                  {models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name || model.id}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="chat-model-status max-w-[140px] truncate" aria-label="当前模型">
-                  {modelStatus === "error"
-                    ? modelError || "无法列出"
-                    : modelStatus === "empty"
-                      ? "暂无列表"
-                      : "正在获取…"}
-                </span>
-              )}
-            </label>
-          )}
-          <button type="button" className="text-[12px] text-muted" onClick={onClose}>
-            关闭
+        <div className="chat-panel-head-actions">
+          <button
+            type="button"
+            className="chat-close-btn"
+            aria-label="关闭"
+            title="关闭"
+            onClick={onClose}
+          >
+            <X size={14} strokeWidth={1.8} />
           </button>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
+
+      <div ref={bodyRef} className="chat-panel-body">
         {!runtimeLoaded && (
           <p className="text-[12px] text-muted">正在检查管理 CLI…</p>
         )}
         {showSetup && (
-          <div className="chat-cli-setup notice">
+          <div className="chat-cli-setup">
             <h3>先接入管理 CLI</h3>
             <p>
               内置对话使用本机默认管理 CLI「{name}」。安装并完成登录后会钉死这一家，不再扫描本机其它命令行。
@@ -442,37 +450,121 @@ export function ChatPanel({ open, view, onClose }: ChatPanelProps) {
             </div>
           </div>
         )}
-        {messages.map((message, index) => (
-          <div key={`${message.role}-${index}`} className="mb-2">
-            <div className="text-[11px] text-faint">{message.role}</div>
-            <p className="whitespace-pre-wrap text-[13px] text-ink-2">{message.text}</p>
-          </div>
-        ))}
+        {messages.map((message, index) => {
+          if (message.role === "user") {
+            return (
+              <div key={`user-${index}`} className="chat-msg chat-msg-user">
+                <div className="chat-msg-bubble">{message.text}</div>
+              </div>
+            );
+          }
+          if (message.role === "system") {
+            return (
+              <div key={`system-${index}`} className="chat-msg chat-msg-system">
+                <div className="chat-msg-system-pill">{message.text}</div>
+              </div>
+            );
+          }
+          return (
+            <div key={`assistant-${index}`} className="chat-msg chat-msg-assistant">
+              <div className="chat-msg-head">
+                <span className="chat-msg-avatar" aria-hidden="true">
+                  <Bot size={11} strokeWidth={1.8} />
+                </span>
+                <span className="chat-msg-role">管理助手</span>
+              </div>
+              <div className="chat-msg-card">
+                <MarkdownView text={message.text} className="chat-markdown" />
+              </div>
+            </div>
+          );
+        })}
         {error && <Notice tone="danger">{error}</Notice>}
-        {messages.length === 0 && !showSetup && (
-          <p className="text-[12px] text-muted">只上报当前界面引用。全局清单与详情由 Host 组装。</p>
+        {messages.length === 0 && !showSetup && runtimeLoaded && (
+          <div className="chat-empty">
+            <div className="chat-empty-icon" aria-hidden="true">
+              <Bot size={17} strokeWidth={1.7} />
+            </div>
+            <h3>有什么可以帮你管理？</h3>
+            <p>只上报当前界面引用。全局清单与详情由 Host 组装。</p>
+            {canSend && (
+              <div className="chat-quick-prompts">
+                {QUICK_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    className="chat-quick-btn"
+                    onClick={() => applyQuickPrompt(prompt)}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {taskId && (
+          <div className="chat-running-bar">
+            <span className="chat-running-state">
+              <span className="chat-pulse-dot" aria-hidden="true" />
+              <span>正在处理请求…</span>
+            </span>
+            <Button compact onClick={() => void cancel()}>
+              取消进行中任务
+            </Button>
+          </div>
         )}
       </div>
-      {taskId && (
-        <div className="border-t border-line-soft px-3 py-2">
-          <Button compact onClick={() => void cancel()}>
-            取消进行中任务
-          </Button>
-        </div>
-      )}
-      <div className="border-t border-line-soft p-3">
-        <textarea
-          className="h-[72px] w-full resize-none rounded-lg border border-line bg-app px-2 py-1.5 text-[13px]"
-          placeholder="例如：完善中文注释 / 有哪些译文待更新"
-          value={text}
-          disabled={!canSend}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={composerKeyDown}
-        />
-        <div className="mt-2">
-          <Button kind="primary" compact disabled={busy || !canSend || !text.trim()} onClick={() => void send()}>
-            {busy ? "发送中…" : "发送"}
-          </Button>
+
+      <div className="chat-panel-foot">
+        <div className="chat-composer">
+          <textarea
+            ref={composerRef}
+            placeholder="例如：完善中文注释 / 有哪些译文待更新"
+            value={text}
+            disabled={!canSend}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={composerKeyDown}
+          />
+          <div className="chat-composer-foot">
+            <div className="chat-composer-tools">
+              {canSend && (
+                <label className="chat-model">
+                  {models.length > 0 ? (
+                    <select
+                      value={currentModelId ?? models[0]?.id ?? ""}
+                      disabled={busy || modelBusy}
+                      aria-label="当前模型"
+                      onChange={(event) => void changeModel(event.target.value)}
+                    >
+                      {models.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name || model.id}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="chat-model-status" aria-label="当前模型">
+                      {modelStatus === "error"
+                        ? modelError || "无法列出"
+                        : modelStatus === "empty"
+                          ? "暂无列表"
+                          : "正在获取…"}
+                    </span>
+                  )}
+                </label>
+              )}
+            </div>
+            <button
+              type="button"
+              className={`${buttonClass("primary", true)} chat-send-btn`}
+              disabled={busy || !canSend || !text.trim()}
+              onClick={() => void send()}
+            >
+              <SendHorizontal size={12} strokeWidth={1.8} />
+              <span>{busy ? "发送中…" : "发送"}</span>
+            </button>
+          </div>
         </div>
       </div>
     </aside>
