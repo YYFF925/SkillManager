@@ -38,6 +38,24 @@ const version = `${major}.${minor}.${patch}`;
 
 writeFileSync(cargoPath, cargo.replace(/^version = "\d+\.\d+\.\d+"/m, `version = "${version}"`));
 
+const lockPath = join(root, "Cargo.lock");
+let lock = readFileSync(lockPath, "utf8");
+const workspaceCrates = [
+  "skill-manager-cli",
+  "skill-manager-core",
+  "skill-manager-desktop",
+  "skill-manager-host",
+  "skill-manager-station",
+];
+for (const name of workspaceCrates) {
+  const pattern = new RegExp(`(name = "${name}"\\nversion = ")\\d+\\.\\d+\\.\\d+(")`);
+  if (!pattern.test(lock)) {
+    throw new Error(`Cargo.lock 中未找到 ${name} 的 version`);
+  }
+  lock = lock.replace(pattern, `$1${version}$2`);
+}
+writeFileSync(lockPath, lock);
+
 const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
 pkg.version = version;
 writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);

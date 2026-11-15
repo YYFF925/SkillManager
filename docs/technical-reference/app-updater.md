@@ -29,7 +29,7 @@ Tauri updater 签名不能关。公钥在 `skill-manager/src-tauri/tauri.conf.js
 
 标准流程（双平台，GitHub Actions 构建）：
 
-1. `node skill-manager/scripts/bump-version.mjs` 升 patch（`--minor` / `--major` 仅在用户明确要求时）。同步修改 `Cargo.toml`、`package.json`、`tauri.conf.json`。
+1. `node skill-manager/scripts/bump-version.mjs` 升 patch（`--minor` / `--major` 仅在用户明确要求时）。同步修改 `Cargo.toml`、`package.json`、`tauri.conf.json`，以及 `Cargo.lock` 里五个 workspace 包的 version（`--locked` 构建依赖这份一致）。
 2. 提交本次改动，只推 `github`（Gitea `origin` 不再推送）。
 3. `git tag -f v<version>`，把该 tag 推到 `github`（`git push github v<version> --force`）。tag 推送即触发 `.github/workflows/release.yml`；也可在 Actions 页手动 `workflow_dispatch`。
 4. 等两个 job 成功，确认版本 tag 的 Release 含 macOS DMG、`.app.tar.gz` 及 `.sig`、Windows `-setup.exe` 及 `.sig`；`updater-manifests` 含对应平台的 `latest-*.json`，且 `version` 是新版本号。
@@ -40,6 +40,7 @@ Tauri updater 签名不能关。公钥在 `skill-manager/src-tauri/tauri.conf.js
 
 - Release 说明取 tag 指向提交的 message（`RELEASE_NOTES`），会写进清单，客户端更新提示会显示，提交信息要写清楚。
 - 重复推同一 tag 会再次触发构建并覆盖 Release 资产。
+- Release workflow 钉 `dtolnay/rust-toolchain@1.99.1`，不要写成 `@stable` 再配 `with.toolchain`：action ref 本身就是 toolchain，`@stable` 会装当前 stable（1.100 起会在 `cargo --locked` 时改 lockfile 失败）。
 - 本机单平台备选：凭据注入 `TAURI_SIGNING_PRIVATE_KEY` 后 `npm run tauri build`，替换 `release/` 安装包，再 `node skill-manager/scripts/publish-github-update.mjs` 上传当前平台产物并更新清单。不要把本机产物与 Actions 产物混用于同一版本。
 
 尚未含 updater 的旧包（例如 0.1.0）不能被这条链路升级，需要手动安装一次 0.1.1 及以后的包。
