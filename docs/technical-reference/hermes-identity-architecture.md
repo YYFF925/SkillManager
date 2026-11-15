@@ -1,351 +1,297 @@
 # Hermes 档案身份管理：调查与架构
 
-**日期**：2026-11-15（Asia/Shanghai）  
+**日期**：2026-11-15（Asia/Shanghai），同日按 GPT 三层建议修订  
 **状态**：调查结论与推荐架构，**尚未实现、尚未写入正式规格**。  
-**范围**：在现有 Hermes 档案中心为每个 bot 管理 SOUL、角色、行为规范，以及后续的非密钥配置；源内容进库，保存后自动合并写入该 bot。
+**范围**：在现有 Hermes 档案中心管理每个 bot 的身份（SOUL / 角色）与常驻行为规范；源内容进库，保存后自动合并写入该 bot。能力层（技能）已由档案中心管理，不另建一套。
 
-本页不是规格。落地前须走 speckit（建议新功能目录 `specs/004-hermes-identity/`），并修订 002 中明确排除 SOUL 管理的条目。
+本页不是规格。落地前须走 speckit（建议 `specs/004-hermes-identity/`），并修订 002 中明确排除 SOUL 管理的条目。
 
 ---
 
 ## 1. 结论先行
 
-和现有 **Agent 指令** 同一套「库内源 → 本机合成覆盖」模型，**不要**在档案 home 里直接当唯一真值编辑 `SOUL.md`。
+产品按 **三层** 对齐 Hermes 真实加载槽，不要把规范塞进 `SOUL.md`，也不要把规范写成项目 `AGENTS.md`。
 
-原因：Hermes 每个档案是一座岛，官方只从该档案 `HERMES_HOME/SOUL.md` 读人格，**没有**「全局 SOUL + 档案 SOUL」的原生合并。全局与专属只能由 Skill Manager 在库内维护，合成后再写入每个档案的 `SOUL.md`。这与 `instructions/global.md` + `instructions/<agent>.md` → 覆盖各工具 `AGENTS.md` 同构。
+| 层 | 管什么 | 库内源（全局 + 每档案） | 写入 Hermes 的位置 | 本产品现状 |
+|---|---|---|---|---|
+| **身份** | 这个 bot 是谁、职责、判断原则、语气 | `soul.md` + `role.md` | `<档案 home>/SOUL.md`（系统提示 slot #1） | 未做 |
+| **规范** | 无论在哪个目录、做什么任务都要遵守的操作规则、哪些事要确认 | `guidelines.md` | 该档案 `config.yaml` 的 **`agent.system_prompt`**（经 `hermes config set`，不整份重写配置） | 未做 |
+| **能力** | 某类任务用什么方法与步骤 | 技能库 + 档案启用名单 | `<档案>/skills/` 下的 `SKILL.md` | **已有**（档案中心） |
 
-| 用户说法 | 落到 Hermes 的真实文件 | Skill Manager 怎么管 |
-|---|---|---|
-| SOUL / 人格 | `<档案 home>/SOUL.md`（系统提示 slot #1，原文注入） | 库内 `soul.md`：全局 + 每档案，合成后写入该文件 |
-| 角色 | Hermes **没有**独立 `IDENTITY.md`；Bot 显示名在 `profile.yaml` 的 `ui_meta.hermes-bots.title` | 库内 `role.md` 合成进 `SOUL.md` 的「角色」段；显示名仍读 `profile.yaml`，改名作为二期 |
-| 行为规范 | Hermes 的 `AGENTS.md` 是**项目工作目录**文件，不是档案人格 | 库内 `guidelines.md` 合成进同一份 `SOUL.md`；**不要**去写项目 `AGENTS.md` |
-| 配置 | `<档案 home>/config.yaml`（模型、工具、网关等） | **不要整份重写**。二期用非密钥 overlay，经 `hermes -p <档案> config set` 应用 |
+合成合同仍复制 Agent 指令：库内源是真值；每种文档「全局在前、专属在后」；保存后分发到本机已发现档案。身份与规范 **分文件写出**，因为 Hermes 在提示词里把它们放在不同层。
 
-**首期只做三份 Markdown 源（人格 / 角色 / 行为规范）的全局+专属合成，写入各档案 `SOUL.md`。** 配置、显示名、记忆文件、密钥、档案生命周期继续排除。
+GPT 建议里正确的部分：官方 `AGENTS.md` 只是项目上下文，VPS 机器人换目录就会丢；常驻规范应走配置里的全局指令槽。需要补上的限制：`agent.system_prompt` 在选了 `/personality` 时会被人格 overlay 盖掉；写入必须走 Hermes 自己的 `config set`，不能用本项目 YAML 库整份保存 `config.yaml`。
 
----
-
-## 2. 现状（以仓库与官方文档为准）
-
-### 2.1 档案中心现在做什么
-
-`HermesPage` 只管理**技能启停、浏览、收编**。页头注释与 CLI `hermes` 子命令都写明：不做档案创建/删除/改名、活动切换、多实例或 `SOUL.md` 管理。core 发现档案时会**读** `profile.yaml` 标题和 `SOUL.md` 首个 `# ` 标题作显示名，但**不暴露、不写入**正文。
-
-规格锚点：
-
-- 002 `FR-028` / US6 场景 6：排除 `SOUL.md` 管理。
-- 002 `FR-043` 末句：指令管理与 Hermes 档案指令互不扩展。
-- 需求记录：暂不把各档案 `SOUL.md` 等角色与行为指令纳入范围。
-- research.md §5.4：本项目**不写**用户 `config.yaml`（约 12 万字节、含大量注释；Hermes 用 ruamel 保注释；整份重写会破坏其它设置）。
-
-这些是**当时的范围裁决，不是永久禁令**（宪章与 `AGENTS.md` 均如此）。本次需求等于明确要打开 SOUL / 角色 / 行为规范这一块。
-
-### 2.2 可复用的指令系统
-
-`skill-manager/crates/core/src/vault/instructions.rs`：
-
-```text
-SkillManagerVault/instructions/
-  global.md
-  <agent-key>.md
-        │
-        ▼  compose：全局在前、专属在后、空行分隔；单侧空则只用另一侧
-        │
-        ▼  覆盖本机已启用且已检测 Agent 的 <detect_dir>/AGENTS.md
+```mermaid
+flowchart TB
+  subgraph Product["Skill Manager 三层"]
+    I["身份层 soul + role"]
+    N["规范层 guidelines"]
+    K["能力层 技能 已有"]
+  end
+  subgraph Hermes["Hermes 加载"]
+    S["SOUL.md · slot #1 稳定层"]
+    P["agent.system_prompt · 可选系统消息"]
+    A["项目 AGENTS.md · 随工作目录 不管"]
+    SK["skills/SKILL.md"]
+  end
+  I --> S
+  N --> P
+  K --> SK
+  A -.->|"换目录即失效"| X["不作为 bot 常驻规范"]
 ```
 
-保存立即分发；库拉取后若源签名变化，再分发一次。不新增启用目标。真正读失败与「文件不存在」分开，避免把失败当成清空。
+---
 
-Hermes 身份应**复制这套服务形态**，不要把 Code Agent 的 `InstructionEditor` 直接扩到 Hermes（与 FR-043「互不扩展」一致：两套源、两套目标）。
+## 2. 对 GPT 建议的采纳
 
-### 2.3 Hermes 实际加载什么
+用户转述（2026-11-15）：
 
-官方对照（2026-11 文档，实施前须再核对用户本机 Hermes 版本）：
+- 官方 `AGENTS.md` 是项目上下文，不是对整个 Bot 永久生效的全局规则。
+- VPS 机器人无论在哪个目录都应遵守的操作规范，应考虑 `config.yaml` 的 `agent.system_prompt`，而不是只依赖某项目目录里的 `AGENTS.md`。
+- 建议三层：身份（`SOUL.md`）/ 规范（全局指令 + 项目 `AGENTS.md`）/ 能力（`SKILL.md`）。
 
-| 文件 | 作用 | 位置 | 谁写 |
-|---|---|---|---|
-| `SOUL.md` | 人格 / 语气 / 风格，系统提示第 1 槽，**原文注入** | 档案 `HERMES_HOME`，不扫工作目录 | 用户（缺省时 Hermes 会 seed，从不覆盖已有文件） |
-| `USER.md` | 用户画像 | `memories/` | **Agent 经 memory 工具** |
-| `MEMORY.md` | Agent 笔记 | `memories/` | **Agent 经 memory 工具** |
-| `AGENTS.md` / `.hermes.md` | 项目约定 | **项目工作目录** | 用户 / 仓库 |
-| `config.yaml` | 模型、工具集、网关等 | 档案 home | 用户 / `hermes config set` |
-| `.env` | API 密钥、bot token | 档案 home | 用户（chmod 600） |
-| `profile.yaml` | Bot Mode 展示（title 等） | 档案 home | Hermes 面板 |
-| `auth.json` / `state.db` | 登录与运行状态 | 档案 home | Hermes |
+采纳与修正：
 
-缺文件或空 `SOUL.md` 时，Hermes 回退内置默认人格。有内容则**整份替换**默认人格，不是叠加。改文件后下一条新会话生效，一般不必重启网关；长会话可用 `hermes sessions refresh-prompts`。
+| GPT 说法 | 本项目裁决 |
+|---|---|
+| 不要用项目 `AGENTS.md` 当 bot 常驻规范 | **采纳**。档案中心不写、不管理各仓库 `AGENTS.md`。Code Agent 指令系统继续管各编码工具自己的 `AGENTS.md`，与 Hermes bot 分轨。 |
+| 常驻规范写入 `agent.system_prompt` | **采纳**。规范源仍在库里合成，分发时对该档案执行 `hermes -p <id> config set agent.system_prompt …`（或等价、保注释的单键写入）。 |
+| 身份 = `SOUL.md`（是谁、职责、判断原则） | **采纳**。库内 `soul.md` + `role.md` 合成进 `SOUL.md`，**不再**把行为规范拼进同一文件。 |
+| 能力 = `SKILL.md` | **采纳且已存在**。档案中心已经管技能启停与内容；本功能不重复做技能编辑。 |
+| 规范层同时包括项目 `AGENTS.md` | **产品不管项目文件**。项目约定留给仓库作者；管理器只保证 bot 常驻规范跟档案走。 |
 
-Soul Spec 一类的 `IDENTITY.md` / `STYLE.md` 在 Hermes 侧会被**合并进 `SOUL.md`**。本产品不必再发明第三份 Hermes 不读的文件。
-
-### 2.4 与 2026-11-12 旧调查的差异
-
-From Hindsight memory: 此前有一条「每 bot 一个大 textarea 直接读写 `SOUL.md`」的路线，且建议新开 `specs/003-hermes-soul/`。
-
-那条路线**不能满足**本次「全局 + 每 bot、保存后自动合并」的要求，而且 `specs/003-host-station-agent/` 已被占用。本次以库内源 + 合成为准，功能目录用 **004**。
+先前草案曾把三种 Markdown 全部拼进一份 `SOUL.md`。那会把「是谁」和「必须遵守的操作规则」混在 identity slot，也用不上 Hermes 已有的 `agent.system_prompt`。**已作废。**
 
 ---
 
-## 3. 推荐架构：档案身份源（Hermes Identity Sources）
+## 3. 现状（仓库 + 官方文档）
 
-### 3.1 一句话
+### 3.1 档案中心现在做什么
 
-库里维护「全局 + 每档案」的身份源；本机按已发现档案合成，覆盖写入各档案 `SOUL.md`。技能启用名单、密钥、记忆仍是本机 / Hermes 自己的事。
+`HermesPage` 只管理**技能启停、浏览、收编**（能力层）。页头注释与 CLI 写明：不做档案生命周期或 `SOUL.md` 管理。显示名只读 `profile.yaml` / `SOUL.md` 标题。
 
-### 3.2 库内布局（共享资产）
+规格锚点：002 `FR-028` / US6-6 排除 SOUL；`FR-043` 末句指令不扩展到 Hermes；research.md §5.4 **不整份写** `config.yaml`。这些是当时范围，不是永久禁令。
+
+### 3.2 可复用的指令系统
+
+`instructions/global.md` + `<agent>.md` → compose → 覆盖已启用 Agent 的 `AGENTS.md`。保存即分发；拉取后源签名变化再分发。读失败不得当成空。Hermes 身份 **复制服务形态**，不把 `InstructionEditor` 扩到 Hermes。
+
+### 3.3 Hermes 提示词里这三层实际怎么排
+
+官方 Prompt Assembly（2026-11，实施前须对用户本机版本再核）：
+
+1. **稳定层首位**：`SOUL.md`（缺则内置默认人格），原文注入。
+2. **可选系统消息**：配置或 API 的 system message —— 对应 `agent.system_prompt`（`hermes config set agent.system_prompt` 已入 schema，PR nousresearch/hermes-agent#80681）。
+3. **项目上下文**（换工作目录会变）：`.hermes.md` / `AGENTS.md` / … 只取一种。
+4. **技能索引**：档案 `skills/` 里已启用的 `SKILL.md` 摘要；正文按任务再加载。
+
+`agent.system_prompt` 的限制（必须写进规格）：
+
+- 它是**用户手写的常驻 overlay**，人格预设代码不应改它（#81791 曾出现选 personality 覆盖该键，上游已修；本机版本若未修须检测并警告）。
+- 解析顺序：若 `display.personality` 选了具名人格，会话 overlay **用人格文本，不用** `agent.system_prompt`。依赖管理器规范的 bot **不要同时开 `/personality`**；分发后若发现人格已选，如实警告「规范槽被人格 overlay 盖住」。
+- 写入只用 Hermes 单键 API，禁止本项目整份重写 12 万字节配置。
+
+---
+
+## 4. 推荐架构
+
+### 4.1 库内布局
 
 ```text
 SkillManagerVault/
   instructions/                 # 已有：Code Agent 指令（不动）
-  hermes-identity/              # 新增：Hermes 档案身份源
+  hermes-identity/
     global/
-      soul.md                   # 全局人格
+      soul.md                   # 全局人格 / 判断原则
       role.md                   # 全局角色底稿（可空）
-      guidelines.md             # 全局行为规范
+      guidelines.md             # 全局常驻操作规范
     profiles/
-      <profile-id>/             # 与 Hermes 目录 id 一致（含 URL 编码名）
+      <profile-id>/             # Hermes 目录 id，含 URL 编码名
         soul.md
         role.md
         guidelines.md
 ```
 
-- 文件不存在 = 该侧空内容（与指令相同）。
-- `<profile-id>` 用档案目录名（`default`、`blank`、`u7ed8-u753b-u52a9-u624b`），**不用**显示名，避免跨机改名后对不上。
-- 不把 `SOUL.md` 正文放进 SQLite。身份源随库 Git 同步（ADR 0001：共享内容进库）。
-- 分发记录（上次写入哈希、暂停原因）进本机 SQLite，与部署记录同类。
+文件不存在 = 该侧空。id 不用显示名。源随库同步；各档案上次分发哈希、暂停原因留本机 SQLite。
 
-二期若做配置 overlay，另加 `global/config.yaml` 与 `profiles/<id>/config.yaml`，只含非密钥键；仍不把 `.env` 放进库。
+其它配置键（模型、工具开关等）仍等用户给出清单后再做 overlay，不与规范槽绑在一起。
 
-### 3.3 数据流
+### 4.2 数据流
 
 ```mermaid
 flowchart LR
-  subgraph Vault["SkillManagerVault /hermes-identity"]
-    G["global/soul.md<br/>role.md<br/>guidelines.md"]
-    P["profiles/&lt;id&gt;/soul.md<br/>role.md<br/>guidelines.md"]
+  subgraph Vault["hermes-identity"]
+    GS["global soul + role"]
+    GG["global guidelines"]
+    PS["档案 soul + role"]
+    PG["档案 guidelines"]
   end
-
-  subgraph Core["skill-manager-core"]
-    C["按文档种类 compose<br/>全局在前 · 专属在后"]
-    J["按固定标题拼成一份 SOUL.md"]
-    D["原子写入各档案 home"]
+  subgraph Core["compose 全局在前专属在后"]
+    I["拼 SOUL.md<br/># 角色 + # 人格"]
+    N["拼规范纯文本"]
   end
-
-  subgraph Disk["本机 Hermes 档案"]
-    S1["~/.hermes/SOUL.md<br/>default"]
-    S2["~/.hermes/profiles/&lt;id&gt;/SOUL.md"]
+  subgraph Out["每档案写出"]
+    S["home/SOUL.md 原子写"]
+    C["hermes config set<br/>agent.system_prompt"]
   end
-
-  G --> C
-  P --> C
-  C --> J
-  J --> D
-  D --> S1
-  D --> S2
+  GS --> I
+  PS --> I
+  GG --> N
+  PG --> N
+  I --> S
+  N --> C
 ```
 
-### 3.4 合成规则（Markdown）
+### 4.3 合成规则
 
-每种文档独立合成，规则与指令四态相同：
+每种文档独立，指令四态：去空白；双空→空；单侧有→只用该侧；双有→`全局\n\n专属`。读失败必须报错。
 
-1. 两侧去首尾空白。
-2. 双空 → 空；单侧有内容 → 只用该侧；双有 → `全局\n\n专属`。
-3. 读失败（非 NotFound）必须报错，**不得**当成空内容继续覆盖。
-
-然后按固定标题拼成 Hermes 真正加载的那一份 `SOUL.md`：
+**身份 → `SOUL.md`：**
 
 ```markdown
 # 角色
 
-<合成后的 role>
+<合成 role>
 
 # 人格
 
-<合成后的 soul>
-
-# 行为规范
-
-<合成后的 guidelines>
+<合成 soul>
 ```
 
-空段整段省略。三段都空时：若用户明确保存过空源，则写入空文件（Hermes 回退默认人格）；若从未认领该档案，则**不写**，避免抹掉 Hermes seed 或用户手改。
+空段省略。身份两侧都空且已认领 → 写空文件（Hermes 回退默认人格）。未认领 → 不写。
 
-标题用中文、固定字符串，便于人读，也便于模型区分「大家都要遵守的规范」和「这个 bot 的人格」。不要用 HTML 注释作管理标记：Hermes 原文注入，注释会进提示词。
+**规范 → `agent.system_prompt`：**
 
-**不要**把专属内容盖掉全局（覆盖语义）。行为规范的本意是「全体 bot 都要遵守，专属再补充」；覆盖会让专属 bot 丢掉全局安全/语气底线。若某 bot 必须取消某条全局规范，应在专属里显式写「忽略全局某某条」，而不是换合成算法。
+只写入合成后的纯文本，**不加**「行为规范」这种身份标题（该键本身就是规范槽）。两边都空且已认领 → `config set` 成空字符串。未认领 → 不改该键。
 
-### 3.5 分发范围与时机
+专属是补充不是覆盖。某 bot 要取消某条全局规范，在专属里写明「忽略全局某某条」。
+
+### 4.4 分发
 
 | 时机 | 行为 |
 |---|---|
-| GUI / CLI 保存任一作用域 | 写源，立即对**本机已发现的全部档案**分发（含 default） |
-| 库拉取后源签名变化 | 同样全量刷新，不创建档案、不改技能启用名单 |
-| 新发现的档案 | 下次保存或拉取时写入；不在发现时偷偷写 |
+| 保存任一身份或规范源 | 写源，对**全部已发现档案**分发身份文件 + 规范键 |
+| 库拉取后源签名变化 | 同上，不创建档案、不改技能名单 |
+| 新发现档案 | 下次保存或拉取再写 |
 
-分发目标是「本机已发现档案」，不是「当前下拉选中的那一个」。全局规范必须落到每个 bot。某档案本次写入失败不中断其余，逐项报告（与指令相同）。
+单档案失败不中断其余。`SOUL.md` 用 tmp+rename。`agent.system_prompt` 调用本机 `hermes` CLI（`HERMES_HOME` / `-p` 指向该档案），失败则报告命令输出，不回退成整文件 YAML 写入。
 
-写入用同目录 tmp + `rename` 原子替换（Hermes 自己写 SOUL 也是这一套）。
+### 4.5 收编现网内容
 
-### 3.6 已有 SOUL 的收编（必须做，否则第一次分发会覆盖人格）
+第一次分发前必须认领：
 
-用户现网档案里已经有 `SOUL.md`。若库内该档案 `soul.md` 为空就按「仅全局」覆盖，会丢掉现有人格。
+- 磁盘 `SOUL.md` 非空且不像内置 seed → 收入该档案 `soul.md`。
+- 已有非空 `agent.system_prompt` → 收入该档案 `guidelines.md`。
+- 保存前若未认领且磁盘有内容 → 阻止覆盖并提示导入。
 
-推荐：**首次认领**时，若库内该档案三种源都空、且磁盘 `SOUL.md` 非空且不像 Hermes 内置 seed，则把磁盘全文收进 `profiles/<id>/soul.md`，再合成。提供显式 CLI/按钮「从档案导入」，GUI 保存前若检测到未认领的非空 SOUL，阻止覆盖并提示导入。
+本机分别记 `soul_hash` 与 `prompt_hash`。外部改了 `SOUL.md` 或该配置键 → 暂停覆盖该项，其它层仍可更新。
 
-本机状态记 `last_dispatched_hash`。磁盘文件与哈希不一致 → **暂停覆盖**并如实报告（复用部署 `paused_local_change` 的诚实表达，不在 GUI 做 diff 合并）。
-
-### 3.7 明确不管
+### 4.6 明确不管
 
 | 对象 | 原因 |
 |---|---|
-| 档案创建 / 删除 / 改名 / 活动切换 / 多实例 | 002 仍排除；本次只加身份内容 |
-| `USER.md` / `MEMORY.md` | Agent 自己维护的记忆，当源会和 memory 工具打架 |
-| `.env` / `auth.json` / bot token | 密钥，不进 SkillManagerVault |
-| 项目 `AGENTS.md` | 属于仓库工作目录，不是档案人格；Code Agent 指令系统已经管各工具的 `AGENTS.md` |
-| 整份重写 `config.yaml` | research.md §5.4 已否决 |
-| Markdown 预览、版本历史、注入扫描 | 避免复制 Hermes 自己的机制（宪章 VI） |
+| 档案创建 / 删除 / 改名 / 活动切换 | 002 仍排除 |
+| 项目 `AGENTS.md` / `.hermes.md` | 跟仓库走，不是 bot 常驻规范 |
+| `USER.md` / `MEMORY.md` | Agent 自维护 |
+| `.env` / `auth.json` / bot token | 密钥 |
+| 整份 `config.yaml` | 注释与其它键会被毁掉 |
+| `/personality` 预设编辑 | 与规范槽互斥；只警告，不替用户关人格 |
+| 技能正文编辑 | 能力层已有：去技能库编辑、档案页启停 |
 
 ---
 
-## 4. 模块分层
+## 5. 模块分层
 
 ```mermaid
 flowchart TB
-  subgraph UI["界面"]
-    HP["HermesPage 页头按钮「人格与规范」"]
-    ED["HermesIdentityEditor<br/>左：全局 + 档案列表<br/>上：人格 / 角色 / 规范<br/>右：源编辑 + 合成预览"]
+  subgraph UI["界面 档案页"]
+    HP["人格与规范"]
+    SK["技能列表 已有"]
   end
-
-  subgraph API["同一套业务规则"]
-    T["Tauri hermes_identity_*"]
-    C["CLI hermes identity get/set/import/distribute"]
-    H["Host ACP 工具（管理站 / 内置 Agent）"]
+  subgraph Core["core"]
+    ID["hermes/identity.rs · SOUL"]
+    GL["hermes/guidelines.rs · system_prompt"]
   end
-
-  subgraph Core["crates/core"]
-    IS["hermes/identity.rs<br/>读源 · compose · 拼 SOUL · 签名"]
-    DIS["分发到 ProfileInfo.home"]
-    IMP["导入现有 SOUL"]
-    ST["SQLite：last_dispatched_hash / paused"]
-    PULL["sync/pull.rs：签名变化则分发"]
-  end
-
-  HP --> ED
-  ED --> T
-  T --> IS
-  C --> IS
-  H --> IS
-  IS --> DIS
-  IS --> IMP
-  DIS --> ST
-  PULL --> IS
+  HP --> ID
+  HP --> GL
+  SK --> EN["已有 hermes/enables.rs"]
+  ID --> SOUL["SOUL.md"]
+  GL --> CFG["config set agent.system_prompt"]
 ```
 
-建议实现落点：
-
-- **core**：`crates/core/src/hermes/identity.rs`（贴近档案发现，不放进 `vault/instructions.rs`）。
-- **CLI**：`hermes identity get|set|import|distribute`，不要新的顶层 `soul` 命令。
-- **Tauri / Host**：薄封装，规则全在 core。
-- **前端**：新组件 `HermesIdentityEditor`，入口在 `HermesPage` 档案选择器旁；**不要**复用页头「Agent 指令」对话框。
-- **设计层**：先改 `ui-prototype` 档案页与新对话框，再按 frontend-design 技能对齐正式界面。
-
-配置二期若做：独立 `hermes/config_overlay.rs`，经 `hermes -p <id> config set` 写键，禁止密钥形键名（`token` / `api_key` / `secret` / `password` 等）。
+- core 分两个写出适配器，合成函数共用（与 `compose_instructions` 同形）。
+- CLI：`hermes identity …` 与 `hermes guidelines …`，或同一 `hermes identity` 下用 `--kind soul|role|guidelines`。
+- 规范写出依赖本机 `hermes` 可执行文件；缺失时该项失败并说明，不假装已写入配置。
+- 前端仍是一个编辑器：左全局+档案，上「人格 / 角色 / 规范」，保存后按当前种类分发对应槽；预览显示将写入的 `SOUL.md` 或 `agent.system_prompt` 文本。
 
 ---
 
-## 5. 界面
+## 6. 界面
 
-沿用指令编辑器的交互合同，换数据源：
+交互对齐指令编辑器：单编辑区、单保存、切换保留草稿。种类分段为人格 / 角色 / 规范。规范选中时注明「写入该 bot 的 agent.system_prompt，换目录也仍生效；项目 AGENTS.md 不管」。若该档案 `display.personality` 非空，显示警告。
 
-- 左列固定「全局」，下列本机已发现档案（显示名，内部仍用 profile id）。
-- 文档种类用顶部分段：人格 / 角色 / 行为规范。
-- 右侧**只编辑当前作用域的源**，不是合成结果。专属为空时提示「仅使用全局」。
-- 底部一个「保存」：写当前源并分发全部档案。保存后保持打开，切换作用域保留草稿。
-- 展示合成预览（只读），让用户看见将写入 `SOUL.md` 的全文。
-- 单档案失败列在结果里，不中断其它档案。
-
-不做独立「分发」按钮、不分发勾选（与指令同一产品决定）。
+能力层继续用现有档案技能列表，不塞进这个对话框。
 
 ---
 
-## 6. 和指令系统对照
+## 7. 和指令系统对照
 
-| | Agent 指令 | Hermes 身份（推荐） |
+| | Agent 指令 | Hermes 身份+规范 |
 |---|---|---|
 | 库目录 | `instructions/` | `hermes-identity/` |
 | 作用域 | `global` + Agent key | `global` + 档案 id |
-| 源文件 | 每种作用域一个 md | 每种作用域 × 三种文档 |
-| 合成 | 一种流 | 三种流，再拼成一份 SOUL |
-| 目标 | 已启用已检测 Agent 的 `AGENTS.md` | 已发现档案 home 的 `SOUL.md` |
-| 空内容 | 允许，覆盖目标 | 允许；未认领则不覆盖磁盘 |
-| 拉取刷新 | 源签名变化则分发 | 同样 |
-| 密钥 | 无 | 永不入库 |
-| GUI 入口 | 全局页头「Agent 指令」 | 档案页「人格与规范」 |
+| 源 | 每作用域一个 md | 每作用域 × soul / role / guidelines |
+| 目标 | 工具 `AGENTS.md` | `SOUL.md` **和** `agent.system_prompt` |
+| 项目 AGENTS.md | 正是目标 | **不是**目标 |
+| 能力 | 另页部署技能 | 档案中心已有启停 |
 
 ---
 
-## 7. 配置管理（二期，不进首期）
+## 8. 其它配置（仍二期）
 
-用户提到「配置管理」。当前硬约束是：**不能整份重写 `config.yaml`**。
-
-推荐适配：
-
-1. 库内只存**非密钥 overlay**（例如 `model.default`、工具开关这类用户点名的键）。
-2. 合并：全局键 + 档案键，档案覆盖同名键。
-3. 应用：调用本机 `hermes -p <id> config set <key> <value>`（或等价入口），让 Hermes 自己保注释、做校验。
-4. 拒绝密钥形键；`.env`、平台 token、`auth.json` 永远不进库、不经本 overlay。
-
-在用户列出「到底要同步哪些配置键」之前，不要做通用 YAML 编辑器。
-
-显示名（`profile.yaml` 的 title）可作配置二期的一个小项：独立读写该键，不碰其余 YAML。首期继续只读。
+`agent.system_prompt` 已是规范层的一等目标，不等于开放整份配置编辑。模型、工具集、网关等仍要用户列出键再做 overlay。显示名（`profile.yaml` title）仍只读，改名二期。
 
 ---
 
-## 8. 建议分期（实现时，不是本调查的工作）
+## 9. 分期
 
 | 阶段 | 内容 |
 |---|---|
-| 0 规格 | `specs/004-hermes-identity/`：specify → clarify → checklist；修订 002 的 FR-028、US6-6、FR-043 末句、Assumptions；需求记录补一节。**003 已被 Host/管理站占用。** |
-| 1 core | 源读写、三种 compose、拼 SOUL、签名、原子写、测试四态与读失败 |
-| 2 认领 | 导入现有 SOUL；`last_dispatched_hash`；外部修改暂停 |
-| 3 入口 | CLI + Tauri + Host 工具 |
-| 4 界面 | 设计层原型 + `HermesIdentityEditor` + 档案页入口 |
-| 5 同步 | `sync/pull.rs` 在身份源签名变化时分发 |
-| 6 配置（可选） | overlay + `hermes config set`；`profile.yaml` 显示名 |
+| 0 规格 | `specs/004-hermes-identity/`；修订 002 FR-028、US6-6、FR-043 末句 |
+| 1 身份 | soul/role 源、compose、原子写 `SOUL.md`、导入、哈希暂停 |
+| 2 规范 | guidelines 源、compose、`hermes config set agent.system_prompt`、导入现有键、人格冲突警告 |
+| 3 入口 | CLI + Tauri + Host |
+| 4 界面 | 设计层 + 档案页编辑器 |
+| 5 同步 | pull 时身份与规范源签名变化则分发 |
+| 6 其它配置 | 可选 overlay；显示名 |
 
-每阶段仍须 GUI 与 CLI 同一规则（宪章 V）。
-
----
-
-## 9. 规格与文档修订清单（落地时做）
-
-| 文件 | 修订 |
-|---|---|
-| `specs/002-skill-management/spec.md` | FR-028 / US6-6 去掉 SOUL 排除；FR-043 改为「Code Agent 指令与 Hermes 身份源分轨」 |
-| `docs/requirements.md` | 撤回「暂不管理 SOUL」并记录新裁决 |
-| `docs/legacy-skill-capabilities.md` H02 | 同步裁决 |
-| `GLOSSARY.md` | 增加「档案身份源」 |
-| `docs/adr/0001-library-and-local-state.md` | 身份源进库；分发哈希留本机 |
-| `docs/technical-reference/hermes-integration.md` | 从「不编辑 SOUL」改为「由身份源分发」 |
-| CLI 契约 / data-model / 维护 Skill | 新命令与目录 |
-
-本调查**不改**上述正式规格，避免把草案写成已定案。
+能力层不排期。规范依赖本机 Hermes CLI，可与身份并行设计、分步验收。
 
 ---
 
-## 10. 待用户拍板（实现前）
+## 10. 规格修订清单（落地时做）
 
-1. **首期三种 Markdown（人格 / 角色 / 行为规范）是否一次做完**，还是先做人格+规范、角色并入人格？
-2. **已有 `SOUL.md`：自动收编进专属源，还是保存前强制确认？** 建议自动收编非 seed 文件，并在结果里写明。
-3. **分发范围确认**：本机全部已发现档案（推荐），还是仅当前选中档案？
-4. **配置 overlay 要哪些键？** 没有清单则首期不做配置。
-5. **空合成是否允许把磁盘 SOUL 写成空**（触发 Hermes 默认人格）？建议：仅当该档案已被认领且用户清空源。
+与前一稿相同：002 FR-028 / US6-6、需求记录、H02、GLOSSARY、ADR 0001、hermes-integration、CLI 契约。另须写明：规范目标是 `agent.system_prompt`，不是 `SOUL.md`，也不是项目 `AGENTS.md`。
+
+本调查不改正式规格。
 
 ---
 
-## 11. 实施时必须再核对的 Hermes 事实
+## 11. 待用户拍板
 
-- 当前安装是否仍只从 `HERMES_HOME/SOUL.md` 读人格（官方 2026-11 如此）。
-- 内置默认人格全文（用于判断 seed，避免把 seed 收编成「用户专属」）。
-- `hermes config set` / `hermes sessions refresh-prompts` 在目标版本是否仍可用。
-- Windows 下档案 home 是否仍为 `%LOCALAPPDATA%/hermes`。
-- 发行版锁定的 `SOUL.md`（`hermes profile install <git-url>`）是否出现在本机；若出现须拒绝覆盖并报告。
+1. **身份 + 规范是否一次规格做完**（推荐一次定稿，实现仍可分 1/2 阶段验收）。
+2. 现网 `SOUL.md` 与已有 `system_prompt`：自动收编非 seed / 非空值（推荐），还是保存前强制确认。
+3. 分发全部已发现档案（推荐），还是仅当前选中档案。
+4. 选了 `/personality` 的档案：只警告（推荐），还是分发时拒绝写规范键。
+5. 其它配置键清单仍空则不做通用配置编辑。
+
+---
+
+## 12. 实施前再核的 Hermes 事实
+
+- 本机版本中 `agent.system_prompt` 是进缓存系统提示（Prompt Assembly Layer 4）还是仅 ephemeral overlay。
+- 本机是否仍有「选 personality 覆盖 system_prompt」的旧 bug。
+- `hermes -p <id> config set agent.system_prompt` 对多行文本、空字符串的写法。
+- 内置默认 `SOUL.md` 全文（判断 seed）。
+- Windows 档案 home、发行版锁定的 SOUL。
