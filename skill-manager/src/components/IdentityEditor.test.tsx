@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IdentityEditor } from "./IdentityEditor";
-import type { HermesProfileView } from "../services/client";
+import { hermesIdentitySet, type HermesProfileView } from "../services/client";
 
 vi.mock("../services/client", () => ({
   hermesIdentityGet: vi.fn(async (scope: string) => ({
@@ -69,5 +69,30 @@ describe("IdentityEditor", () => {
 
     await waitFor(() => expect(container.textContent).toContain("已覆盖 空白模板"));
     expect(screen.getByText("SOUL")).toBeTruthy();
+    expect(hermesIdentitySet).toHaveBeenCalledWith("global", "GLOBAL EDIT");
+  });
+
+  it("writes every loaded draft on a single save, not only the visible profile", async () => {
+    const { container } = render(
+      <IdentityEditor profiles={profiles} onClose={() => {}} onSaved={() => {}} />,
+    );
+
+    await waitFor(() => expect(textarea(container).value).toBe("GLOBAL"));
+    fireEvent.change(textarea(container), { target: { value: "GLOBAL ALL" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "空白模板" }));
+    await waitFor(() => expect(textarea(container).value).toBe(""));
+    fireEvent.change(textarea(container), { target: { value: "BLANK SOUL" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "default" }));
+    await waitFor(() => expect(textarea(container).value).toBe(""));
+    fireEvent.change(textarea(container), { target: { value: "DEFAULT SOUL" } });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "保存" })[0]);
+
+    await waitFor(() => expect(hermesIdentitySet).toHaveBeenCalledTimes(3));
+    expect(hermesIdentitySet).toHaveBeenNthCalledWith(1, "global", "GLOBAL ALL");
+    expect(hermesIdentitySet).toHaveBeenCalledWith("blank", "BLANK SOUL");
+    expect(hermesIdentitySet).toHaveBeenCalledWith("default", "DEFAULT SOUL");
   });
 });

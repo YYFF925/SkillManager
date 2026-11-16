@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InstructionEditor } from "./InstructionEditor";
-import type { AgentView } from "../services/client";
+import { instructionSet, type AgentView } from "../services/client";
 
 vi.mock("../services/client", () => ({
   instructionGet: vi.fn(async (scope: string) => ({
@@ -73,5 +73,25 @@ describe("InstructionEditor", () => {
 
     await waitFor(() => expect(container.textContent).toContain("已刷新 Cursor"));
     expect(screen.getByText("Agent 指令文件")).toBeTruthy();
+    expect(instructionSet).toHaveBeenCalledWith("global", "GLOBAL EDIT");
+  });
+
+  it("writes every loaded draft on a single save, not only the visible agent", async () => {
+    const { container } = render(
+      <InstructionEditor agents={agents} onClose={() => {}} onSaved={() => {}} />,
+    );
+
+    await waitFor(() => expect(textarea(container).value).toBe("GLOBAL"));
+    fireEvent.change(textarea(container), { target: { value: "GLOBAL ALL" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Cursor/ }));
+    await waitFor(() => expect(textarea(container).value).toBe(""));
+    fireEvent.change(textarea(container), { target: { value: "CURSOR SPECIFIC" } });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "保存" })[0]);
+
+    await waitFor(() => expect(instructionSet).toHaveBeenCalledTimes(2));
+    expect(instructionSet).toHaveBeenNthCalledWith(1, "global", "GLOBAL ALL");
+    expect(instructionSet).toHaveBeenNthCalledWith(2, "cursor", "CURSOR SPECIFIC");
   });
 });
