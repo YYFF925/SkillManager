@@ -704,6 +704,7 @@ export function App() {
         />
       ) : activeKey === "presets" ? (
         <PresetPage
+          key={presetDomain}
           os={os}
           agents={agents}
           reloadToken={reloadToken + presetReload}

@@ -129,8 +129,10 @@ export function PresetPage({
   const [layout, setLayout] = useState<Layout>("grid");
   const [multi, setMulti] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
-  const [all, setAll] = useState<SkillListResult | null>(null);
-  const [filtered, setFiltered] = useState<SkillListResult | null>(null);
+  const [allState, setAllState] = useState<{ domain: Domain; result: SkillListResult } | null>(null);
+  const [filteredState, setFilteredState] = useState<{ domain: Domain; result: SkillListResult } | null>(null);
+  const all = allState?.domain === domain ? allState.result : null;
+  const filtered = filteredState?.domain === domain ? filteredState.result : null;
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -212,8 +214,8 @@ export function PresetPage({
         if (cancelled) {
           return;
         }
-        setAll(base);
-        setFiltered(result);
+        setAllState({ domain, result: base });
+        setFilteredState({ domain, result });
         setError(null);
       } catch (err) {
         if (!cancelled) {
@@ -239,6 +241,8 @@ export function PresetPage({
     setSelectedTags([]);
     setMemberFilter("all");
     setMulti(false);
+    setAllState(null);
+    setFilteredState(null);
   }, [domain]);
 
   const memberNames = useMemo(

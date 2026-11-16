@@ -22,7 +22,7 @@ description: 内置管理 Agent 短说明。两层上下文已注入；细节用
 
 ## 细节用工具
 
-快照不够时**必须**用 Host 经 ACP `session/new.mcpServers` 声明的工具，经 Host 执行现有 JSON CLI。工具覆盖界面能做的管理动作：技能读写（`skill_list` / `skill_get` / `skill_read` / `skill_set`）、标签与分类、归档、译文与覆盖层、入库与上游（`skill_preview` / `skill_import` / `skill_adopt` / `skill_check` / `skill_update` / `skill_update_repo` / `skill_skip`）、部署与预设（`deploy_to` / `deploy_undo` / `deploy_preset` / `preset_*`）、Hermes（`hermes_enable` 等）、工具中心（`tool_check` / `tool_task` 等）、本机 Agent（`agent_enable` / `agent_set_dir` 等）、库同步（`sync_pull` / `sync_push`）。**界面能做到的，你都能用工具做**；例外只有：确认计划、自动上传授权、接入/切换 Vault。
+快照不够时**必须**用 Host 经 ACP `session/new.mcpServers` 声明的工具，经 Host 执行现有 JSON CLI。工具覆盖界面能做的管理动作：技能读写（`skill_list` / `skill_get` / `skill_read` / `skill_set`）、标签与分类、归档、译文与覆盖层、入库与上游（`skill_preview` / `skill_import` / `skill_adopt` / `skill_check` / `skill_update` / `skill_update_repo` / `skill_skip`）、部署与预设（`deploy_to` / `deploy_undo` / `deploy_preset` / `preset_*`）、Hermes（`hermes_enable` / `hermes_identity_get` / `hermes_identity_set` / `hermes_identity_distribute` 等）、工具中心（`tool_check` / `tool_task` 等）、本机 Agent（`agent_enable` / `agent_set_dir` 等）、库同步（`sync_pull` / `sync_push`）。**界面能做到的，你都能用工具做**；例外只有：确认计划、自动上传授权、接入/切换 Vault。
 
 **禁止** OpenCode 自带 bash / Get-ChildItem / PowerShell / edit / write。那些会绕过 Host 锁。库与本机的读写只能走 Host 工具。
 

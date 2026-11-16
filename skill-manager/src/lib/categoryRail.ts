@@ -39,12 +39,13 @@ export function saveCategoryRail(domain: Domain, state: CategoryRailState): void
 
 /**
  * 合并库内已有分类、空壳分类与持久化顺序。
- * `present` 可含真实分类名；空壳 extras 也会出现在结果中。
+ * `present` 为当前真实分类与未落库空壳；`storedOrder` 只提供显示顺序，不复活已消失或串域的分类。
  */
 export function orderedCategoryNames(present: string[], storedOrder: string[]): string[] {
-  const universe = [...new Set([...storedOrder, ...present])];
-  const known = storedOrder.filter((name) => universe.includes(name));
-  const missing = universe.filter((name) => !known.includes(name));
+  const presentSet = new Set(present);
+  const known = storedOrder.filter((name) => presentSet.has(name));
+  const knownSet = new Set(known);
+  const missing = present.filter((name) => !knownSet.has(name));
   return [...known, ...missing];
 }
 

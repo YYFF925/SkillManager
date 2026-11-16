@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { PresetPage } from "./PresetPage";
-import { addPresetMembers, listPresets, type PresetView } from "../services/client";
+import { loadCategoryRail } from "../lib/categoryRail";
+import { addPresetMembers, listPresets, listSkills, type PresetView } from "../services/client";
 
 vi.mock("../services/client", async (importOriginal) => ({
   ...await importOriginal<typeof import("../services/client")>(),
@@ -14,6 +15,7 @@ vi.mock("../services/client", async (importOriginal) => ({
 }));
 
 beforeEach(() => {
+  localStorage.clear();
   vi.clearAllMocks();
   vi.mocked(listPresets).mockResolvedValue([]);
 });
@@ -116,4 +118,98 @@ it("does not deploy when only browsing members", async () => {
   await screen.findByRole("heading", { name: "通用" });
   expect(addPresetMembers).not.toHaveBeenCalled();
   await waitFor(() => expect(listPresets).toHaveBeenCalled());
+});
+
+it("does not leak lobster categories into code storage when switching preset domain", async () => {
+  const lobsterPreset: PresetView = { ...common, domain: "lobster", id: "lobster-common", name: "龙虾通用" };
+  vi.mocked(listPresets).mockImplementation(async (domain) =>
+    domain === "lobster" ? [lobsterPreset] : [common],
+  );
+  vi.mocked(listSkills).mockImplementation(async (query) => {
+    if (query?.domain === "lobster") {
+      return {
+        skills: [
+          {
+            domain: "lobster",
+            name: "comfy-helper",
+            category: "AI绘画",
+            comment: null,
+            tags: [],
+            description: null,
+            agents: null,
+            oses: null,
+            has_translation: false,
+            translation_stale: false,
+            vault_rel_dir: "Lobster/AI绘画/comfy-helper",
+            path: "/tmp/Lobster/AI绘画/comfy-helper",
+            entry_file: "SKILL.md",
+            source: null,
+            manager_error: null,
+            presets: [],
+            deployment_blocks: {},
+          },
+        ],
+        total: 1,
+        categories: ["AI绘画"],
+        tag_candidates: [],
+      };
+    }
+    return {
+      skills: [
+        {
+          domain: "code",
+          name: "infisical-cli",
+          category: "Infisical",
+          comment: null,
+          tags: [],
+          description: null,
+          agents: null,
+          oses: null,
+          has_translation: false,
+          translation_stale: false,
+          vault_rel_dir: "Code/Infisical/infisical-cli",
+          path: "/tmp/Code/Infisical/infisical-cli",
+          entry_file: "SKILL.md",
+          source: null,
+          manager_error: null,
+          presets: [],
+          deployment_blocks: {},
+        },
+      ],
+      total: 1,
+      categories: ["Infisical"],
+      tag_candidates: [],
+    };
+  });
+
+  const { rerender } = render(
+    <PresetPage
+      os="macos"
+      agents={[]}
+      reloadToken={0}
+      domain="lobster"
+      selectedId="lobster-common"
+      onSelectedIdChange={vi.fn()}
+      onCount={vi.fn()}
+      onTitle={vi.fn()}
+    />,
+  );
+  expect(await screen.findByText("AI绘画")).toBeInTheDocument();
+
+  rerender(
+    <PresetPage
+      os="macos"
+      agents={[]}
+      reloadToken={0}
+      domain="code"
+      selectedId="common"
+      onSelectedIdChange={vi.fn()}
+      onCount={vi.fn()}
+      onTitle={vi.fn()}
+    />,
+  );
+  expect(await screen.findByText("Infisical")).toBeInTheDocument();
+  expect(screen.queryByText("AI绘画")).not.toBeInTheDocument();
+  expect(loadCategoryRail("code")).toEqual({ order: ["Infisical"], extras: [] });
+  expect(loadCategoryRail("lobster")).toEqual({ order: ["AI绘画"], extras: [] });
 });

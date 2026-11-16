@@ -39,8 +39,10 @@ SkillManagerVault/
 │       ├── SKILL.md（或 skill.md）及技能文件   # 原始内容
 │       └── .manager/        # 该技能的管理层
 ├── lobster/                 # 龙虾技能库，结构同上
+├── archive/<domain>/        # 已归档技能，保留分类目录与 .manager/
 ├── presets/<domain>.yaml    # 预设定义
 ├── instructions/global.md, <agent-key>.md   # 指令源
+├── hermes-identity/global.md, <profile>.md  # Hermes 人格源（SOUL.md）
 ├── upstream-decisions.yaml  # 明确不入库的上游子路径 + 发现基线
 └── tools/<tool-slug>/tool.yaml, guide.md, 检查脚本   # 工具共享资料
 ```
@@ -128,6 +130,9 @@ registered_at: 2026-10-15
 - `presets/<domain>.yaml`：`id`（域内唯一，新建时由名称派生）、`name`、`icon`、`order`（预设间顺序）、
   `members`（技能名数组，**数组顺序即成员显示顺序**）。
 - `instructions/global.md` 与 `instructions/<agent-key>.md`：指令**源**；分发目标由本机 Agent 配置决定。
+- `hermes-identity/global.md` 与 `hermes-identity/<profile>.md`：Hermes 人格**源**；保存或库拉取变化后，
+  按「全局在前、专属在后」无条件覆盖本机全部已发现档案的 `SOUL.md`（空合成写成空文件；不检测冲突、
+  不导入现网文件、不创建档案、不改启用名单；合成约 20,000 字符以上会提示可能被截断）。
 - `upstream-decisions.yaml`：按 `(repo, domain)` 记录 `rejected_subpaths`（明确不入库并记住）与
   `seen_subpaths`（发现基线，首次 `import` 时已存在的候选，**只建一次、从不自动扩充**）。
 - `tools/<slug>/tool.yaml` + `guide.md` + 检查脚本：工具共享资料，随库同步；工具**程序本身**不随库同步。
@@ -185,7 +190,8 @@ registered_at: 2026-10-15
      会提交推送。CLI 写库、`deploy sync`、文件监听、启动/定时同步**都**不构成上传授权。
    - 已同意的上传失败时保留可读原因，可提示用户主动重试（再次 `sync push`）；后台路径不重试推送。
 3. **部署与库同步分开**：`sync pull` 只让库内容一致；拉取到的**新增技能不会自动部署**，
-   已启用指令目标会按“全局在前、专属在后”覆盖规则刷新，但不新增启用目标、不改本机路径。
+   已启用指令目标会按“全局在前、专属在后”覆盖规则刷新，但不新增启用目标、不改本机路径；
+   `hermes-identity/` 变化时也会无条件覆盖刷新本机全部已发现 Hermes 档案的 `SOUL.md`。
 
 ## 七、冲突与暂停处理
 
@@ -261,6 +267,12 @@ skill-manager deploy to <target> <ref>… [--also-target <target>…]
 skill-manager deploy sync [--ref <ref>] [--target <target>] [--overwrite-local]
 skill-manager deploy status [--target <target>] [--paused]
 skill-manager sync pull | sync push | sync status | sync conflicts
+
+# Hermes
+skill-manager hermes profiles | hermes list <profile> [--query <text>]
+skill-manager hermes identity get global|<profile>
+skill-manager hermes identity set global|<profile> (--file <path> | --stdin)
+skill-manager hermes identity distribute
 
 # 工具中心
 skill-manager tool list [--query <text>] [--category <c>] [--status <status>]

@@ -28,7 +28,11 @@ export interface CategoryRailProps {
   editable?: boolean;
 }
 
-export function CategoryRail({
+export function CategoryRail(props: CategoryRailProps) {
+  return <CategoryRailInner key={props.domain} {...props} />;
+}
+
+function CategoryRailInner({
   domain,
   total,
   namedCounts,
@@ -38,21 +42,13 @@ export function CategoryRail({
   onRenameNamed,
   editable = true,
 }: CategoryRailProps) {
-  const [order, setOrder] = useState<string[]>([]);
-  const [extras, setExtras] = useState<string[]>([]);
+  const [order, setOrder] = useState<string[]>(() => loadCategoryRail(domain).order);
+  const [extras, setExtras] = useState<string[]>(() => loadCategoryRail(domain).extras);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const renameRef = useRef<HTMLInputElement>(null);
   const focusSelect = useRef(false);
-
-  // 切换管理域时重载本机顺序与空壳。
-  useEffect(() => {
-    const stored = loadCategoryRail(domain);
-    setOrder(stored.order);
-    setExtras(stored.extras);
-    setRenaming(null);
-  }, [domain]);
 
   const present = useMemo(() => {
     const names = [...namedCounts.keys(), ...extras];
@@ -64,16 +60,27 @@ export function CategoryRail({
     [present, order],
   );
 
+  // 仅在当前域技能列表已加载后同步本机顺序与空壳，避免加载期或切域瞬间污染存储。
   useEffect(() => {
-    setOrder((current) => {
-      const next = orderedCategoryNames(present, current);
-      if (next.join("\0") !== current.join("\0")) {
-        saveCategoryRail(domain, { order: next, extras });
-        return next;
-      }
-      return current;
-    });
-  }, [present, domain, extras]);
+    if (total === null) {
+      return;
+    }
+    const nextExtras = extras.filter((name) => !namedCounts.has(name));
+    const nextPresent = [...new Set([...namedCounts.keys(), ...nextExtras])];
+    const nextOrder = orderedCategoryNames(nextPresent, order);
+    const extrasChanged = nextExtras.join("\0") !== extras.join("\0");
+    const orderChanged = nextOrder.join("\0") !== order.join("\0");
+    if (!extrasChanged && !orderChanged) {
+      return;
+    }
+    if (extrasChanged) {
+      setExtras(nextExtras);
+    }
+    if (orderChanged) {
+      setOrder(nextOrder);
+    }
+    saveCategoryRail(domain, { order: nextOrder, extras: nextExtras });
+  }, [domain, total, namedCounts, extras, order]);
 
   useEffect(() => {
     if (!renaming) {
@@ -177,7 +184,7 @@ export function CategoryRail({
         <button
           type="button"
           onClick={() => onSelect(null)}
-          className="flex min-w-0 flex-1 items-center gap-1.5 truncate px-1 text-left"
+          className="flex h-full min-w-0 flex-1 items-center gap-1.5 truncate px-1 text-left"
         >
           全部分类
           <span className="grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
@@ -198,19 +205,19 @@ export function CategoryRail({
       </div>
 
       {uncategorizedCount > 0 && (
-        <button
-          type="button"
-          onClick={() => onSelect(UNCATEGORIZED)}
-          className={`mb-0.5 flex h-[35px] w-full items-center gap-1.5 rounded-md px-2.5 text-left text-[14px] ${
-            selected === UNCATEGORIZED ? "bg-selected text-ink" : "text-ink-3 hover:bg-hover"
-          }`}
-        >
+        <div className={rowClass(selected === UNCATEGORIZED)}>
           <span className="inline-block w-4 shrink-0" aria-hidden="true" />
-          未分类
-          <span className="ml-auto grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
-            {uncategorizedCount}
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => onSelect(UNCATEGORIZED)}
+            className="flex h-full min-w-0 flex-1 items-center gap-1.5 truncate px-1 text-left"
+          >
+            未分类
+            <span className="grid h-[18px] min-w-[20px] place-items-center rounded-full bg-subtle px-1.5 text-[11px] text-muted">
+              {uncategorizedCount}
+            </span>
+          </button>
+        </div>
       )}
 
       {categories.map((name) => {
