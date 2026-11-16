@@ -48,7 +48,7 @@ const workspaceCrates = [
   "skill-manager-station",
 ];
 for (const name of workspaceCrates) {
-  const pattern = new RegExp(`(name = "${name}"\\nversion = ")\\d+\\.\\d+\\.\\d+(")`);
+  const pattern = new RegExp(`(name = "${name}"\\r?\\nversion = ")\\d+\\.\\d+\\.\\d+(")`);
   if (!pattern.test(lock)) {
     throw new Error(`Cargo.lock 中未找到 ${name} 的 version`);
   }
