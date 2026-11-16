@@ -51,6 +51,8 @@ export interface SettingsPageProps {
   reloadToken: number;
   /** 管理站远程壳：隐藏托盘、关窗收起与应用更新。 */
   remote?: boolean;
+  /** 管理站远程壳：退出当前登录会话。 */
+  onLoggedOut?: () => void;
 }
 
 const FREQUENCY_OPTIONS = [
@@ -136,6 +138,7 @@ export function SettingsPage({
   reloadToken,
   schedule,
   remote = false,
+  onLoggedOut,
 }: SettingsPageProps) {
   const [sharedDir, setSharedDir] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -279,6 +282,26 @@ export function SettingsPage({
     }
   }
 
+  async function logout() {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String((body as { error?: unknown })?.error ?? "退出登录失败"));
+      }
+      onLoggedOut?.();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const upstreamChanged = (latestSchedule?.upstream_report?.skills ?? []).filter(skillHasChange).length;
   const upstreamCandidates = latestSchedule?.upstream_report?.candidates.length ?? 0;
 
@@ -376,43 +399,51 @@ export function SettingsPage({
           )}
 
           {remote && (
-            <SettingRow label="登录保持时长">
-              <input
-                className="h-8 w-[120px] rounded-md border border-line bg-panel px-2 text-[12px]"
-                value={sessionTtl}
-                onChange={(e) => setSessionTtl(e.target.value)}
-                aria-label="登录保持时长（秒）"
-              />
-              <Button
-                compact
-                disabled={busy || !sessionTtl}
-                onClick={() => {
-                  const seconds = Number(sessionTtl);
-                  if (!Number.isFinite(seconds) || seconds < 60) {
-                    setError("登录保持时长至少 60 秒");
-                    return;
-                  }
-                  setBusy(true);
-                  setError(null);
-                  void fetch("/auth/session-ttl", {
-                    method: "PUT",
-                    credentials: "include",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ seconds }),
-                  })
-                    .then(async (res) => {
-                      const body = await res.json().catch(() => ({}));
-                      if (!res.ok) throw new Error(String(body?.error ?? "无法保存"));
-                      setSessionTtl(String(body.seconds ?? seconds));
-                      setNotice(`登录保持时长已设为 ${body.seconds ?? seconds} 秒。`);
+            <>
+              <SettingRow label="登录保持时长">
+                <input
+                  className="h-8 w-[120px] rounded-md border border-line bg-panel px-2 text-[12px]"
+                  value={sessionTtl}
+                  onChange={(e) => setSessionTtl(e.target.value)}
+                  aria-label="登录保持时长（秒）"
+                />
+                <Button
+                  compact
+                  disabled={busy || !sessionTtl}
+                  onClick={() => {
+                    const seconds = Number(sessionTtl);
+                    if (!Number.isFinite(seconds) || seconds < 60) {
+                      setError("登录保持时长至少 60 秒");
+                      return;
+                    }
+                    setBusy(true);
+                    setError(null);
+                    void fetch("/auth/session-ttl", {
+                      method: "PUT",
+                      credentials: "include",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ seconds }),
                     })
-                    .catch((err) => setError(String(err)))
-                    .finally(() => setBusy(false));
-                }}
-              >
-                保存
-              </Button>
-            </SettingRow>
+                      .then(async (res) => {
+                        const body = await res.json().catch(() => ({}));
+                        if (!res.ok) throw new Error(String(body?.error ?? "无法保存"));
+                        setSessionTtl(String(body.seconds ?? seconds));
+                        setNotice(`登录保持时长已设为 ${body.seconds ?? seconds} 秒。`);
+                      })
+                      .catch((err) => setError(String(err)))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  保存
+                </Button>
+              </SettingRow>
+
+              <SettingRow label="登录会话">
+                <Button compact disabled={busy} onClick={() => void logout()}>
+                  退出登录
+                </Button>
+              </SettingRow>
+            </>
           )}
         </div>
       </Panel>

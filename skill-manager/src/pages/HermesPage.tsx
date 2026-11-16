@@ -22,10 +22,13 @@ import {
 import {
   hermesAdopt,
   hermesDisable,
+  hermesDisablePreset,
   hermesEnable,
+  hermesEnablePreset,
   hermesList,
   hermesProfiles,
   hermesRead,
+  listPresets,
   renameCategory,
   deployStatus,
   type AgentView,
@@ -34,12 +37,14 @@ import {
   type HermesProfileView,
   type HermesSkillView,
   type HermesSkillsView,
+  type PresetView,
 } from "../services/client";
 import { osLabel, unsupportedOs } from "../lib/support";
 import { TagChip } from "../components/TagChip";
 import { toggleTagSelection, pruneSelectedTags, type TagMode } from "../lib/tagFilter";
 import { LocalSkillDetail } from "../components/LocalSkillDetail";
 import { HermesSkillDetail } from "../components/HermesSkillDetail";
+import { PresetPillBar, type PresetPillCoverage, type PresetPillItem } from "../components/AgentPresetPills";
 import { QuickDeploy } from "../components/QuickDeploy";
 import { CategoryRail, CATEGORY_UNCATEGORIZED } from "../components/CategoryRail";
 import { IdentityEditor } from "../components/IdentityEditor";
@@ -140,6 +145,8 @@ export function HermesPage({
   const [localDetail, setLocalDetail] = useState<HermesSkillView | null>(null);
   const [adoptTarget, setAdoptTarget] = useState<HermesSkillView | null>(null);
   const [identityOpen, setIdentityOpen] = useState(false);
+  const [presets, setPresets] = useState<PresetView[]>([]);
+  const [busyPresetId, setBusyPresetId] = useState<string | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -152,6 +159,14 @@ export function HermesPage({
     let cancelled = false;
     deployStatus().then((value) => { if (!cancelled) setRecords(value); })
       .catch((err) => { if (!cancelled) setError(String(err)); });
+    return () => { cancelled = true; };
+  }, [reloadToken, version]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listPresets("lobster")
+      .then((value) => { if (!cancelled) setPresets(value); })
+      .catch(() => { if (!cancelled) setPresets([]); });
     return () => { cancelled = true; };
   }, [reloadToken, version]);
 
@@ -298,6 +313,35 @@ export function HermesPage({
     profile.display_name ?? profile.name;
   const activeLabel = activeProfile ? profileLabel(activeProfile) : "选择档案";
 
+  const presetItems: PresetPillItem[] = useMemo(() => {
+    if (!active || isDefault || presets.length === 0) {
+      return [];
+    }
+    const enabledNames = new Set(
+      (base?.skills ?? [])
+        .filter((skill) => skill.enabled)
+        .map((skill) => skill.name.toLowerCase()),
+    );
+    return presets.map((preset) => {
+      const total = preset.members.length;
+      const installed = preset.members.filter((member) =>
+        enabledNames.has(member.name.toLowerCase()),
+      ).length;
+      const state: PresetPillCoverage =
+        total === 0 || installed === 0 ? "off" : installed === total ? "on" : "partial";
+      return {
+        preset,
+        state,
+        installed,
+        total,
+        title:
+          state === "on"
+            ? "仅在当前档案禁用该预设"
+            : "一键启用该预设（未安装到 default 的将自动安装）",
+      };
+    });
+  }, [active, isDefault, presets, base]);
+
   const filterActive =
     debouncedQuery.trim().length > 0 ||
     category !== null ||
@@ -382,6 +426,40 @@ export function HermesPage({
       setVersion((value) => value + 1);
     } catch (err) {
       setError(String(err));
+    }
+  }
+
+  async function togglePreset(preset: PresetView, state: PresetPillCoverage) {
+    if (!active || isDefault) {
+      return;
+    }
+    setBusyPresetId(preset.id);
+    try {
+      const enabling = state !== "on";
+      const result = enabling
+        ? await hermesEnablePreset(active, preset.id)
+        : await hermesDisablePreset(active, preset.id);
+      const failed = result.items.filter((item) => !item.ok);
+      const summary = enabling
+        ? result.installed > 0
+          ? `已为「${activeLabel}」启用预设「${result.preset_name}」（自动安装 ${result.installed} 项到 default，当前档案启用 ${result.changed} 项）`
+          : `已为「${activeLabel}」启用预设「${result.preset_name}」（${result.changed} 项）`
+        : `已在「${activeLabel}」禁用预设「${result.preset_name}」（${result.changed} 项，default 与其他档案不受影响）`;
+      const parts = [summary];
+      if (failed.length > 0) {
+        parts.push(
+          `${failed.length} 项未完成：${failed
+            .map((item) => `${item.name}（${item.message ?? "未知原因"}）`)
+            .join("；")}`,
+        );
+      }
+      setNotice(parts.join("；"));
+      setError(null);
+      setVersion((value) => value + 1);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusyPresetId(null);
     }
   }
 
@@ -544,6 +622,14 @@ export function HermesPage({
           </div>
         </div>
       </div>
+
+      {!isDefault && (
+        <PresetPillBar
+          items={presetItems}
+          busyId={busyPresetId}
+          onToggle={(preset, state) => void togglePreset(preset, state)}
+        />
+      )}
 
       <div className="mb-3.5 flex min-h-[23px] shrink-0 flex-wrap items-center gap-1.5">
         <span className="mr-0.5 text-[12px] text-faint">标签</span>

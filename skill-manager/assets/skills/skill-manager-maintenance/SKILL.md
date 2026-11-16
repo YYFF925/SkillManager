@@ -131,7 +131,7 @@ registered_at: 2026-10-15
   `members`（技能名数组，**数组顺序即成员显示顺序**）。
 - `instructions/global.md` 与 `instructions/<agent-key>.md`：指令**源**；分发目标由本机 Agent 配置决定。
 - `hermes-identity/global.md` 与 `hermes-identity/<profile>.md`：Hermes 人格**源**；保存或库拉取变化后，
-  按「全局在前、专属在后」无条件覆盖本机全部已发现档案的 `SOUL.md`（空合成写成空文件；不检测冲突、
+  按「专属在前、全局在后」无条件覆盖本机全部已发现档案的 `SOUL.md`（空合成写成空文件；不检测冲突、
   不导入现网文件、不创建档案、不改启用名单；合成约 20,000 字符以上会提示可能被截断）。
 - `upstream-decisions.yaml`：按 `(repo, domain)` 记录 `rejected_subpaths`（明确不入库并记住）与
   `seen_subpaths`（发现基线，首次 `import` 时已存在的候选，**只建一次、从不自动扩充**）。
@@ -191,7 +191,7 @@ registered_at: 2026-10-15
    - 已同意的上传失败时保留可读原因，可提示用户主动重试（再次 `sync push`）；后台路径不重试推送。
 3. **部署与库同步分开**：`sync pull` 只让库内容一致；拉取到的**新增技能不会自动部署**，
    已启用指令目标会按“全局在前、专属在后”覆盖规则刷新，但不新增启用目标、不改本机路径；
-   `hermes-identity/` 变化时也会无条件覆盖刷新本机全部已发现 Hermes 档案的 `SOUL.md`。
+   `hermes-identity/` 变化时也会按「专属在前、全局在后」无条件覆盖刷新本机全部已发现 Hermes 档案的 `SOUL.md`。
 
 ## 七、冲突与暂停处理
 

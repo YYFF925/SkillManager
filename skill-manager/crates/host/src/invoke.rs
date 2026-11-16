@@ -355,6 +355,20 @@ fn dispatch(runtime: &HostRuntime, command: &str, body: &Value) -> Result<Value,
         )
         .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null))
         .map_err(InvokeError::Failed),
+        "hermes_enable_preset" => commands::hermes::hermes_enable_preset(
+            runtime,
+            req_string(body, "profile")?,
+            req_string(body, "preset_id")?,
+        )
+        .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null))
+        .map_err(InvokeError::Failed),
+        "hermes_disable_preset" => commands::hermes::hermes_disable_preset(
+            runtime,
+            req_string(body, "profile")?,
+            req_string(body, "preset_id")?,
+        )
+        .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null))
+        .map_err(InvokeError::Failed),
         "hermes_adopt" => commands::hermes::hermes_adopt(
             runtime,
             req_string(body, "profile")?,

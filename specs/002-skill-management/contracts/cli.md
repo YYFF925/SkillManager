@@ -112,6 +112,7 @@ preset reorder-members <domain> <id> --order <name,...>
 hermes profiles | hermes list <profile>
 hermes read <profile> <name> [--file <path>]
 hermes enable <profile> <name>... | hermes disable <profile> <name>...
+hermes enable-preset <profile> <preset-id> | hermes disable-preset <profile> <preset-id>
 hermes identity get global|<profile>
 hermes identity set global|<profile> (--file <path> | --stdin)
 hermes identity distribute
@@ -119,7 +120,7 @@ hermes identity distribute
 
 只管理现有单根下的档案技能；default 部署与其他档案明确启用分开。启用沿用龙虾域/支持声明，新内容不重置已有选择。
 `read` 只读该档案的实际技能正文或目录内文件；不要求先收编，不改变库、部署或启用名单。
-`identity get` 返回该作用域的源内容（`hermes-identity/global.md` 或 `hermes-identity/<profile>.md`；文件不存在按空内容）以及按拼接规则得到的合成预览；`identity set` 写入源后立即按「全局在前、专属在后」无条件覆盖本机**全部已发现档案**的 `<home>/SOUL.md`，空合成写成空文件。单档案写入失败不中断其余，逐项如实报告。`distribute` 不改源，只按当前源刷新。不创建档案、不改启用名单、不改显示名读取链。
+`identity get` 返回该作用域的源内容（`hermes-identity/global.md` 或 `hermes-identity/<profile>.md`；文件不存在按空内容）以及按拼接规则得到的合成预览；`identity set` 写入源后立即按「专属在前、全局在后」无条件覆盖本机**全部已发现档案**的 `<home>/SOUL.md`，空合成写成空文件。单档案写入失败不中断其余，逐项如实报告。`distribute` 不改源，只按当前源刷新。不创建档案、不改启用名单、不改显示名读取链。
 
 ### tool — 工具中心
 

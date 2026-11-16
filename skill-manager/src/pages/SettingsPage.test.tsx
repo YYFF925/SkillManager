@@ -136,6 +136,7 @@ import { checkNow, sharedDirGet } from "../services/client";
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
   vi.mocked(sharedDirGet).mockResolvedValue("/tmp/home/.agents/skills");
 });
 
@@ -250,7 +251,65 @@ describe("SettingsPage · 远程壳", () => {
     expect(within(panel).queryByText("托盘模式")).toBeNull();
     expect(within(panel).queryByText("托盘／菜单栏图标")).toBeNull();
     expect(within(panel).queryByRole("button", { name: "检查更新" })).toBeNull();
+    expect(within(panel).getByRole("button", { name: "退出登录" })).toBeTruthy();
     await waitFor(() => expect(within(panel).getByText("0.1.1")).toBeTruthy());
+  });
+
+  it("桌面模式不显示登录保持时长与退出登录", async () => {
+    renderSettings();
+    const global = await screen.findByRole("heading", { name: "全局配置" });
+    const panel = global.closest("section")!;
+    expect(within(panel).queryByLabelText("登录保持时长（秒）")).toBeNull();
+    expect(within(panel).queryByRole("button", { name: "退出登录" })).toBeNull();
+  });
+
+  it("远程模式点击退出登录调用 /auth/logout 并触发回调", async () => {
+    const onLoggedOut = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/auth/session-ttl") {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, seconds: 31104000 }),
+        };
+      }
+      if (url === "/auth/logout" && init?.method === "POST") {
+        return {
+          ok: true,
+          json: async () => ({ ok: true }),
+        };
+      }
+      return { ok: false, json: async () => ({}) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <SettingsPage
+        schedule={null}
+        vault={vault}
+        uploadFailure={null}
+        onRetryUpload={async () => {}}
+        settings={settingsFixture}
+        onSettingsChange={() => {}}
+        agents={[codex, hermes]}
+        onAgentsChanged={() => {}}
+        onOpenTarget={() => {}}
+        onAppUpdateFound={() => {}}
+        reloadToken={0}
+        remote
+        onLoggedOut={onLoggedOut}
+      />,
+    );
+
+    const ttlInput = (await screen.findByLabelText("登录保持时长（秒）")) as HTMLInputElement;
+    await waitFor(() => expect(ttlInput.value).toBe("31104000"));
+
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
+    await waitFor(() => expect(onLoggedOut).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith("/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
   });
 });
 

@@ -1,7 +1,7 @@
 //! Hermes 档案人格源与分发（SOUL.md）。
 //!
 //! 源内容保存在 SkillManagerVault 的 `hermes-identity/`（`global.md` + `<档案id>.md`），随库同步。
-//! 保存或库拉取源变化后，按「全局在前、专属在后」无条件覆盖本机全部已发现档案的 `SOUL.md`。
+//! 保存或库拉取源变化后，按「专属在前、全局在后」无条件覆盖本机全部已发现档案的 `SOUL.md`。
 //! 磁盘上的 `SOUL.md` 不是真值：不检测冲突、不导入现网文件、空合成也写成空文件。
 
 use std::io::Write;
@@ -60,9 +60,9 @@ impl IdentityScope {
     }
 }
 
-/// 与指令相同的四态拼接：去空白；双空→空；单侧有→只用该侧；双有→全局\\n\\n专属。
+/// 四态拼接：去空白；双空→空；单侧有→只用该侧；双有→专属\\n\\n全局（全局拼接到最后）。
 pub fn compose_identity(global: &str, profile: &str) -> String {
-    compose_instructions(global, profile)
+    compose_instructions(profile, global)
 }
 
 /// 一个档案的分发结果。
@@ -94,9 +94,13 @@ pub struct IdentityService {
 
 impl IdentityService {
     pub fn new(vault_root: PathBuf, home: PathBuf) -> Self {
+        Self::with_hermes_root(vault_root, super::hermes_home(&home))
+    }
+
+    pub fn with_hermes_root(vault_root: PathBuf, hermes_root: PathBuf) -> Self {
         Self {
             vault_root,
-            hermes_root: super::hermes_home(&home),
+            hermes_root,
         }
     }
 
@@ -185,7 +189,7 @@ impl IdentityService {
         Ok(results)
     }
 
-    /// 某档案的合成内容（全局 + 专属）。
+    /// 某档案的合成内容（专属 + 全局）。
     pub fn compose_for(&self, profile_id: &str) -> Result<String> {
         let global = self.read_source(&IdentityScope::Global)?;
         let exclusive = self.read_source(&IdentityScope::Profile(profile_id.to_string()))?;
@@ -288,7 +292,7 @@ mod tests {
         assert_eq!(compose_identity("", ""), "");
         assert_eq!(compose_identity("  全局  ", ""), "全局");
         assert_eq!(compose_identity("", "专属"), "专属");
-        assert_eq!(compose_identity("全局", "专属"), "全局\n\n专属");
+        assert_eq!(compose_identity("全局", "专属"), "专属\n\n全局");
     }
 
     #[test]
@@ -328,7 +332,10 @@ mod tests {
         std::fs::write(hermes.join("SOUL.md"), "旧 default 人格").unwrap();
         std::fs::write(hermes.join("profiles/blank/SOUL.md"), "旧 blank 人格").unwrap();
 
-        let service = IdentityService::new(vault.path().to_path_buf(), home.path().to_path_buf());
+        let service = IdentityService::with_hermes_root(
+            vault.path().to_path_buf(),
+            home.path().join(".hermes"),
+        );
         let results = service.save(&IdentityScope::Global, "全局人格").unwrap();
         assert_eq!(results.len(), 2);
         assert!(results.iter().all(|item| item.ok));
@@ -350,7 +357,7 @@ mod tests {
         );
         assert_eq!(
             std::fs::read_to_string(hermes.join("profiles/blank/SOUL.md")).unwrap(),
-            "全局人格\n\nblank 专属"
+            "blank 专属\n\n全局人格"
         );
 
         // 空合成也覆盖成空文件，不保留现网内容。
@@ -369,7 +376,10 @@ mod tests {
     fn signature_changes_when_source_changes() {
         let vault = tempfile::TempDir::new().unwrap();
         let home = tempfile::TempDir::new().unwrap();
-        let service = IdentityService::new(vault.path().to_path_buf(), home.path().to_path_buf());
+        let service = IdentityService::with_hermes_root(
+            vault.path().to_path_buf(),
+            home.path().join(".hermes"),
+        );
         let empty = service.signature().unwrap();
         service.save(&IdentityScope::Global, "hello").unwrap();
         let filled = service.signature().unwrap();

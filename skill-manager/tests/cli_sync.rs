@@ -153,6 +153,7 @@ fn cli(machine: &Machine, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_skill-manager"))
         .args(&full)
         .env("HOME", &machine.home)
+        .env("HERMES_HOME", hermes_root(&machine.home))
         .output()
         .expect("执行 CLI 失败")
 }
@@ -193,6 +194,7 @@ fn cli_stdin(machine: &Machine, args: &[&str], input: &str) -> std::process::Out
     let mut child = Command::new(env!("CARGO_BIN_EXE_skill-manager"))
         .args(&full)
         .env("HOME", &machine.home)
+        .env("HERMES_HOME", hermes_root(&machine.home))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -604,6 +606,21 @@ fn identity_save_and_pull_overwrites_discovered_souls() {
     );
     assert_eq!(read(&env.a.home, ".hermes/SOUL.md").unwrap(), "全局人格");
 
+    let out_blank = cli_stdin(
+        &env.a,
+        &["hermes", "identity", "set", "blank", "--stdin"],
+        "blank 专属",
+    );
+    assert!(
+        out_blank.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out_blank.stderr)
+    );
+    assert_eq!(
+        read(&env.a.home, ".hermes/profiles/blank/SOUL.md").unwrap(),
+        "blank 专属\n\n全局人格"
+    );
+
     commit(&env.a.vault, &env.a.home, "设置人格源");
     git_ok(&env.a.vault, &["push"], &env.a.home);
 
@@ -613,6 +630,6 @@ fn identity_save_and_pull_overwrites_discovered_souls() {
     assert_eq!(read(&env.b.home, ".hermes/SOUL.md").unwrap(), "全局人格");
     assert_eq!(
         read(&env.b.home, ".hermes/profiles/blank/SOUL.md").unwrap(),
-        "全局人格"
+        "blank 专属\n\n全局人格"
     );
 }

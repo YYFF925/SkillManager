@@ -224,6 +224,7 @@ async fn auth_login(
                 .path("/")
                 .http_only(true)
                 .same_site(SameSite::Lax)
+                .max_age(cookie::time::Duration::seconds(result.ttl_seconds))
                 .build();
             let mut body = json!({
                 "ok": true,
@@ -751,3 +752,121 @@ fn invoke_response(reply: crate::devices::InvokeReply) -> Response {
 /// 因此 Host 侧应接受它们，或管理站应走 Host HTTP。出站长连接已覆盖 invoke。
 #[allow(dead_code)]
 fn _note() {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use totp_rs::{Algorithm, Secret, TOTP};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn login_sets_persistent_360d_cookie_and_logout_revokes_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = StationDb::open(dir.path()).unwrap();
+        let shown = auth::create_admin(&db, "admin", "password1").unwrap();
+        assert_eq!(auth::ttl(&db).unwrap(), 31_104_000);
+
+        let totp = TOTP::new(
+            Algorithm::SHA1,
+            6,
+            1,
+            30,
+            Secret::Encoded(shown.totp_secret).to_bytes().unwrap(),
+            Some("Skill Manager".to_string()),
+            "admin".to_string(),
+        )
+        .unwrap();
+        let otp = totp.generate_current().unwrap();
+
+        let state = AppState {
+            db: Arc::new(Mutex::new(db)),
+            live: LiveMap::default(),
+            web_dir: dir.path().join("missing-web"),
+        };
+        let app = router(state);
+
+        let login_res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "username": "admin",
+                            "password": "password1",
+                            "otp": otp,
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(login_res.status(), StatusCode::OK);
+        let set_cookie = login_res
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .expect("login must set cookie")
+            .to_string();
+        assert!(set_cookie.contains("sm_station="), "{set_cookie}");
+        assert!(set_cookie.contains("HttpOnly"), "{set_cookie}");
+        assert!(set_cookie.contains("SameSite=Lax"), "{set_cookie}");
+        assert!(set_cookie.contains("Path=/"), "{set_cookie}");
+        assert!(set_cookie.contains("Max-Age=31104000"), "{set_cookie}");
+
+        let cookie_pair = set_cookie.split(';').next().unwrap().to_string();
+
+        let session_res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/auth/session")
+                    .header(header::COOKIE, &cookie_pair)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(session_res.status(), StatusCode::OK);
+
+        let logout_res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/logout")
+                    .header(header::COOKIE, &cookie_pair)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(logout_res.status(), StatusCode::OK);
+        let clear_cookie = logout_res
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .expect("logout must clear cookie")
+            .to_string();
+        assert!(clear_cookie.contains("Max-Age=0"), "{clear_cookie}");
+
+        let after_logout = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/auth/session")
+                    .header(header::COOKIE, &cookie_pair)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(after_logout.status(), StatusCode::UNAUTHORIZED);
+    }
+}

@@ -13,7 +13,10 @@ use std::path::{Path, PathBuf};
 
 pub use adopt::AdoptItem;
 pub use disabled::{config_path, read_disabled, DisabledState};
-pub use enables::{HermesItem, HermesService, ProfileSkillView, ProfileSkillsView, ProfileView};
+pub use enables::{
+    HermesItem, HermesPresetOutcome, HermesService, ProfileSkillView, ProfileSkillsView,
+    ProfileView,
+};
 pub use identity::{
     compose_identity, IdentityScope, IdentityService, IdentitySourceView, IdentityTargetResult,
     IDENTITY_DIR, LONG_SOUL_CHARS,

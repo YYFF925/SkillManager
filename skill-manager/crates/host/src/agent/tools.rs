@@ -84,6 +84,8 @@ const ALLOWED: &[&str] = &[
     "hermes_read",
     "hermes_enable",
     "hermes_disable",
+    "hermes_enable_preset",
+    "hermes_disable_preset",
     "hermes_adopt",
     "hermes_identity_get",
     "hermes_identity_set",
@@ -651,6 +653,13 @@ fn tool_input_schema(name: &str) -> Value {
                 "names": str_array("技能名"),
             }),
         ),
+        "hermes_enable_preset" | "hermes_disable_preset" => (
+            &["profile", "preset_id"],
+            json!({
+                "profile": str_prop("Hermes 具名档案"),
+                "preset_id": str_prop("龙虾预设 id"),
+            }),
+        ),
         "hermes_identity_get" => (&["scope"], json!({ "scope": str_prop("global 或档案 id") })),
         "hermes_identity_set" => (
             &["scope", "content"],
@@ -857,6 +866,8 @@ fn tool_description(name: &str) -> &'static str {
         "hermes_read" => "读取档案技能文件",
         "hermes_enable" => "启用 Hermes 档案技能",
         "hermes_disable" => "停用 Hermes 档案技能",
+        "hermes_enable_preset" => "按龙虾预设为 Hermes 具名档案一键启用（未装进 default 则自动安装）",
+        "hermes_disable_preset" => "仅在当前 Hermes 具名档案禁用龙虾预设成员",
         "hermes_adopt" => "收编 Hermes 档案技能入库",
         "hermes_identity_get" => "读取 Hermes 人格源与合成预览",
         "hermes_identity_set" => "写人格源并覆盖各档案 SOUL.md",

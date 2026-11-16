@@ -15,6 +15,8 @@ use uuid::Uuid;
 use crate::db::StationDb;
 
 const COOKIE: &str = "sm_station";
+/// 默认保持登录 360 天（秒）。
+pub const DEFAULT_SESSION_TTL_SECONDS: i64 = 360 * 24 * 60 * 60;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AdminRow {
@@ -143,12 +145,13 @@ pub fn create_admin(db: &StationDb, username: &str, password: &str) -> Result<Se
     db.conn()
         .execute(
             "INSERT INTO admin (id, username, password_hash, totp_secret, recovery_code_hashes, session_ttl_seconds)
-             VALUES (1, ?1, ?2, ?3, ?4, 604800)",
+             VALUES (1, ?1, ?2, ?3, ?4, ?5)",
             rusqlite::params![
                 username,
                 password_hash,
                 totp_secret,
                 serde_json::to_string(&recovery_hashes).unwrap_or_else(|_| "[]".into()),
+                DEFAULT_SESSION_TTL_SECONDS,
             ],
         )
         .map_err(|err| err.to_string())?;
@@ -315,6 +318,7 @@ pub fn set_ttl(db: &StationDb, seconds: i64) -> Result<i64, String> {
 #[derive(Clone, Debug)]
 pub struct LoginResult {
     pub session_id: String,
+    pub ttl_seconds: i64,
     pub must_rebind_totp: bool,
     pub rebind: Option<SetupShown>,
 }
@@ -376,9 +380,11 @@ pub fn login(
             .map_err(|err| err.to_string())?;
         rebind = Some(mint_totp(&admin.username)?);
     }
-    let session_id = create_session_with(db, admin.session_ttl_seconds, rebind.as_ref())?;
+    let ttl_seconds = admin.session_ttl_seconds.max(60);
+    let session_id = create_session_with(db, ttl_seconds, rebind.as_ref())?;
     Ok(LoginResult {
         session_id,
+        ttl_seconds,
         must_rebind_totp: rebind.is_some(),
         rebind,
     })

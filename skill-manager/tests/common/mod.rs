@@ -249,7 +249,8 @@ impl TestEnv {
             .arg("--state-dir")
             .arg(&self.state_dir)
             .args(args)
-            .env("HOME", &self.home);
+            .env("HOME", &self.home)
+            .env("HERMES_HOME", self.hermes_root());
         cmd.output().expect("执行 CLI 失败")
     }
 
@@ -298,6 +299,7 @@ impl TestEnv {
             .arg(&self.state_dir)
             .args(args)
             .env("HOME", &self.home)
+            .env("HERMES_HOME", self.hermes_root())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());

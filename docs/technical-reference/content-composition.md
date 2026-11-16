@@ -62,7 +62,7 @@ description: 图表生成｜Create diagrams
 
 来源：`src-tauri/src/core/agent_instructions.rs` 中的 `read_source`、`compose_instructions`、`save_sources`。
 
-Hermes 人格源（2026-11-15）复用同一四态拼接（`compose_identity` 调用 `compose_instructions`），覆盖各档案 `SOUL.md`。空合成同样覆盖成空文件；读取失败如实报错，不把失败当清空。原子写用同目录 tmp+rename，见 `crates/core/src/hermes/identity.rs`。
+Hermes 人格源（2026-11-15，2026-11-16 调整顺序）复用同一四态拼接（`compose_identity` 调用 `compose_instructions(profile, global)`，即专属在前、全局在后），覆盖各档案 `SOUL.md`。空合成同样覆盖成空文件；读取失败如实报错，不把失败当清空。原子写用同目录 tmp+rename，见 `crates/core/src/hermes/identity.rs`。
 
 ## 第二轮补充：小配置文件写入
 

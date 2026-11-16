@@ -157,7 +157,7 @@ hermes-identity/
 └── <profile-id>.md     # 逐档案专属；档案 id 与 Hermes 目录 id 一致（含 URL 编码名），不用显示名
 ```
 
-- 拼接与 `instructions/` 相同四态：去空白；双空→空；单侧有→只用该侧；双有→全局后空一行再专属（core 复用 `compose_instructions`）。
+- 拼接与 `instructions/` 相同四态：去空白；双空→空；单侧有→只用该侧；双有→专属后空一行再全局（core 复用 `compose_instructions(profile, global)`，即全局拼接到最后）。
 - 保存任一作用域，或 `sync pull` 发现源签名变化后，对**本机全部已发现档案**无条件覆盖 `<home>/SOUL.md`（同目录 tmp+rename）。空合成写成空文件。档案 home 不是目录则跳过，避免把 `SOUL.md` 写成身份标记。
 - 磁盘上的 `SOUL.md` 不是真值：不检测冲突、不导入现网文件、不暂停。不写 `config.yaml`、`agent.system_prompt` 或项目 `AGENTS.md`，不改档案显示名读取链（`profile.yaml` title → `SOUL.md` 首标题 → 目录 id）。
 

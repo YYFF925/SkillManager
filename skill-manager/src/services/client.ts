@@ -782,6 +782,16 @@ export interface HermesToggleView {
   changed: number;
 }
 
+export interface HermesPresetView {
+  profile: string;
+  preset_id: string;
+  preset_name: string;
+  enabled: boolean;
+  installed: number;
+  changed: number;
+  items: HermesToggleItemView[];
+}
+
 export interface HermesAdoptItemView {
   name: string;
   ok: boolean;
@@ -832,6 +842,22 @@ export async function hermesDisable(
   names: string[],
 ): Promise<HermesToggleView> {
   return invoke<HermesToggleView>("hermes_disable", { profile, names });
+}
+
+/** 为某具名档案按龙虾预设一键启用（未安装到 default 则静默补装）。 */
+export async function hermesEnablePreset(
+  profile: string,
+  presetId: string,
+): Promise<HermesPresetView> {
+  return invoke<HermesPresetView>("hermes_enable_preset", { profile, presetId });
+}
+
+/** 仅在当前具名档案禁用龙虾预设成员（不动 default 池与其他档案）。 */
+export async function hermesDisablePreset(
+  profile: string,
+  presetId: string,
+): Promise<HermesPresetView> {
+  return invoke<HermesPresetView>("hermes_disable_preset", { profile, presetId });
 }
 
 /** 收编档案独有技能到龙虾库并部署 default 档案。 */

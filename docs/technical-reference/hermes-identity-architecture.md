@@ -9,7 +9,7 @@
 
 ## 1. 已选方案：一份 SOUL，全局 + 每 bot 合成
 
-和现有 Agent 指令同一合同：库内维护源，保存后「全局在前、专属在后」覆盖本机各档案的 `SOUL.md`。
+和现有 Agent 指令同一合同形式，顺序相反：库内维护源，保存后「专属在前、全局在后」覆盖本机各档案的 `SOUL.md`。
 
 角色定义、行为规范、语气都写在这份 Markdown 里。**不**拆 `agent.system_prompt`，**不**写项目 `AGENTS.md`。能力层（技能）继续用现有档案中心，不进这个编辑器。
 
@@ -29,8 +29,8 @@ SkillManagerVault/hermes-identity/
 
 ```mermaid
 flowchart LR
-  G["库 global.md"] --> C["compose 全局在前专属在后"]
-  P["库 档案.md"] --> C
+  P["库 档案.md"] --> C["compose 专属在前全局在后"]
+  G["库 global.md"] --> C
   C --> S["各档案 home/SOUL.md"]
   S --> H["Hermes 系统提示 slot #1 原文注入"]
 ```
@@ -62,7 +62,7 @@ GPT 说对的部分仍然成立，只是**不必为此分槽**：
 
 ## 3. 合成与分发
 
-规则与 `compose_instructions` 相同：去空白；双空→空；单侧有→只用该侧；双有→`全局\n\n专属`。读失败不得当空。
+规则与 `compose_instructions` 同为四态拼接，顺序为专属在前、全局在后：去空白；双空→空；单侧有→只用该侧；双有→`专属\n\n全局`。读失败不得当空。
 
 合成结果**不再加管理器标题**（由用户在源里自己写 `# 角色` / `# 规范`）。不要 HTML 注释：会进提示词。
 

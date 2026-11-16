@@ -336,13 +336,13 @@ fn identity_save_overwrites_all_discovered_souls() {
     );
     assert_eq!(
         env.hermes_read("profiles/blank/SOUL.md").as_deref(),
-        Some("全局人格\n\nblank 专属")
+        Some("blank 专属\n\n全局人格")
     );
     assert_eq!(env.hermes_read("SOUL.md").as_deref(), Some("全局人格"));
 
     let view = env.cli_json(&["hermes", "identity", "get", "blank"]);
     assert_eq!(view["source"], "blank 专属");
-    assert_eq!(view["composed"], "全局人格\n\nblank 专属");
+    assert_eq!(view["composed"], "blank 专属\n\n全局人格");
 
     env.cli_json_stdin(&["hermes", "identity", "set", "global", "--stdin"], "");
     env.cli_json_stdin(&["hermes", "identity", "set", "blank", "--stdin"], "");
@@ -351,4 +351,53 @@ fn identity_save_overwrites_all_discovered_souls() {
         env.hermes_read("profiles/blank/SOUL.md").as_deref(),
         Some("")
     );
+}
+
+#[test]
+fn preset_enable_auto_installs_missing_to_default_and_disable_only_affects_profile() {
+    let env = hermes_env();
+    env.write_skill("lobster", None, "a", "# a\n");
+    env.write_skill("lobster", None, "b", "# b\n");
+    env.write_skill("lobster", None, "c", "# c\n");
+    env.commit_all("加入龙虾技能");
+
+    // 预先只把 a 部署进 default；b 尚未安装到 Hermes。
+    env.cli_json(&["deploy", "to", "hermes:default", "lobster/a"]);
+    env.cli_json(&["preset", "create", "lobster", "ops"]);
+    env.cli_json(&["preset", "members", "lobster", "ops", "--add", "a,b"]);
+
+    // default 档案禁止通过预设启停。
+    let (default_code, _) = env.cli_json_raw(&["hermes", "enable-preset", "default", "ops"]);
+    assert_ne!(default_code, 0);
+
+    // 在 blank 档案一键启用预设：自动把 b 装进 default，且只为 blank 启用 a、b，不影响 drawing。
+    let enabled = env.cli_json(&["hermes", "enable-preset", "blank", "ops"]);
+    assert_eq!(enabled["installed"], 1, "{enabled}");
+    assert_eq!(enabled["changed"], 2, "{enabled}");
+    assert!(env.hermes_root().join("skills/b/SKILL.md").is_file());
+
+    let blank_list = env.cli_json(&["hermes", "list", "blank"]);
+    assert_eq!(profile_item(&blank_list["skills"], "a")["enabled"], true);
+    assert_eq!(profile_item(&blank_list["skills"], "b")["enabled"], true);
+
+    let drawing_list = env.cli_json(&["hermes", "list", "drawing"]);
+    assert_eq!(profile_item(&drawing_list["skills"], "a")["enabled"], false);
+    assert_eq!(profile_item(&drawing_list["skills"], "b")["enabled"], false);
+
+    // 也在 drawing 启用 a，验证后续在 blank 禁用预设不影响 drawing 与 default。
+    env.cli_json(&["hermes", "enable", "drawing", "a"]);
+
+    let disabled = env.cli_json(&["hermes", "disable-preset", "blank", "ops"]);
+    assert_eq!(disabled["changed"], 2, "{disabled}");
+
+    let blank_after = env.cli_json(&["hermes", "list", "blank"]);
+    assert_eq!(profile_item(&blank_after["skills"], "a")["enabled"], false);
+    assert_eq!(profile_item(&blank_after["skills"], "b")["enabled"], false);
+    assert!(!env.hermes_root().join("profiles/blank/skills/a").exists());
+
+    // default 与 drawing 均不受影响。
+    assert!(env.hermes_root().join("skills/a/SKILL.md").is_file());
+    assert!(env.hermes_root().join("skills/b/SKILL.md").is_file());
+    let drawing_after = env.cli_json(&["hermes", "list", "drawing"]);
+    assert_eq!(profile_item(&drawing_after["skills"], "a")["enabled"], true);
 }

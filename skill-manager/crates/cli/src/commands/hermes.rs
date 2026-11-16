@@ -31,6 +31,10 @@ pub enum HermesAction {
     Enable(NamesArgs),
     /// 为某具名档案禁用技能（可多个）。
     Disable(NamesArgs),
+    /// 为某具名档案按龙虾预设一键启用（未安装到 default 则静默补装）。
+    EnablePreset(PresetArgs),
+    /// 仅在当前具名档案禁用龙虾预设成员。
+    DisablePreset(PresetArgs),
     /// 档案人格源（SOUL.md）：读取、保存并覆盖本机全部已发现档案。
     Identity(IdentityCommand),
 }
@@ -109,6 +113,15 @@ pub struct NamesArgs {
     pub names: Vec<String>,
 }
 
+#[derive(Args, Debug)]
+pub struct PresetArgs {
+    #[arg(value_name = "profile")]
+    pub profile: String,
+    /// 龙虾预设 id。
+    #[arg(value_name = "preset-id")]
+    pub preset_id: String,
+}
+
 type Result<T> = std::result::Result<T, CoreError>;
 
 /// 分发 `hermes` 子命令。
@@ -139,6 +152,8 @@ fn dispatch(action: HermesAction, ctx: &AppContext) -> Result<(CliResult, String
         HermesAction::List(args) => list(ctx, args),
         HermesAction::Enable(args) => set_enabled(ctx, args, true),
         HermesAction::Disable(args) => set_enabled(ctx, args, false),
+        HermesAction::EnablePreset(args) => set_preset_enabled(ctx, args, true),
+        HermesAction::DisablePreset(args) => set_preset_enabled(ctx, args, false),
         HermesAction::Identity(command) => identity(ctx, command),
     }
 }
@@ -234,13 +249,13 @@ fn list(ctx: &AppContext, args: ListArgs) -> Result<(CliResult, String)> {
 // enable / disable
 // ---------------------------------------------------------------------------
 
-fn set_enabled(ctx: &AppContext, args: NamesArgs, enabled: bool) -> Result<(CliResult, String)> {
-    let items = with_service(ctx, |service| {
-        service.set_enabled(&args.profile, &args.names, enabled)
-    })?;
-
+fn collect_items_outcome(
+    profile: &str,
+    items: &[skill_manager_core::hermes::HermesItem],
+    data: Value,
+) -> CliResult {
     let mut batch = BatchOutcome::default();
-    for item in &items {
+    for item in items {
         if item.ok {
             batch.push_ok(serde_json::to_value(item).unwrap_or(Value::Null));
         } else {
@@ -250,10 +265,25 @@ fn set_enabled(ctx: &AppContext, args: NamesArgs, enabled: bool) -> Result<(CliR
                         .clone()
                         .unwrap_or_else(|| "未知原因".to_string()),
                 )
-                .skill(format!("{}/{}", args.profile, item.name)),
+                .skill(format!("{profile}/{}", item.name)),
             );
         }
     }
+    let ok = items.iter().filter(|item| item.ok).count();
+    if batch.failed.is_empty() {
+        CliResult::success(data)
+    } else if ok == 0 {
+        CliResult::failed(batch.failed)
+    } else {
+        CliResult::partial(data, batch.failed)
+    }
+}
+
+fn set_enabled(ctx: &AppContext, args: NamesArgs, enabled: bool) -> Result<(CliResult, String)> {
+    let items = with_service(ctx, |service| {
+        service.set_enabled(&args.profile, &args.names, enabled)
+    })?;
+
     let ok = items.iter().filter(|item| item.ok).count();
     let data = json!({
         "profile": args.profile,
@@ -261,13 +291,7 @@ fn set_enabled(ctx: &AppContext, args: NamesArgs, enabled: bool) -> Result<(CliR
         "items": items,
         "changed": ok,
     });
-    let result = if batch.failed.is_empty() {
-        CliResult::success(data)
-    } else if ok == 0 {
-        CliResult::failed(batch.failed)
-    } else {
-        CliResult::partial(data, batch.failed)
-    };
+    let result = collect_items_outcome(&args.profile, &items, data);
 
     let mut human = format!(
         "已{}档案 {} 的技能 {} 项",
@@ -279,6 +303,46 @@ fn set_enabled(ctx: &AppContext, args: NamesArgs, enabled: bool) -> Result<(CliR
         human.push_str(&format!("；{} 项未完成", result.errors.len()));
     }
     for item in &items {
+        if let Some(message) = &item.message {
+            human.push_str(&format!("\n- {}：{message}", item.name));
+        }
+    }
+    Ok((result, human))
+}
+
+fn set_preset_enabled(
+    ctx: &AppContext,
+    args: PresetArgs,
+    enabled: bool,
+) -> Result<(CliResult, String)> {
+    let outcome = with_service(ctx, |service| {
+        service.set_preset_enabled(&args.profile, &args.preset_id, enabled)
+    })?;
+    let data = serde_json::to_value(&outcome)
+        .map_err(|err| CoreError::other(format!("序列化预设结果失败：{err}")))?;
+    let result = collect_items_outcome(&outcome.profile, &outcome.items, data);
+    let mut human = if enabled {
+        if outcome.installed > 0 {
+            format!(
+                "已为档案 {} 启用预设「{}」（自动安装 {} 项到 default，启用 {} 项）",
+                outcome.profile, outcome.preset_name, outcome.installed, outcome.changed
+            )
+        } else {
+            format!(
+                "已为档案 {} 启用预设「{}」（{} 项）",
+                outcome.profile, outcome.preset_name, outcome.changed
+            )
+        }
+    } else {
+        format!(
+            "已在档案 {} 禁用预设「{}」（{} 项，default 与其他档案不受影响）",
+            outcome.profile, outcome.preset_name, outcome.changed
+        )
+    };
+    if !result.errors.is_empty() {
+        human.push_str(&format!("；{} 项未完成", result.errors.len()));
+    }
+    for item in &outcome.items {
         if let Some(message) = &item.message {
             human.push_str(&format!("\n- {}：{message}", item.name));
         }

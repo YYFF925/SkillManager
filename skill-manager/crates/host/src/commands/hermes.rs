@@ -4,8 +4,8 @@
 
 use serde::Serialize;
 use skill_manager_core::hermes::{
-    AdoptItem, HermesItem, HermesService, IdentityScope, IdentityService, IdentitySourceView,
-    IdentityTargetResult, ProfileSkillsView, ProfileView,
+    AdoptItem, HermesItem, HermesPresetOutcome, HermesService, IdentityScope, IdentityService,
+    IdentitySourceView, IdentityTargetResult, ProfileSkillsView, ProfileView,
 };
 use skill_manager_core::vault::index::{CategoryFilter, SearchQuery};
 
@@ -159,6 +159,32 @@ fn toggle(
             items,
             changed,
         })
+    })
+}
+
+/// 为某具名档案按龙虾预设一键启用（未安装到 default 则静默补装）。
+pub fn hermes_enable_preset(
+    runtime: &HostRuntime,
+    profile: String,
+    preset_id: String,
+) -> Result<HermesPresetOutcome, String> {
+    run_with(runtime, |service| {
+        service
+            .set_preset_enabled(&profile, &preset_id, true)
+            .map_err(|err| err.to_string())
+    })
+}
+
+/// 仅在当前具名档案禁用龙虾预设成员（不动 default 池与其他档案）。
+pub fn hermes_disable_preset(
+    runtime: &HostRuntime,
+    profile: String,
+    preset_id: String,
+) -> Result<HermesPresetOutcome, String> {
+    run_with(runtime, |service| {
+        service
+            .set_preset_enabled(&profile, &preset_id, false)
+            .map_err(|err| err.to_string())
     })
 }
 

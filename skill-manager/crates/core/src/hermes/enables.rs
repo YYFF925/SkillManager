@@ -150,6 +150,19 @@ pub struct HermesItem {
     pub message: Option<String>,
 }
 
+/// 为具名档案按预设批量启用或禁用的结果。
+#[derive(Clone, Debug, Serialize)]
+pub struct HermesPresetOutcome {
+    pub profile: String,
+    pub preset_id: String,
+    pub preset_name: String,
+    pub enabled: bool,
+    /// 本次启用前未安装而自动部署到 `hermes:default` 的数量。
+    pub installed: usize,
+    pub changed: usize,
+    pub items: Vec<HermesItem>,
+}
+
 /// 档案服务：绑定 Hermes 根、SkillManagerVault 与本机状态。
 pub struct HermesService<'a> {
     root: PathBuf,
@@ -534,6 +547,179 @@ impl<'a> HermesService<'a> {
             message: None,
         })
     }
+
+    /// 为具名档案按龙虾预设一键启用或禁用。
+    ///
+    /// - 启用：预设成员若尚未安装到 `hermes:default`，先静默部署到 `hermes:default`，再仅为当前档案启用（不扩散到其他档案）。
+    /// - 禁用：仅禁用当前档案中的该预设成员，保留 `hermes:default` 共享副本与其他档案启用状态。
+    pub fn set_preset_enabled(
+        &self,
+        profile: &str,
+        preset_id: &str,
+        enabled: bool,
+    ) -> Result<HermesPresetOutcome> {
+        let info = resolve_profile(&self.root, profile)?;
+        if info.is_default() {
+            return Err(CoreError::other(
+                "default 档案不支持预设启停；请使用预设部署/撤销维护 default",
+            ));
+        }
+        let vault_root = self.vault_root.as_deref().ok_or_else(|| {
+            CoreError::other("尚未接入 SkillManagerVault：档案预设需要库内技能内容")
+        })?;
+        let preset = crate::preset::manage::get(vault_root, Domain::Lobster, preset_id)?;
+        let names: Vec<String> = preset.members.iter().map(|m| m.name.clone()).collect();
+        let default_dir = self.default_skills_dir();
+
+        let mut installed = 0usize;
+        let mut items = Vec::new();
+
+        if enabled {
+            let pool = installed_hermes_skills(self.state);
+            let to_install: Vec<SkillRef> = names
+                .iter()
+                .filter(|name| {
+                    !(default_dir.join(name).is_dir()
+                        && pool.iter().any(|r| names_equal(&r.name, name)))
+                })
+                .map(|name| SkillRef {
+                    domain: Domain::Lobster,
+                    name: name.clone(),
+                })
+                .collect();
+
+            let mut deploy_failures: std::collections::HashMap<String, String> =
+                std::collections::HashMap::new();
+            if !to_install.is_empty() {
+                let deploy = crate::deploy::apply::DeploymentService::new(
+                    vault_root.to_path_buf(),
+                    self.resolver,
+                    self.state,
+                );
+                let report = deploy.deploy_to(&to_install, &[Target::HermesDefault])?;
+                installed = report.items.len();
+                for failure in report.failures {
+                    if let Some(skill) = failure.skill {
+                        let key = skill
+                            .strip_prefix("lobster/")
+                            .unwrap_or(&skill)
+                            .to_lowercase();
+                        deploy_failures.insert(key, failure.message);
+                    }
+                }
+            }
+
+            let library = SkillIndex::build(vault_root)?;
+            let disabled = read_disabled(&info.home);
+            for name in &names {
+                if let Some(msg) = deploy_failures.get(&name.to_lowercase()) {
+                    if !default_dir.join(name).is_dir() {
+                        items.push(HermesItem {
+                            name: name.clone(),
+                            ok: false,
+                            enabled: false,
+                            message: Some(msg.clone()),
+                        });
+                        continue;
+                    }
+                }
+                let item = match self.set_one(&info, &library, &disabled, &default_dir, name, true)
+                {
+                    Ok(item) => item,
+                    Err(err) => HermesItem {
+                        name: name.clone(),
+                        ok: false,
+                        enabled: false,
+                        message: Some(err.to_string()),
+                    },
+                };
+                items.push(item);
+            }
+        } else {
+            let library = SkillIndex::build(vault_root)?;
+            let disabled = read_disabled(&info.home);
+            for name in &names {
+                let in_state = self
+                    .state
+                    .hermes_enabled(&info.name, Domain::Lobster, name)?;
+                let link = info.skills_dir.join(name);
+                let state = link_state(&link);
+                if !in_state && matches!(state, LinkState::Missing) {
+                    continue;
+                }
+                let reference = SkillRef {
+                    domain: Domain::Lobster,
+                    name: name.clone(),
+                };
+                let item = if library.get(&reference).is_some() && default_dir.join(name).is_dir() {
+                    match self.set_one(&info, &library, &disabled, &default_dir, name, false) {
+                        Ok(item) => item,
+                        Err(err) => HermesItem {
+                            name: name.clone(),
+                            ok: false,
+                            enabled: true,
+                            message: Some(err.to_string()),
+                        },
+                    }
+                } else {
+                    match state {
+                        LinkState::Real => HermesItem {
+                            name: name.clone(),
+                            ok: false,
+                            enabled: true,
+                            message: Some(format!(
+                                "档案自有技能目录（非管理器链接），禁用不删除其内容：{}",
+                                link.display()
+                            )),
+                        },
+                        LinkState::Symlink(_) => {
+                            if let Err(err) = std::fs::remove_file(&link) {
+                                HermesItem {
+                                    name: name.clone(),
+                                    ok: false,
+                                    enabled: true,
+                                    message: Some(
+                                        CoreError::io(link.clone(), err).to_string(),
+                                    ),
+                                }
+                            } else {
+                                self.state
+                                    .remove_hermes_enable(&info.name, Domain::Lobster, name)?;
+                                HermesItem {
+                                    name: name.clone(),
+                                    ok: true,
+                                    enabled: false,
+                                    message: None,
+                                }
+                            }
+                        }
+                        LinkState::Missing => {
+                            self.state
+                                .remove_hermes_enable(&info.name, Domain::Lobster, name)?;
+                            HermesItem {
+                                name: name.clone(),
+                                ok: true,
+                                enabled: false,
+                                message: None,
+                            }
+                        }
+                    }
+                };
+                items.push(item);
+            }
+        }
+
+        let changed = items.iter().filter(|item| item.ok).count();
+        Ok(HermesPresetOutcome {
+            profile: info.name,
+            preset_id: preset.id,
+            preset_name: preset.name,
+            enabled,
+            installed,
+            changed,
+            items,
+        })
+    }
 }
 
 /// default 技能目录中实际启用（未被 Hermes 禁用）的技能数。
@@ -881,5 +1067,25 @@ mod tests {
         };
         let value = serde_json::to_value(&view).unwrap();
         assert_eq!(value["tags"], serde_json::json!([]), "{value}");
+    }
+
+    #[test]
+    fn set_preset_enabled_rejects_default_and_missing_vault() {
+        let home = tempfile::TempDir::new().unwrap();
+        let root = home.path().join(".hermes");
+        std::fs::create_dir_all(root.join("skills")).unwrap();
+        std::fs::create_dir_all(root.join("profiles/blank")).unwrap();
+        std::fs::write(root.join("profiles/blank/config.yaml"), "model: test\n").unwrap();
+
+        let state = StateStore::open_in_memory().unwrap();
+        let catalog = crate::deploy::targets::AgentCatalog::embedded();
+        let resolver = TargetResolver::new(home.path(), catalog);
+        let service = HermesService::new(root, None, &resolver, &state);
+
+        let default_err = service.set_preset_enabled("default", "ops", true).unwrap_err();
+        assert!(default_err.to_string().contains("default"), "{default_err}");
+
+        let vault_err = service.set_preset_enabled("blank", "ops", true).unwrap_err();
+        assert!(vault_err.to_string().contains("SkillManagerVault"), "{vault_err}");
     }
 }

@@ -5,7 +5,7 @@
  * 编辑区，切换档案保留未保存草稿；底部只有一个「保存」按钮，一次写入本次已加载
  * 的全部草稿（不只当前可见档案），保存后保持打开。
  *
- * 保存走 core 的 `hermes identity set`：写源并按「全局在前、专属在后」无条件覆盖
+ * 保存走 core 的 `hermes identity set`：写源并按「专属在前、全局在后」无条件覆盖
  * 各档案 SOUL.md。拼接与分发由 core 决定，前端不复制。不改档案显示名。
  */
 import { useEffect, useMemo, useState } from "react";

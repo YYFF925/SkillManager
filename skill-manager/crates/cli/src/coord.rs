@@ -364,6 +364,14 @@ pub fn to_invoke(command: &Command) -> Option<(String, Value)> {
                 "hermes_disable".into(),
                 json!({ "profile": args.profile, "names": args.names }),
             )),
+            HermesAction::EnablePreset(args) => Some((
+                "hermes_enable_preset".into(),
+                json!({ "profile": args.profile, "preset_id": args.preset_id }),
+            )),
+            HermesAction::DisablePreset(args) => Some((
+                "hermes_disable_preset".into(),
+                json!({ "profile": args.profile, "preset_id": args.preset_id }),
+            )),
             HermesAction::Identity(command) => match &command.action {
                 IdentityAction::Set(args) => {
                     let content = if let Some(path) = &args.file {

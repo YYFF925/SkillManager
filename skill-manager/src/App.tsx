@@ -458,6 +458,19 @@ export function App() {
     }
   }
 
+  const handleStationLogout = useCallback(() => {
+    setStationReady(false);
+    setDeviceId(null);
+    setVault(null);
+    setAgents([]);
+    setSettings(null);
+    setSchedule(null);
+    setChatOpen(false);
+    setError(null);
+    setNotice(null);
+    setActiveKey("library-code");
+  }, []);
+
   const groups: NavGroup[] = useMemo(() => {
     const agentItems = (domain: Domain, allKey: string, allLabel: string): NavItem[] => [
       { key: allKey, label: allLabel, icon: Bot },
@@ -759,6 +772,7 @@ export function App() {
           }}
           reloadToken={reloadToken}
           remote={remote}
+          onLoggedOut={remote ? handleStationLogout : undefined}
         />
       ) : (
         <div className="flex items-center gap-2 rounded-xl border border-line-soft bg-panel p-6 text-[13px] text-muted">

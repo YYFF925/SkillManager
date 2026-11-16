@@ -66,7 +66,7 @@
 | password_hash | 密码哈希 |
 | totp_secret | 绑定后保存；绑定过程向用户展示二维码、密钥 |
 | recovery_code_hashes | 一次性恢复码只存哈希 |
-| session_ttl_seconds | 保持登录时长，可配置 |
+| session_ttl_seconds | 保持登录时长，可配置；默认 360 天（31104000 秒） |
 
 一行。首次 `station serve` 无此行则走创建流程。公网不得自助再开账号。本地 `station reset-admin` 清此行并要求重新创建。
 

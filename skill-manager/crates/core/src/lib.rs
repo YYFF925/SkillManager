@@ -27,8 +27,8 @@ pub use error::{CoreError, Result};
 pub use preset::{Preset, PresetFile, PresetMemberView, PresetView};
 pub use scheduler::{ScheduleReport, TaskOutcome, Trigger};
 pub use hermes::{
-    AdoptItem, DisabledState, HermesItem, HermesService, ProfileSkillView, ProfileSkillsView,
-    ProfileView,
+    AdoptItem, DisabledState, HermesItem, HermesPresetOutcome, HermesService, ProfileSkillView,
+    ProfileSkillsView, ProfileView,
 };
 pub use manager::{MetaFile, SkillMeta, SourceRecord, SupportDecl};
 pub use output::{BatchOutcome, CliResult, ItemError, Outcome};

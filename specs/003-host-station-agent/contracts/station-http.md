@@ -10,8 +10,8 @@
 POST /auth/setup          # 仅当尚无管理员：用户名、密码、开始绑定 TOTP
 GET  /auth/totp/setup     # 二维码与密钥、一次性恢复码（只展示一次）
 POST /auth/totp/verify
-POST /auth/login          # 用户名、密码、TOTP 或恢复码；恢复码成功时须带 mustRebindTotp 与新密钥/恢复码。此时不得改写 admin.totp_secret，新密钥只挂在该会话
-POST /auth/logout
+POST /auth/login          # 用户名、密码、TOTP 或恢复码；下发带 Max-Age（默认 31104000 秒）的持久化 sm_station Cookie；恢复码成功时须带 mustRebindTotp 与新密钥/恢复码。此时不得改写 admin.totp_secret，新密钥只挂在该会话
+POST /auth/logout         # 撤销服务端会话并清除 sm_station Cookie
 GET  /auth/session        # 待重绑会话返回 mustRebindTotp 与密钥/二维码（明文恢复码仍只在登录响应展示一次）
 GET  /auth/session-ttl    # 当前保持登录秒数
 PUT  /auth/session-ttl    # 保持登录秒数（最小 60）

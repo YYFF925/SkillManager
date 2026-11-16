@@ -27,13 +27,80 @@ export interface AgentPresetPillsProps {
   onChanged?: () => void;
 }
 
-type Coverage = "off" | "partial" | "on";
+export type PresetPillCoverage = "off" | "partial" | "on";
+
+export interface PresetPillItem {
+  preset: PresetView;
+  state: PresetPillCoverage;
+  installed: number;
+  total: number;
+  title: string;
+}
+
+/** 轻量预设 pill 行：复用于 Agent 详情页与 Hermes 具名档案页。 */
+export function PresetPillBar({
+  items,
+  busyId,
+  onToggle,
+  className = "mb-3",
+}: {
+  items: PresetPillItem[];
+  busyId: string | null;
+  onToggle: (preset: PresetView, state: PresetPillCoverage) => void;
+  className?: string;
+}) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={`${className} flex shrink-0 items-center gap-2.5`}>
+      <span className="shrink-0 text-[12px] text-[#8b8b94]">预设</span>
+      <div className="flex min-w-0 flex-wrap gap-2">
+        {items.map(({ preset, state, installed, total, title }) => {
+          const option = presetIconOption(preset.icon);
+          const Icon = option.icon;
+          const tone =
+            state === "on"
+              ? "border-[#b7e4d4] bg-white text-[#3f3f46]"
+              : state === "partial"
+                ? "border-[#f5c58a] bg-white text-[#3f3f46]"
+                : "border-[#e6e6ea] bg-[#f4f4f5] text-[#a1a1aa]";
+          return (
+            <button
+              key={preset.id}
+              type="button"
+              disabled={busyId === preset.id || total === 0}
+              title={title}
+              onClick={() => onToggle(preset, state)}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-full border py-0 pr-2.5 pl-1.5 text-[13px] font-medium disabled:opacity-50 ${tone}`}
+            >
+              <span
+                className="grid size-[18px] place-items-center rounded-[5px]"
+                style={{ background: `${option.color}22` }}
+              >
+                <Icon className="size-3" strokeWidth={1.75} style={{ color: option.color }} />
+              </span>
+              <span>{preset.name}</span>
+              {state === "on" && <Check className="size-3.5 text-accent" strokeWidth={2} />}
+              {state === "partial" && (
+                <span className="rounded-full bg-[#fff4e8] px-1.5 text-[11px] leading-4 text-[#ef7800]">
+                  {installed}/{total}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function coverage(
   preset: PresetView,
   target: string,
   records: DeploymentStatusView[],
-): { state: Coverage; installed: number; total: number } {
+): { state: PresetPillCoverage; installed: number; total: number } {
   const members = preset.members.map((member) => `${preset.domain}/${member.name}`);
   const total = members.length;
   if (total === 0) {
@@ -42,7 +109,7 @@ function coverage(
   const installed = members.filter((reference) =>
     records.some((record) => record.skill === reference && record.target === target),
   ).length;
-  const state: Coverage = !installed ? "off" : installed === total ? "on" : "partial";
+  const state: PresetPillCoverage = !installed ? "off" : installed === total ? "on" : "partial";
   return { state, installed, total };
 }
 
@@ -81,12 +148,16 @@ export function AgentPresetPills({
   const deployTarget =
     target === "shared" || target.includes(":") ? target : `agent:${target}`;
 
-  const rows = useMemo(
+  const rows: PresetPillItem[] = useMemo(
     () =>
-      presets.map((preset) => ({
-        preset,
-        ...coverage(preset, deployTarget, records),
-      })),
+      presets.map((preset) => {
+        const cov = coverage(preset, deployTarget, records);
+        return {
+          preset,
+          ...cov,
+          title: cov.state === "on" ? "取消安装到当前 Agent" : "部署到当前 Agent",
+        };
+      }),
     [presets, records, deployTarget],
   );
 
@@ -94,7 +165,7 @@ export function AgentPresetPills({
     return null;
   }
 
-  async function toggle(preset: PresetView, state: Coverage) {
+  async function toggle(preset: PresetView, state: PresetPillCoverage) {
     setBusyId(preset.id);
     try {
       if (state === "on") {
@@ -113,45 +184,5 @@ export function AgentPresetPills({
     }
   }
 
-  return (
-    <div className="mb-3 flex items-center gap-2.5">
-      <span className="shrink-0 text-[12px] text-[#8b8b94]">预设</span>
-      <div className="flex min-w-0 flex-wrap gap-2">
-        {rows.map(({ preset, state, installed, total }) => {
-          const option = presetIconOption(preset.icon);
-          const Icon = option.icon;
-          const tone =
-            state === "on"
-              ? "border-[#b7e4d4] bg-white text-[#3f3f46]"
-              : state === "partial"
-                ? "border-[#f5c58a] bg-white text-[#3f3f46]"
-                : "border-[#e6e6ea] bg-[#f4f4f5] text-[#a1a1aa]";
-          return (
-            <button
-              key={preset.id}
-              type="button"
-              disabled={busyId === preset.id || total === 0}
-              title={state === "on" ? "取消安装到当前 Agent" : "部署到当前 Agent"}
-              onClick={() => void toggle(preset, state)}
-              className={`inline-flex h-7 items-center gap-1.5 rounded-full border py-0 pr-2.5 pl-1.5 text-[13px] font-medium disabled:opacity-50 ${tone}`}
-            >
-              <span
-                className="grid size-[18px] place-items-center rounded-[5px]"
-                style={{ background: `${option.color}22` }}
-              >
-                <Icon className="size-3" strokeWidth={1.75} style={{ color: option.color }} />
-              </span>
-              <span>{preset.name}</span>
-              {state === "on" && <Check className="size-3.5 text-accent" strokeWidth={2} />}
-              {state === "partial" && (
-                <span className="rounded-full bg-[#fff4e8] px-1.5 text-[11px] leading-4 text-[#ef7800]">
-                  {installed}/{total}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return <PresetPillBar items={rows} busyId={busyId} onToggle={(preset, state) => void toggle(preset, state)} />;
 }
