@@ -490,3 +490,4 @@ Foundational → US10（环境；托盘检查依赖 US4/US5，容量依赖 US1�
 - [X] T146 [US6] CLI `hermes identity get|set|distribute`、Host `hermes_identity_*`、`sync pull` 源签名变化后刷新；桌面走 host_invoke，不新增 Tauri 直连命令。
 - [X] T147 [US6] 原型 Hermes 工具栏「SOUL」与 `IdentityEditor`（克隆指令编辑器布局）；档案选择显示名读取链保持不变。
 - [X] T148 [US6] 修订 002 spec / data-model / CLI 契约、需求记录、H02、GLOSSARY、ADR 0001、hermes-integration；`tests/cli_hermes.rs` 与 `cli_sync.rs` 覆盖覆盖合同。
+- [X] T149 [US6] [US8] GUI「SOUL」与指令编辑器一次保存写入本次已加载的全部草稿，不只当前可见作用域；`IdentityEditor.test.tsx` / `InstructionEditor.test.tsx` 覆盖多档案/多 Agent 草稿一并提交。

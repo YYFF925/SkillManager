@@ -2,7 +2,8 @@
  * Agent 指令编辑器（T072）：全局与逐 Agent 专属指令的单编辑区、单“保存”。
  *
  * 左列「全局指令」固定第一项并默认选中，下面是本机已启用且已检测的 Agent；同一时刻只有一个
- * 编辑区，切换工具保留未保存草稿；底部只有一个「保存」按钮，保存后保持打开。
+ * 编辑区，切换工具保留未保存草稿；底部只有一个「保存」按钮，一次写入本次已加载
+ * 的全部草稿（不只当前可见 Agent），保存后保持打开。
  *
  * 保存走 core 的 `instruction set`：写源并按“全局在前、专属在后”覆盖本机已启用目标。
  * 拼接规则与分发范围由 core 决定，前端不复制；不加分发勾选、不加第二个分发按钮。
@@ -97,13 +98,48 @@ export function InstructionEditor({ agents, onClose, onSaved }: InstructionEdito
     setError(null);
     setResults(null);
     try {
-      const outcome = await instructionSet(selected, value);
+      const scopes = Object.keys(drafts);
+      if (!scopes.includes(selected)) {
+        scopes.push(selected);
+      }
+      scopes.sort((a, b) => {
+        if (a === GLOBAL_SCOPE) {
+          return -1;
+        }
+        if (b === GLOBAL_SCOPE) {
+          return 1;
+        }
+        return a.localeCompare(b);
+      });
+      let outcome: InstructionTargetResult[] = [];
+      const failures: string[] = [];
+      for (const scope of scopes) {
+        try {
+          outcome = await instructionSet(scope, drafts[scope] ?? "");
+        } catch (err) {
+          failures.push(`${scope === GLOBAL_SCOPE ? "全局指令" : nameOf(scope)}：${String(err)}`);
+        }
+      }
+      if (failures.length > 0) {
+        setError(failures.join("\n"));
+      }
+      const nextDrafts = { ...drafts };
+      const nextComposed = { ...composed };
+      const nextLoaded = { ...loaded };
+      for (const scope of scopes) {
+        try {
+          const view = await instructionGet(scope);
+          nextDrafts[scope] = view.source;
+          nextComposed[scope] = view.composed;
+          nextLoaded[scope] = true;
+        } catch {
+          nextLoaded[scope] = true;
+        }
+      }
+      setDrafts(nextDrafts);
+      setComposed(nextComposed);
+      setLoaded(nextLoaded);
       setResults(outcome);
-      // 保存后刷新该作用域的源与合成预览；其它作用域的草稿保留，下次选中时更新预览。
-      const view = await instructionGet(selected);
-      setDrafts((prev) => ({ ...prev, [selected]: view.source }));
-      setComposed((prev) => ({ ...prev, [selected]: view.composed }));
-      setLoaded({ [selected]: true });
       onSaved();
     } catch (err) {
       setError(String(err));

@@ -2,7 +2,8 @@
  * Hermes 人格编辑器：全局与逐档案专属源的单编辑区、单「保存」。
  *
  * 左列「全局人格」固定第一项并默认选中，下面是本机已发现档案；同一时刻只有一个
- * 编辑区，切换档案保留未保存草稿；底部只有一个「保存」按钮，保存后保持打开。
+ * 编辑区，切换档案保留未保存草稿；底部只有一个「保存」按钮，一次写入本次已加载
+ * 的全部草稿（不只当前可见档案），保存后保持打开。
  *
  * 保存走 core 的 `hermes identity set`：写源并按「全局在前、专属在后」无条件覆盖
  * 各档案 SOUL.md。拼接与分发由 core 决定，前端不复制。不改档案显示名。
@@ -89,12 +90,48 @@ export function IdentityEditor({ profiles, onClose, onSaved }: IdentityEditorPro
     setError(null);
     setResults(null);
     try {
-      const outcome = await hermesIdentitySet(selected, value);
+      const scopes = Object.keys(drafts);
+      if (!scopes.includes(selected)) {
+        scopes.push(selected);
+      }
+      scopes.sort((a, b) => {
+        if (a === GLOBAL_SCOPE) {
+          return -1;
+        }
+        if (b === GLOBAL_SCOPE) {
+          return 1;
+        }
+        return a.localeCompare(b);
+      });
+      let outcome: IdentityTargetResult[] = [];
+      const failures: string[] = [];
+      for (const scope of scopes) {
+        try {
+          outcome = await hermesIdentitySet(scope, drafts[scope] ?? "");
+        } catch (err) {
+          failures.push(`${scope === GLOBAL_SCOPE ? "全局人格" : nameOf(scope)}：${String(err)}`);
+        }
+      }
+      if (failures.length > 0) {
+        setError(failures.join("\n"));
+      }
+      const nextDrafts = { ...drafts };
+      const nextComposed = { ...composed };
+      const nextLoaded = { ...loaded };
+      for (const scope of scopes) {
+        try {
+          const view = await hermesIdentityGet(scope);
+          nextDrafts[scope] = view.source;
+          nextComposed[scope] = view.composed;
+          nextLoaded[scope] = true;
+        } catch {
+          nextLoaded[scope] = true;
+        }
+      }
+      setDrafts(nextDrafts);
+      setComposed(nextComposed);
+      setLoaded(nextLoaded);
       setResults(outcome);
-      const view = await hermesIdentityGet(selected);
-      setDrafts((prev) => ({ ...prev, [selected]: view.source }));
-      setComposed((prev) => ({ ...prev, [selected]: view.composed }));
-      setLoaded({ [selected]: true });
       onSaved();
     } catch (err) {
       setError(String(err));
