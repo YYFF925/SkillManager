@@ -10,7 +10,7 @@ pub const VAULT_CHANGED_EVENT: &str = "vault-changed";
 pub const SCHEDULE_FINISHED_EVENT: &str = "schedule-finished";
 /// 仓库获取进度事件名。
 pub const FETCH_PROGRESS_EVENT: &str = "skill-fetch-progress";
-/// 内置 Agent 触发的破坏性确认计划，须由图形界面确认。
+/// GUI confirmation plan event name (CLI/Agent do not emit this).
 pub const HOST_PLAN_EVENT: &str = "host-plan";
 /// ACP `session/update` 的助手可见文本块。
 pub const AGENT_MESSAGE_CHUNK_EVENT: &str = "agent_message_chunk";

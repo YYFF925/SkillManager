@@ -9,7 +9,6 @@ use crate::commands;
 use crate::commands::acquire::MetaInput;
 use crate::commands::skill::{LangArg, SupportArg};
 use crate::commands::tool::ToolListParams;
-use crate::events::HOST_PLAN_EVENT;
 use crate::plans::{self, DestructiveAction};
 use crate::HostRuntime;
 
@@ -52,11 +51,6 @@ pub fn invoke(
     source: InvokeSource,
     session_id: Option<&str>,
 ) -> Result<Value, InvokeError> {
-    if source == InvokeSource::Gui {
-        if let Some(id) = session_id.filter(|id| !id.is_empty()) {
-            plans::remember_gui_session(id);
-        }
-    }
     if command == "settings_set_git_auto_push" && source != InvokeSource::Gui {
         return Err(InvokeError::Failed(
             "自动上传授权只能在图形界面中修改；请到设置中开启".to_string(),
@@ -64,34 +58,14 @@ pub fn invoke(
     }
     if command == "plans_confirm" && source == InvokeSource::Agent {
         return Err(InvokeError::Failed(
-            "内置管理 Agent 不能代替用户确认破坏性操作。请在界面确认。".to_string(),
+            "内置管理 Agent 不能确认图形界面的操作计划。".to_string(),
         ));
     }
-    if let Some(action) = destructive_action(command, &body) {
-        let plan_id =
-            opt_string(&body, "planId")?.or_else(|| opt_string(&body, "plan_id").ok().flatten());
-        if source == InvokeSource::Agent {
-            if plan_id.is_some() {
-                return Err(InvokeError::Failed(
-                    "内置管理 Agent 不能提交确认计划。请在界面确认。".to_string(),
-                ));
-            }
-            let gui = plans::gui_session().ok_or_else(|| {
-                InvokeError::Failed("破坏性操作需要打开的管理界面来确认。".to_string())
-            })?;
-            let plan =
-                plans::issue(runtime, Some(&gui), action, &body).map_err(InvokeError::Failed)?;
-            runtime.emit(HOST_PLAN_EVENT, &plan);
-            let issued = plan
-                .get("planId")
-                .and_then(Value::as_str)
-                .ok_or_else(|| InvokeError::Failed("确认计划缺少 planId".to_string()))?
-                .to_string();
-            plans::wait_confirmed(runtime, &issued, Some(&gui), action)
-                .map_err(InvokeError::Failed)?;
-            plans::take_confirmed(runtime, &issued, Some(&gui), action)
-                .map_err(InvokeError::Failed)?;
-        } else {
+    // 确认计划只约束图形界面。CLI 与内置管理 Agent 按已发出的指令直接执行。
+    if source == InvokeSource::Gui {
+        if let Some(action) = destructive_action(command, &body) {
+            let plan_id = opt_string(&body, "planId")?
+                .or_else(|| opt_string(&body, "plan_id").ok().flatten());
             match plan_id {
                 Some(id) => plans::take_confirmed(runtime, &id, session_id, action)
                     .map_err(InvokeError::Failed)?,

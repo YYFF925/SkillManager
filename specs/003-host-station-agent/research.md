@@ -38,7 +38,7 @@
 
 ### D6 破坏性确认只在 Host 发票
 
-- **Decision**: 删除技能、覆盖类写入由 Host 生成带 `planId` 的操作计划，绑定 `sessionId`，过期作废。内置管理 Agent 不得口头声称已确认。`git_auto_push` 仍仅图形界面可写（含远程网页，远程算 GUI）；未授权时内置管理 Agent 的上传失败并说明「请在设置中开启自动上传」，不改为逐步确认，也不得自行打开该开关。
+- **Decision**: 图形界面发起的删除与覆盖由 Host 生成带 `planId` 的操作计划，绑定 `sessionId`，过期作废。CLI 与内置管理 Agent 直接执行，不得代点图形界面确认。`git_auto_push` 仍仅图形界面可写（含远程网页，远程算 GUI）；未授权时内置管理 Agent 的上传失败并说明「请在设置中开启自动上传」，不改为逐步确认，也不得自行打开该开关。
 - **Rationale**: FR-019/020；002 禁止 CLI 写 `git_auto_push`。
 - **Alternatives**: Agent 工具里放「用户已同意」布尔（被拒：可伪造）；每个 push 弹窗（被拒：用户已否决）。
 

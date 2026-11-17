@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
 
 import { ConfirmDialog } from "./ui";
-import { confirmHostPlan, isHostPlan, planDialogCopy, setPlanPresenter, type HostPlan } from "../services/planConfirm";
-import { getTransport } from "../services/transport";
+import { planDialogCopy, setPlanPresenter, type HostPlan } from "../services/planConfirm";
 
 interface Pending {
   plan: HostPlan;
   resolve: (ok: boolean) => void;
 }
 
-/** 把 Host 409 确认计划接到现有 ConfirmDialog，展示对象预览。 */
+/** GUI 409 confirmation plans use ConfirmDialog. CLI/Agent skip this gate. */
 export function PlanConfirmHost() {
   const [pending, setPending] = useState<Pending | null>(null);
 
@@ -21,24 +20,6 @@ export function PlanConfirmHost() {
         }),
     );
     return () => setPlanPresenter(null);
-  }, []);
-
-  useEffect(() => {
-    const transport = getTransport();
-    let unsub: (() => void) | undefined;
-    void transport.subscribe("host-plan", (payload) => {
-      if (!isHostPlan(payload)) return;
-      void confirmHostPlan(payload).then((ok) => {
-        if (ok) {
-          void transport.confirmPlan?.(payload.planId);
-        }
-      });
-    }).then((fn) => {
-      unsub = fn;
-    });
-    return () => {
-      unsub?.();
-    };
   }, []);
 
   if (!pending) return null;

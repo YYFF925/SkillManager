@@ -9,7 +9,7 @@ use crate::invoke::{self, InvokeError, InvokeSource};
 use crate::HostRuntime;
 
 /// Agent 可用工具 = Host invoke 同名命令。原则（FR-015）：界面能做的管理动作，Agent 也能做。
-/// 刻意不开放：`plans_confirm`（不能代替用户确认破坏性操作）、`settings_set_git_auto_push`
+/// 刻意不开放：`plans_confirm`（不能代点图形界面确认）、`settings_set_git_auto_push`
 /// （授权仅 GUI）、`vault_open`（切换整个库，路径来自界面选择器）、`agent_post_message` 等
 /// Agent 运行时命令（对话基础设施自身，不是管理动作）。
 const ALLOWED: &[&str] = &[
@@ -224,7 +224,7 @@ pub fn run_tool(
 ) -> Result<Value, String> {
     let raw = canonical_name(name);
     if raw.contains("plans_confirm") || name.contains("plans.confirm") {
-        return Err("内置管理 Agent 不能代替用户确认破坏性操作。请在界面确认。".to_string());
+        return Err("内置管理 Agent 不能确认图形界面的操作计划。".to_string());
     }
     if raw.contains("settings_set_git_auto_push") {
         return Err("内置管理 Agent 不能修改自动上传授权；请在设置中开启".to_string());
@@ -418,7 +418,7 @@ fn tool_input_schema(name: &str) -> Value {
             json!({
                 "reference": str_prop("只同步这个技能"),
                 "target": str_prop("只同步这个目标"),
-                "overwrite_local": bool_prop("覆盖已改动的副本；须界面确认计划"),
+                "overwrite_local": bool_prop("覆盖已改动的副本"),
             }),
         ),
         "deploy_undo" => (
@@ -427,7 +427,7 @@ fn tool_input_schema(name: &str) -> Value {
                 "target": str_prop("部署目标"),
                 "references": str_array("技能引用"),
                 "also_targets": str_array("同时撤销的目标"),
-                "discard_local_changes": bool_prop("丢弃本机改动；须界面确认计划"),
+                "discard_local_changes": bool_prop("丢弃本机改动"),
             }),
         ),
         "deploy_preset" | "deploy_undo_preset" => (
@@ -808,7 +808,7 @@ fn tool_description(name: &str) -> &'static str {
         "skill_set" => {
             "修改技能中文注释、分类、标签或支持声明。完善中文注释必须用本工具的 comment 字段，禁止 bash/edit"
         }
-        "skill_delete" => "删除技能；须经界面确认计划，口头同意无效",
+        "skill_delete" => "删除技能（直接执行，不经图形界面确认）",
         "skill_create" => "创建自建技能骨架",
         "skill_copy" => "把技能复制到另一管理域",
         "skill_task" => "生成技能维护任务说明（不改库）",
@@ -842,8 +842,8 @@ fn tool_description(name: &str) -> &'static str {
         "skill_unskip" => "恢复技能的上游更新提醒",
         "skill_skipped" => "已跳过的上游版本",
         "deploy_to" => "普通部署，不逐步确认",
-        "deploy_sync" => "同步已有部署；overwrite_local 须界面确认计划",
-        "deploy_undo" => "撤销部署；discard_local_changes 须界面确认计划",
+        "deploy_sync" => "同步已有部署；overwrite_local 直接按库覆盖",
+        "deploy_undo" => "撤销部署；discard_local_changes 直接丢弃副本改动",
         "deploy_status" => "本机部署记录；paused 只列出 paused_local_change",
         "deploy_preset" => "按预设整体部署到目标",
         "deploy_undo_preset" => "撤销预设在目标的部署",
@@ -929,7 +929,7 @@ mod tests {
             json!({ "planId": "x" }),
             Some("agent"),
         );
-        assert!(denied.unwrap_err().contains("不能代替用户确认"));
+        assert!(denied.unwrap_err().contains("不能确认图形界面"));
         let unknown = run_tool(
             &runtime,
             "vault_open",

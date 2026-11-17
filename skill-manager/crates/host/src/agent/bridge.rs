@@ -598,7 +598,7 @@ fn builtin_skill_text() -> String {
     let dir = tools::builtin_skill_dir();
     let path = dir.join("SKILL.md");
     std::fs::read_to_string(path).unwrap_or_else(|_| {
-        "你是 Skill Manager 当前 Host 上的内置管理 Agent。两层上下文已注入；细节用工具；删除/覆盖走确认计划。本说明不入库。".to_string()
+        "你是 Skill Manager 当前 Host 上的内置管理 Agent。两层上下文已注入；细节用工具；删除/覆盖直接执行。本说明不入库。".to_string()
     })
 }
 

@@ -20,7 +20,7 @@
 
 同一 `state-dir` 一行。解除对接清除 station_url 与 device_key。
 
-### 1.2 `operation_plans` — 破坏性确认
+### 1.2 `operation_plans` — 图形界面破坏性确认（CLI / Agent 不建计划）
 
 | 列 | 说明 |
 |---|---|
