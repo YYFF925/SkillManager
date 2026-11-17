@@ -24,7 +24,6 @@ description: 维护 Skill Manager 的 SkillManagerVault：.manager 格式、目�
 - **技能身份** = 管理域 + 技能名，技能名即目录名。有上游来源的技能保留上游原名。
 - **分类** = 目录层级，最多一级（`code/<分类>/<技能名>/`）；未分类直接在域根下（`code/<技能名>/`）。
   改分类 = 移动目录，技能名不变。分类路径不是技能身份。
-- **归档** = 把技能移到 `archive/<domain>/[<分类>/]<技能名>/`，完整保留 `.manager`。归档前须卸载全部受管部署；还原不自动重新部署。
 - **本机状态**只在 SQLite（`skill-manager.db`，位于本机状态目录，与库分离）：部署记录、档案启用、
   Agent 配置、设置、工具本机安装记录、检查事实。共享内容真值不写 SQLite。
 - GLOSSARY 与数据模型见本项目仓库 `specs/002-skill-management/data-model.md`；命令契约见
@@ -39,10 +38,8 @@ SkillManagerVault/
 │       ├── SKILL.md（或 skill.md）及技能文件   # 原始内容
 │       └── .manager/        # 该技能的管理层
 ├── lobster/                 # 龙虾技能库，结构同上
-├── archive/<domain>/        # 已归档技能，保留分类目录与 .manager/
 ├── presets/<domain>.yaml    # 预设定义
 ├── instructions/global.md, <agent-key>.md   # 指令源
-├── hermes-identity/global.md, <profile>.md  # Hermes 人格源（SOUL.md）
 ├── upstream-decisions.yaml  # 明确不入库的上游子路径 + 发现基线
 └── tools/<tool-slug>/tool.yaml, guide.md, 检查脚本   # 工具共享资料
 ```
@@ -130,9 +127,6 @@ registered_at: 2026-10-15
 - `presets/<domain>.yaml`：`id`（域内唯一，新建时由名称派生）、`name`、`icon`、`order`（预设间顺序）、
   `members`（技能名数组，**数组顺序即成员显示顺序**）。
 - `instructions/global.md` 与 `instructions/<agent-key>.md`：指令**源**；分发目标由本机 Agent 配置决定。
-- `hermes-identity/global.md` 与 `hermes-identity/<profile>.md`：Hermes 人格**源**；保存或库拉取变化后，
-  按「专属在前、全局在后」无条件覆盖本机全部已发现档案的 `SOUL.md`（空合成写成空文件；不检测冲突、
-  不导入现网文件、不创建档案、不改启用名单；合成约 20,000 字符以上会提示可能被截断）。
 - `upstream-decisions.yaml`：按 `(repo, domain)` 记录 `rejected_subpaths`（明确不入库并记住）与
   `seen_subpaths`（发现基线，首次 `import` 时已存在的候选，**只建一次、从不自动扩充**）。
 - `tools/<slug>/tool.yaml` + `guide.md` + 检查脚本：工具共享资料，随库同步；工具**程序本身**不随库同步。
@@ -178,6 +172,19 @@ registered_at: 2026-10-15
 - `--to` / `--version` 缺省采用**最近检查所得的具体远端提交**；尚无检查结果时应先检查，
   不在应用时静默选择另一个版本。
 
+## 自建技能的敏感信息管理
+
+新建、收编或修改自建技能时，涉及密钥或私人环境信息，先使用 `shared-credentials`：
+
+- 密码、API Key（接口密钥）、Token（访问令牌）、Cookie（会话凭据）、私钥、可授权的订阅/Webhook URL，以及需要保密的账号、地址和个人路径，只保存在 Infisical。技能原文、脚本、模板、译文、覆盖层、注释和共享工具资料均不能保存真实值或片段，也不另建 Credential Map（凭据索引）。通用示例用明确占位符。
+- 先执行 `credentials.py list --path / --recursive`，按目标与 metadata（元数据）核对现有记录。非秘密目标信息可保存在 `_CREDENTIAL_INFO`，秘密值不得进入 metadata。不能把记录存在或 metadata 完整等同于字段齐全、凭据有效。同一服务、账号和权限范围的 API Key（接口密钥）复用同一条记录，不按技能、应用或机器重复录入；轮换时更新原记录。只有用户明确需要独立凭据时才另建实例。
+- 需要新值或迁移时，先明确用途、目标、身份、认证方式和实际字段，再按 `shared-credentials` 规则入库。真实值只经桌面隐藏输入或用户授权的源文件/受保护消费者传递，不进入对话、命令参数或 Git；缺少来源时先询问，不编造、不从无关目录搜寻。
+- 运行时仅通过 `run` / `run-json` 把所需值注入实际消费者；人工粘贴用 `copy`。JSON（结构化数据）字段必须与记录一致，普通文本不能当作 JSON；缺记录、字段或认证失败时说明原因并停止该操作，不回退旧脚本、Obsidian、`.env` 或其他密码库。
+- 部署端可以保留程序必需、由凭据库派生的本地配置、私钥文件或会话；这些不是技能的备用凭据来源，不回写共享库。Infisical 自身的 bootstrap（初始认证）配置留在各机本地，不能要求首次连接依赖从同一实例取值。
+- 写入或部署前检查本次涉及的正文、脚本、模板、`.manager` 和工具资料是否有真实值，验证消费者确实从注入字段取值且不回显。确认入库成功后再移除原位置的敏感值；清理当前文件不代表 Git 历史已脱敏，禁止据此直接宣称可公开。
+
+沿用原有上传授权边界；凭据入库与技能修复不构成 Git 提交或推送授权。
+
 ## 六、修改后同步部署与上传
 
 你修改库内容后，按固定顺序处理：
@@ -222,12 +229,6 @@ registered_at: 2026-10-15
 不提供断开远端或重新克隆的修复入口。
 
 ## 八、CLI 使用
-
-CLI 由 **Skill Manager 桌面安装包**提供，技能目录只包含操作规范与参考，不包含程序。首次使用须按
-[CLI 定位与调用](references/cli.md#定位与调用安装后的-cli)找到实际安装的可执行文件，并验证 `--version`、
-`--help`；后续示例中的 `skill-manager` 都替换为该绝对路径。不要因为 `command -v`／`Get-Command`
-找不到就断言程序未安装，也不要要求用户安装 Rust 或从项目源码编译。GUI 无需运行。
-若只安装了本 Skill，或应用包内程序缺失／无法执行，应明确报告需要安装包含 CLI 的桌面包及具体错误。
 
 全局选项（所有子命令可用）：`--vault <path>`、`--state-dir <path>`、`--json`。
 在本机模拟两台电脑时，用同一库的两个克隆分别配不同 `--state-dir`。

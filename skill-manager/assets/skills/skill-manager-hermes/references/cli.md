@@ -1,0 +1,273 @@
+# Skill Manager CLI 参考
+
+本文件是配套维护 Skill 的 CLI（命令行接口）参考，与当前实现一致。
+可执行文件为桌面安装包随附的 `skill-manager`（Windows 为 `skill-manager.exe`），与桌面程序同版本。
+
+## 定位与调用安装后的 CLI
+
+Skill 只提供规范；程序由 **Skill Manager 桌面安装包**提供，二者分别安装／更新。GUI 无需运行，
+不要求 `PATH`（命令搜索路径）包含应用目录，也不要求源码或编译工具链。
+
+**macOS**：在实际安装的 `Skill Manager.app/Contents/MacOS/` 中定位 `skill-manager`。
+通常位于 `/Applications/Skill Manager.app` 或 `~/Applications/Skill Manager.app`；自定义位置以实际应用为准。
+例如安装在系统应用目录时：
+
+```bash
+"/Applications/Skill Manager.app/Contents/MacOS/skill-manager" --version
+"/Applications/Skill Manager.app/Contents/MacOS/skill-manager" --help
+"/Applications/Skill Manager.app/Contents/MacOS/skill-manager" --json settings get vault_path
+```
+
+**Windows（PowerShell）**：通过 Skill Manager 快捷方式的“目标”定位桌面程序安装目录，
+同目录中的 `skill-manager.exe` 即 CLI。标准当前用户安装通常可按下面的位置验证；若用户选了其他目录，
+使用实际目录，不反复尝试开发目录：
+
+```powershell
+$skillManagerCli = Join-Path $env:LOCALAPPDATA 'Skill Manager\skill-manager.exe'
+& $skillManagerCli --version
+& $skillManagerCli --help
+& $skillManagerCli --json settings get vault_path
+```
+
+确认入口后，本文所有 `skill-manager …` 示例都以该绝对路径调用（PowerShell 使用 `&`）。
+应用安装目录有空格，必须按上述方式引用。`settings get vault_path` 为 `null` 时由用户在 GUI 接入已有库，
+或在命令中显式传 `--vault <已有 SkillManagerVault 路径>`。
+
+找不到应用、应用内缺少 CLI 或执行失败时，报告检查的实际路径与错误；只装了本 Skill 不等于已安装 CLI。
+应安装包含 CLI 的桌面包，不把 GUI 主程序当 CLI，不静默使用源码目录的开发产物。
+
+## 全局约定
+
+所有子命令都接受：
+
+| 选项 | 含义 |
+|---|---|
+| `--vault <path>` | SkillManagerVault 根目录（共享内容真值）。未给时用本机记住的库 |
+| `--state-dir <path>` | 本机状态目录（隔离 SQLite、检查缓存与日志），用于双机模拟 |
+| `--json` | 输出结构化 JSON（`result` / `data` / `errors`） |
+| `-h, --help` | 帮助 |
+| `-V, --version` | 版本 |
+
+**输出与退出码**
+
+- 默认中文人类可读文本；错误以 `未完成：…` 写到标准错误。
+- `--json`：统一对象 `{ "result": "success|partial|failed", "data": …, "errors": [] }`；
+  批量逐项给出对象、结果与原因，`errors[]` 项含 `message` 与可选的 `skill` / `target` / `path`。
+- 退出码：`0` 成功；`1` 失败；`2` 部分完成（部分成功、部分失败）。
+  **参数用法错误（clap）也返回 `2`**，用提示前缀 `error:`（用法错误）与 `未完成：`（业务）区分。
+
+**参数书写约定**
+
+- `<domain>` = `code|lobster`；`<ref>` = `<domain>/<name>`；`<target>` = Agent key、`shared` 或 `hermes:default`。
+- `a | b` 表示互斥参数；`…` 表示可重复条目；未给的编辑参数表示**保持原值**，不表示清空。
+- 多个位置参数（如 `<ref>...`、`<name>...`）在 shell 中需各自作为独立参数传入。
+
+## skill — 技能与库管理
+
+```text
+skill list [--domain <domain>] [--query <text>] [--category <c> | --uncategorized]
+           [--tag <t>...] [--preset <id>] [--agent <key>] [--deployed-to <target>] [--no-tag]
+skill get <ref>
+skill read <ref> [--lang zh|orig]
+skill set <ref> [--comment <text>] [--tags <csv>] [--agents all|none|<csv>] [--oses all|none|<csv>]
+skill tag add <ref>... --tags <csv>
+skill tag detach <ref>... --tags <csv>
+skill tag rename <old> <new>
+skill tag remove <tag>
+skill category rename --domain <domain> <old> <new>
+skill move <ref> (--category <c> | --uncategorized)
+skill delete <ref>...
+skill archive add <ref>...
+skill archive list [--domain <domain>]
+skill archive restore <ref>...
+skill archive delete <ref>...
+skill translation get <ref>
+skill translation set <ref> (--file <path> | --stdin)
+skill translation remove <ref>
+skill overlay list <ref>
+skill overlay get <ref> --path <relative-path> [--agent <key>] [--os <os>]
+skill overlay set <ref> --path <relative-path> (--file <path> | --stdin) [--agent <key>] [--os <os>]
+skill overlay remove <ref> --path <relative-path> [--agent <key>] [--os <os>]
+skill task <ref>... [--requirement <text>]
+```
+
+- `--preset` 须同时给 `--domain`（避免跨域同 id 歧义）；否则报错退出 1。
+- `--deployed-to` 按本机部署记录筛选；`skill get` 的 `deployments` 列出该技能的实际部署位置。
+- 共享目录自动定位为 `<当前用户主目录>/.agents/skills`（`agents` 带 `s`），无需设置。浏览不创建目录，首次部署时创建。
+- `--agents`：`all` 删除限制键（= 全支持）、`none` 写显式空集合、其余为逗号分隔名单；
+  `--oses` 同规则。`--tags` 是替换集合，空字符串清空。`--comment` 空字符串清除。
+- `tag add/detach` 只增减目标标签（不替换）；`tag rename/remove` 两域统一治理，`remove` 只解除关联。
+- `category rename` 重命名一级分类目录，该分类下全部技能一并移动；目标分类已存在则拒绝。不改技能名。
+- `move` 必须给 `--category` 或 `--uncategorized` 之一；不改技能名。
+- `archive add` 先卸载该技能全部受管部署，成功后才移到 `archive/<domain>/[<category>/]<name>/`；外改副本或卸载失败则不归档。`restore` 保留原分类与标签，不重新部署；目标已有同名活技能则拒绝。`delete` 从归档永久删除。
+- `translation set` / `overlay set` 必须给 `--file` 或 `--stdin` 之一，否则报错退出 1。
+- overlay 的 `--agent` / `--os` 省略即该维度通用（`_`）。
+- `task` 生成可复制的维护说明（含配套维护 Skill 库内路径与“按其规范执行”）；不改库、不部署、不上传。
+  `--requirement` 可省略，省略时任务文本如实写明“未填写”。
+
+## skill — 获取与上游
+
+```text
+skill preview <repo-url> [--ref <branch-or-tag>]
+skill import <repo-url> --domain <domain> --skills <subpath>... [--ref <branch-or-tag>]
+             [--category <c> | --uncategorized]
+skill adopt <target> <name>... [--category <c> | --uncategorized]
+            [--comment <text>] [--tags <csv>] [--metadata-file <path>]
+skill adopt-hermes <profile> <name>...
+skill create <ref> [--category <c> | --uncategorized] [--comment <text>] [--tags <csv>]
+skill copy <ref> --to <domain> [--category <c> | --uncategorized]
+skill check [<ref>] [--repo <url>] [--all]
+skill update <ref> [--to <commit-oid>]
+skill update-repo <repo-url> [--include-new <subpath>...] [--domain <domain>]
+                  [--category <c> | --uncategorized]
+skill reject-new <repo-url> --domain <domain> --skills <subpath>...
+skill rejected [--repo <url>] [--domain <domain>]
+skill skip <ref> [--version <commit-oid>]
+skill unskip <ref>
+skill skipped
+```
+
+- `import --skills` 支持逗号分隔与重复给出；`--domain` 必填。
+- `check` 必须给 `<ref>`、`--repo`、`--all` 之一，否则报错退出 1。
+- `preview`/`import` 的真实 Git 进度写标准错误，最终结果写标准输出；Ctrl-C 取消本次获取
+  （返回 `failed` 并说明“后续不继续该获取”，不误报入库）。
+- `--to` / `--version` 缺省采用最近检查所得的具体远端提交；尚无检查结果会提示先检查。
+- `update-repo` 只处理两域该仓库**未采用、未跳过**的已有条目；新增只处理 `--include-new` 显式选定项。
+- `adopt` 的目标为内置 Agent key 或 `shared`；管理域由目标所属域决定，共享目录进入编码库并接管原共享部署。批量不同资料用 `--metadata-file` 按技能名给各自资料。
+- 已知限制：`import` / `update-repo` 没有 `--tags` / `--comment` 参数，新增候选入库时标签与注释
+  继承上游 `.manager`，只能补充分类（GUI 与 CLI 一致）。入库后再用 `skill set` 补充标签/注释。
+
+## deploy — 部署与同步
+
+```text
+deploy to <target> <ref>... [--also-target <target>...]
+deploy preset <domain> <preset-id> --to <target> [--also-target <target>...]
+deploy undo <target> <ref>... [--also-target <target>...] [--discard-local-changes]
+deploy undo-preset <domain> <preset-id> --from <target> [--also-target <target>...]
+deploy sync [--ref <ref>] [--target <target>] [--overwrite-local]
+deploy status [--target <target>] [--paused]
+```
+
+- `--also-target` 可重复；未给则只处理一个目标。
+- 遇受管副本外改：普通部署/同步暂停该项（`paused_local_change`），其余继续。
+  用户裁决后按库覆盖用 `sync --ref <ref> --target <target> --overwrite-local`；
+  确认丢弃待清理副本用 `undo ... --discard-local-changes`。
+- `deploy preset` 按当前成员**叠加**部署；`undo-preset` 按成员逐个撤销（缺失成员报告后其余继续），
+  都不追踪来源预设或引用计数。
+
+## preset — 预设
+
+```text
+preset list [--domain <domain>]
+preset get <domain> <id>
+preset create <domain> <name> [--icon <icon>]
+preset delete <domain> <id>
+preset members <domain> <id> (--add <csv> | --remove <csv>)
+preset rename <domain> <id> <new>
+preset icon <domain> <id> <icon>
+preset reorder <domain> --order <id,...>
+preset reorder-members <domain> <id> --order <name,...>
+```
+
+- `id` 新建时由名称派生并在域内去重；`icon` 传空字符串清除图标。
+- `reorder --order` 须是该域全部预设 id 的一个排列；`reorder-members --order` 须是该预设全部成员名的一个排列。
+- 定义编辑不动部署，两种排序也不改变成员集合、分类目录或部署。
+
+## agent / instruction — 本机配置与指令
+
+```text
+agent list | agent detect
+agent enable <key> | agent disable <key> | agent reorder --order <key,...>
+agent set-dir <key> (--skills <path> | --project-rel <path> | --instructions <path>)
+agent reset-dir <key> --kind skills|project-rel|instructions
+agent local-skills <target> | agent delete-local <target> <name>...
+agent read-local <target> <name> [--file <技能内相对路径>]
+instruction get global|<key>
+instruction set global|<key> (--file <path> | --stdin)
+```
+
+- `agent` 的目录/启停/顺序只写本机状态；`detect` 只读目录存在性，不启动、不部署。
+- `local-skills` / `delete-local` 的 `<target>` 接受内置 Agent key、`shared`（共享目录是编码 Agent 的本机部署目标）或 `hermes:default`（Hermes default 档案）：
+  按内置 Agent 的同一套语义列出与处理——受管项（存在该目标部署记录）走撤销部署规则、不删库；
+  未受管项直接删除实际文件、不改库。共享目录自动定位为当前用户主目录下的 `.agents/skills`；目录不存在时返回空列表，不要求设置路径。
+- `instruction get` 返回源内容与按“全局在前、专属在后”的合成预览；
+  `set` 写入源后立即覆盖本机已启用目标的 `<detect_dir>/AGENTS.md`（可用 `--instructions` 覆盖路径），
+  空内容可正常保存并覆盖；单目标写入失败不中断其余并逐项报告。
+
+## hermes — 档案
+
+```text
+hermes profiles
+hermes list <profile> [--query <text>] [--category <c> | --uncategorized] [--tag <t>...] [--no-tag]
+hermes read <profile> <name> [--file <path>]
+hermes enable <profile> <name>...
+hermes disable <profile> <name>...
+hermes identity get global|<profile>
+hermes identity set global|<profile> (--file <path> | --stdin)
+hermes identity distribute
+```
+
+`default` 档案即部署记录（`hermes:default`）；其他档案的启用是本机状态，内容更新不重置。
+`read` 读取档案内实际正文或文件，未入库技能也可先查看；阅读不收编，不改变库、部署或启用名单。
+`identity get` 返回源内容与按「专属在前、全局在后」拼接的合成预览；`set` 写入库内 `hermes-identity/` 后立即按同一顺序无条件覆盖本机全部已发现档案的 `SOUL.md`；空合成写成空文件。`distribute` 不改源，只按当前源刷新。不创建档案、不改启用名单。
+
+## tool — 工具中心
+
+```text
+tool list [--query <text>] [--category <c>]
+          [--status installed|not-installed|updatable|latest|failed|unchecked|no-command|no-guide]
+tool get <slug>
+tool check [<slug>] [--all]
+tool register (--dir <path> | --stdin)
+tool set <slug> (--dir <path> | --stdin)
+tool set-install <slug> --version <v> [--method <text>] [--path <path>] [--config-path <path>]
+tool task [<slug>] --action register|edit|install|update|guide [--requirement <text>]
+tool skill-link <slug> <ref>
+```
+
+- `register` 新登记、`set` 修改已有共享资料；已登记时 `register` 报错。
+- `set-install --version ""`（空字符串）表示已核实该工具不在本机：清除安装记录并重置检查结果；
+  正常回写也会重置该工具检查结果。
+- `tool check` 只写检查结果，不改安装事实；未安装工具取得上游版本后仍显示未安装。
+- `tool task --action register` 允许省略 `<slug>`（用 `--requirement` 说明名称与来源）；其他动作必须给已登记 slug。
+
+## sync — SkillManagerVault 跨机同步
+
+```text
+sync pull
+sync push [--message <text>]
+sync status
+sync conflicts
+```
+
+- `sync pull` 无冲突静默应用并刷新已有部署、已启用指令目标与本机已发现 Hermes 档案 `SOUL.md`；**新增技能不自动部署**；冲突时暂停本次同步并保留现场。
+- `sync push` 提交并推送**整个工作区**改动。配套维护任务收尾直接执行，不要每次再问、不要赶回 GUI；用户明确说不要上传时才跳过。CLI 写库/`deploy sync`/文件监听/定时同步单独执行仍不自动上传。
+- `sync status` 只读事实（连接/未提交/未拉取/冲突），不提交、不推送、不改库。
+- `sync conflicts` 输出未合并路径与状态供你在 Git 层处理，之后再次 `sync pull` 继续。
+
+## settings — 本机运行配置与只读报告
+
+```text
+settings get [<key>...]
+settings set-auto-check <0|30|60|360|1440>
+settings set-git-auto-push <true|false>
+settings diagnostics [--export]
+settings capacity
+```
+
+- 只读写**本机状态**，不改 SkillManagerVault 内容、不触发上传。
+- `settings get` 不带参数返回全部键的当前生效值：`theme`、`font_scale`、`auto_check_minutes`、
+  `shared_dir`、`git_auto_push`、`vault_path`、`last_sync_at`、`last_check_at`；带参数只返回指定键。
+  **未设置的键返回 `null`**（不省略键、不用空字符串冒充）；已套用默认值：主题 `system`、字号 `default`、
+  自动检查频率 `60`。
+- `shared_dir` 是自动识别的只读路径，不是 SQLite 设置键，不提供修改或清除入口。
+- **只有一个写入口**：
+  - `settings set-auto-check <0|30|60|360|1440>` 设置 FR-029 三项共用的自动检查周期（`0` = 关闭）。
+    其他取值被拒绝并列出合法值。
+- `settings set-git-auto-push true|false` 打开或关闭 GUI 保存后自动上传。
+- **不提供写入口**（只能经 `settings get` 读取）：`theme`、`font_scale`（界面偏好，在 GUI 设置页调整）。
+- **无组合调度命令**：手动检查分别用 `skill check --all`、`sync pull`、`tool check --all` 表达，不合并成一条。
+- `settings diagnostics` 输出诊断报告与运行日志/崩溃记录的**真实文件路径**；`--export` 追加写出文件并返回其路径；
+  不提供上传诊断。
+- `settings capacity` 输出库总占用与较大技能排行；空库返回 0 与空排行。与 GUI 设置页共用同一 core。
+- Hermes 根不在这里设置：按 `HERMES_HOME` 环境变量与平台默认解析（`hermes profiles` 报出实际根）。
