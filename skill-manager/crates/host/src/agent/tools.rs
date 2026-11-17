@@ -9,8 +9,7 @@ use crate::invoke::{self, InvokeError, InvokeSource};
 use crate::HostRuntime;
 
 /// Agent 可用工具 = Host invoke 同名命令。原则（FR-015）：界面能做的管理动作，Agent 也能做。
-/// 刻意不开放：`plans_confirm`（不能代点图形界面确认）、`settings_set_git_auto_push`
-/// （授权仅 GUI）、`vault_open`（切换整个库，路径来自界面选择器）、`agent_post_message` 等
+/// 刻意不开放：`plans_confirm`（不能代点图形界面确认）、`vault_open`（切换整个库，路径来自界面选择器）、`agent_post_message` 等
 /// Agent 运行时命令（对话基础设施自身，不是管理动作）。
 const ALLOWED: &[&str] = &[
     // 技能读取与写入
@@ -119,6 +118,7 @@ const ALLOWED: &[&str] = &[
     "settings_set_theme",
     "settings_set_font_scale",
     "settings_set_auto_check",
+    "settings_set_git_auto_push",
     "environment_check",
     "environment_schedule_current",
     "environment_os",
@@ -226,18 +226,7 @@ pub fn run_tool(
     if raw.contains("plans_confirm") || name.contains("plans.confirm") {
         return Err("内置管理 Agent 不能确认图形界面的操作计划。".to_string());
     }
-    if raw.contains("settings_set_git_auto_push") {
-        return Err("内置管理 Agent 不能修改自动上传授权；请在设置中开启".to_string());
-    }
-    let command = basename(name).ok_or_else(|| format!("未知或不允许的管理工具：{name}"))?;
-    if command == "sync_push" {
-        let ctx = runtime.get()?;
-        if !ctx.state().git_auto_push().map_err(|err| err.to_string())? {
-            return Err(
-                "未开启自动上传。请在设置中打开 GUI 保存后自动上传，然后再试。".to_string(),
-            );
-        }
-    }
+    let command = basename(name).ok_or_else(|| format!("未知或不允许的管理工具?{name}"))?;
     let args = normalize_args(&command, args);
     match invoke::invoke(runtime, &command, args, InvokeSource::Agent, session_id) {
         Ok(value) => Ok(value),
@@ -760,6 +749,10 @@ fn tool_input_schema(name: &str) -> Value {
                 "minutes": { "type": "integer", "description": "分钟；0 关闭，可选 0 / 30 / 60 / 360 / 1440" }
             }),
         ),
+        "settings_set_git_auto_push" => (
+            &["enabled"],
+            json!({ "enabled": { "type": "boolean", "description": "true/false" } }),
+        ),
         "environment_diagnostics_export" => (
             &[],
             json!({ "recent": { "type": "integer", "description": "最近失败条数" } }),
@@ -859,7 +852,7 @@ fn tool_description(name: &str) -> &'static str {
         "preset_reorder_members" => "调整预设成员顺序",
         "sync_pull" => "拉取库远端更新；冲突会暂停并列出",
         "sync_status" => "库同步状态",
-        "sync_push" => "上传库；仅当 GUI 已打开自动上传",
+        "sync_push" => "上传库；用户要求时直接执行",
         "sync_conflicts" => "拉取冲突路径与 git status 原文",
         "hermes_profiles" => "本机 Hermes 档案列表",
         "hermes_list" => "列出某档案技能",
@@ -898,6 +891,7 @@ fn tool_description(name: &str) -> &'static str {
         "settings_set_theme" => "设置主题 light / dark / system",
         "settings_set_font_scale" => "设置字号 small / default / large / xlarge",
         "settings_set_auto_check" => "设置自动检查频率分钟数；0 关闭",
+        "settings_set_git_auto_push" => "打开或关闭自动上传",
         "environment_check" => "立即执行一次上游与工具检查",
         "environment_schedule_current" => "最近一次调度报告（含可入库新增）",
         "environment_os" => "本机系统信息",
@@ -1025,14 +1019,14 @@ mod tests {
             "agent_enable",
             "instruction_set",
             "settings_set_theme",
+            "settings_set_git_auto_push",
             "environment_check",
         ] {
             assert!(is_allowed(name), "{name} 应对 Agent 开放");
         }
-        // 刻意不开放：破坏性确认、授权、库切换、Agent 运行时自身。
+        // 刻意不开放：图形界面确认计划、库切换、Agent 运行时自身。
         for name in [
             "plans_confirm",
-            "settings_set_git_auto_push",
             "vault_open",
             "agent_post_message",
         ] {

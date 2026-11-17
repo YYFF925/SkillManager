@@ -16,7 +16,7 @@ Content-Type: application/json
 - `<command>` 与 `src-tauri` 已注册名一致（`skill_set`、`deploy_to`、`sync_push` 等）。
 - 响应 JSON 与现有 command 返回值一致；错误不改写为「成功」。
 - 仅图形界面来源的删除技能、覆盖类 command：未带有效 `planId` 时不得执行，返回需要确认的操作计划（见下）。CLI 与内置管理 Agent 直接执行。其它写入直接执行。
-- `git_auto_push` 设置项：仅当请求来自图形界面会话时可写；内置管理 Agent 与 CLI 不可写。
+- `git_auto_push` 设置项：图形界面、内置管理 Agent 与 CLI 均可写。
 
 ## 事件
 

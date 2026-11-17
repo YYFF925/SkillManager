@@ -151,7 +151,7 @@ sync status                                                 # 连接/未提交/�
 sync conflicts                                              # Git 冲突信息供 Agent 检查
 ```
 
-- GUI 保存沿用已有自动上传确认（设置键 `git_auto_push`，见 data-model.md §2.6）：首次保存时询问一次，确认后每次保存自动 `push`；Agent 修改后每次询问得到明确同意才 `push`。CLI 写库、`deploy sync`、文件监听及后台检查/重试都不构成上传授权，也不读 `git_auto_push`。
+- GUI 保存沿用已有自动上传确认（设置键 `git_auto_push`，见 data-model.md §2.6）：首次保存时询问一次，确认后每次保存自动 `push`；配套维护 Skill 改库后直接 `sync push`。CLI 写库、`deploy sync`、文件监听及后台检查/重试单独执行仍不自动上传。
 - 已同意的上传失败可由用户主动重试（再次 `sync push`）；后台路径不提交或推送。冲突由 Agent 按用户裁决完成 Git 层处理后，再 `sync pull` 继续；不新增应用内合并流程或“保留本地/远端/双方”选项。冲突时本次同步暂停并保留 Git 冲突现场，`sync conflicts` 输出未合并路径与状态供 Agent 检查。
 - `sync status` 只读事实：连接状态（远端可用/不可用）、未提交改动、相对 upstream 的未拉取提交数、进行中的冲突；不提交、不推送、不改库。
 - 远端不可用时 `sync pull`/`sync push` 明确报“未连接”，本地库管理、部署与 `deploy sync` 继续可用；不提供断开远端或重新克隆修复入口。
@@ -195,7 +195,7 @@ settings capacity
 - `settings get` 不带参数返回全部键的**当前生效值**（含默认值推导，例如主题缺省 `system`、检查频率缺省 60、共享目录为当前用户主目录下的 `.agents/skills`）；带参数只返回指定键。**未设置的键返回 `null`**，不省略键、不用空字符串冒充。
 - 只暴露**一个写入口**：`auto_check_minutes`（FR-029 三项共用周期，值须为 0/30/60/360/1440）。其余键按 FR-050 保持单侧：
   - `theme`、`font_scale` **不提供写**（界面偏好，不影响管理结果，见 FR-052）；
-  - `git_auto_push`（GUI 保存自动上传的长期授权记录）**不提供写**——该授权只能由用户在 GUI 给出，Agent 的上传仍需每次取得明确同意后显式 `sync push`（FR-038）；允许 CLI 读取以便解释当前行为。
+  - `git_auto_push` 用 `settings set-git-auto-push true|false` 开关（FR-038）。
 - `shared_dir` 只读派生自当前系统用户主目录下的 `.agents/skills`，不写 SQLite，不提供修改或清除路径的命令。
 - 手动检查**不新增组合命令**：CLI 以 `skill check --all`、`sync pull`、`tool check --all` 分别表达同一批动作（FR-029 的三项），不合并成一条命令。
 - `settings diagnostics` 输出诊断报告内容与日志/崩溃记录的**真实文件路径**；`--export` 追加写出可交给 Agent 的文件并返回其路径。**不提供上传诊断**。
@@ -257,11 +257,11 @@ settings capacity
 | 工具维护任务 | `tool task --action register/edit/install/update/guide` | 实际执行；`register` 可无 slug | 通过 |
 | 库同步 | `sync pull/push/status/conflicts` | 实际执行（临时裸远端）；后台路径不推送 | 通过 |
 | Agent 配置/本地技能/指令 | `agent list/detect/enable/disable/reorder/set-dir/reset-dir/local-skills/delete-local`，`instruction get/set` | 实际执行（临时 HOME 假目录） | 通过 |
-| 本机运行配置与只读报告 | `settings get/set-auto-check/diagnostics/capacity` | 实际执行（临时库 + 临时 HOME + 独立 `--state-dir`）：`get` 全键/指定键与 `null` 语义、`shared_dir` 自动定位，未配置即可 `deploy to shared`，目录不存在时浏览不创建而首次部署创建，旧路径设置不再生效且已删除写入命令、`set-auto-check` 接受 0/30/60/360/1440 并拒绝 45、`theme`/`font_scale`/`git_auto_push` 无 CLI 写入口（`--help` 无对应子命令，调用退出 2）、`diagnostics --export` 返回真实存在文件、`capacity` 空库返回 0 与空排行；并与 `--help` 逐项比对子命令与互斥关系。自动化见 `skill-manager/tests/cli_settings.rs`（8 项） | 通过 |
+| 本机运行配置与只读报告 | `settings get/set-auto-check/diagnostics/capacity` | 实际执行（临时库 + 临时 HOME + 独立 `--state-dir`）：`get` 全键/指定键与 `null` 语义、`shared_dir` 自动定位，未配置即可 `deploy to shared`，目录不存在时浏览不创建而首次部署创建，旧路径设置不再生效且已删除写入命令、`set-auto-check` 接受 0/30/60/360/1440 并拒绝 45、`theme`/`font_scale` 无 CLI 写入口；`git_auto_push` 有 `set-git-auto-push`、`diagnostics --export` 返回真实存在文件、`capacity` 空库返回 0 与空排行；并与 `--help` 逐项比对子命令与互斥关系。自动化见 `skill-manager/tests/cli_settings.rs`（8 项） | 通过 |
 
 **JSON/退出码核对**：`--json` 输出统一 `result`(`success|partial|failed`)/`data`/`errors`；退出码 0/1/2 = 成功/失败/部分完成。**已知碰撞**：clap 的参数用法错误也返回 2，调用方需按 `errors` 或提示前缀区分（本节如实记录，未新增机制消除该碰撞）。
 
-**无 GUI 裁决依赖核对**：GUI 的 85 个前端调用名与 87 个 Tauri 注册命令逐一对齐（无前端调用缺失），全部命令共用 core，均只做参数映射。除下方缺口 ① 外，所有核心管理操作均有 CLI 等价路径，**Agent 无需回 GUI 补做核心操作**；缺口 ① 已由 2026-10-16 的 `settings` 命令组补齐并实现，见上表 `settings` 行结论。但 GUI 独有的界面偏好写入仍有边界：`theme`/`font_scale`/`git_auto_push` 不由 CLI 写（FR-052/FR-038）。
+**无 GUI 裁决依赖核对**：GUI 的 85 个前端调用名与 87 个 Tauri 注册命令逐一对齐（无前端调用缺失），全部命令共用 core，均只做参数映射。除下方缺口 ① 外，所有核心管理操作均有 CLI 等价路径，**Agent 无需回 GUI 补做核心操作**；缺口 ① 已由 2026-10-16 的 `settings` 命令组补齐并实现，见上表 `settings` 行结论。界面偏好 `theme`/`font_scale` 仍不由 CLI 写（FR-052）。`git_auto_push` 可由 CLI 写。
 
 **维护任务 Skill 路径核对**：配套维护 Skill 未入库时，任务文本显示"配套维护 Skill：未入库（…此处不编造库内路径）"；入库后显示其**真实库内绝对路径**与技能引用，并含"按其规范执行"（FR-051）。均已实际执行验证。
 
@@ -269,8 +269,9 @@ settings capacity
 
 1. **本机运行侧整类缺 CLI 入口**（原记为"仅共享目录路径"，2026-10-16 逐项清点后确认为整类，已在 `spec.md` FR-050/FR-052/FR-053 补齐表述并在本节补齐命令契约，见 `settings` 命令组与 tasks T093～T100）。清点结论：
    - **必须 CLI 可写**：`auto_check_minutes`（FR-029 三项共用周期）；
-   - **必须 CLI 可读**：全部运行配置与调度事实（含仅由 GUI 写入的 `theme`、`font_scale`、`git_auto_push`）；
-   - **不提供 CLI 写**：`theme`、`font_scale`（界面偏好）、`git_auto_push`（长期上传授权，FR-038）；
+   - **必须 CLI 可读**：全部运行配置与调度事实（含仅由 GUI 写入的 `theme`、`font_scale`）；
+   - **不提供 CLI 写**：`theme`、`font_scale`（界面偏好）；
+   - **可 CLI 写**：`git_auto_push`（`settings set-git-auto-push`）；
    - **有意单侧**：工具安装事实回写只有 CLI（FR-047/FR-050），不是缺口。
 2. **清理两处无写入点的配置键**（T097 已实现）：自定义日志目录不再保留（日志固定 `<state-dir>/logs`）；Hermes 根改为按 `HERMES_HOME` 与平台默认解析，不设可写设置键。
 3. **新增候选入库时的标签/注释**（M3 已记录）。`skill import` / `skill update-repo` 无 `tags`/`comment` 参数，故 GUI 与 CLI 一致地只能补充分类；标签/注释继承上游 `.manager`，入库后可用 `skill set` 补齐。这是契约层面的限制而非入口不对齐，**保持现状**：批量入库用 `--tags` 会把同一份资料套给全部技能，与"不把同一段注释擅自套给全部技能"冲突；若确需入库时逐项给资料，应复用 `skill adopt` 的 `--metadata-file` 形式，需用户裁决。

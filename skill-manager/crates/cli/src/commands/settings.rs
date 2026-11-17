@@ -24,6 +24,9 @@ pub enum SettingsAction {
     /// 设置统一的自动检查频率（FR-029 三项共用）。
     #[command(name = "set-auto-check")]
     SetAutoCheck(SetAutoCheckArgs),
+    /// Enable or disable auto-upload after GUI save.
+    #[command(name = "set-git-auto-push")]
+    SetGitAutoPush(SetGitAutoPushArgs),
     /// 诊断报告与运行日志/崩溃记录的真实路径。
     Diagnostics(DiagnosticsArgs),
     /// 技能库容量：总占用与较大技能排行。
@@ -42,6 +45,12 @@ pub struct SetAutoCheckArgs {
     /// 自动检查频率（分钟）：0=关闭 / 30 / 60 / 360 / 1440。
     #[arg(value_name = "minutes")]
     pub minutes: i64,
+}
+
+#[derive(Args, Debug)]
+pub struct SetGitAutoPushArgs {
+    #[arg(value_name = "enabled")]
+    pub enabled: bool,
 }
 
 #[derive(Args, Debug)]
@@ -81,6 +90,7 @@ fn dispatch(action: SettingsAction, ctx: &AppContext) -> Result<(CliResult, Stri
     match action {
         SettingsAction::Get(args) => get(ctx, args),
         SettingsAction::SetAutoCheck(args) => set_auto_check(ctx, args),
+        SettingsAction::SetGitAutoPush(args) => set_git_auto_push(ctx, args),
         SettingsAction::Diagnostics(args) => diagnostics_report(ctx, args),
         SettingsAction::Capacity => capacity_report(ctx),
     }
@@ -162,6 +172,20 @@ fn set_auto_check(ctx: &AppContext, args: SetAutoCheckArgs) -> Result<(CliResult
     };
     Ok((
         CliResult::success(json!({ "auto_check_minutes": current })),
+        human,
+    ))
+}
+
+fn set_git_auto_push(ctx: &AppContext, args: SetGitAutoPushArgs) -> Result<(CliResult, String)> {
+    ctx.state().set_git_auto_push(args.enabled)?;
+    let current = ctx.state().git_auto_push()?;
+    let human = if current {
+        "已打开自动上传".to_string()
+    } else {
+        "已关闭自动上传".to_string()
+    };
+    Ok((
+        CliResult::success(json!({ "git_auto_push": current })),
         human,
     ))
 }

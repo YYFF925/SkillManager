@@ -98,27 +98,29 @@ fn set_auto_check_accepts_allowed_and_rejects_other() {
 }
 
 #[test]
-fn no_cli_write_entry_for_theme_font_scale_and_auto_push() {
+fn no_cli_write_entry_for_theme_and_font_scale() {
     let env = TestEnv::new();
     for args in [
         ["settings", "set-theme", "dark"],
         ["settings", "set-font-scale", "large"],
-        ["settings", "set-git-auto-push", "true"],
     ] {
         let output = env.cli(&args);
         assert!(
             !output.status.success(),
-            "不应存在 CLI 写入口 {args:?}：stdout={} stderr={}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            "no CLI write for {args:?}"
         );
     }
+}
 
-    // 三者仍可经 settings get 读取。
-    let data = env.cli_json(&["settings", "get", "theme", "font_scale", "git_auto_push"]);
-    assert_eq!(data["theme"], "system");
-    assert_eq!(data["font_scale"], "default");
-    assert_eq!(data["git_auto_push"], false);
+#[test]
+fn set_git_auto_push_writes_and_reads_back() {
+    let env = TestEnv::new();
+    let written = env.cli_json(&["settings", "set-git-auto-push", "true"]);
+    assert_eq!(written["git_auto_push"], true);
+    let read_back = env.cli_json(&["settings", "get", "git_auto_push"]);
+    assert_eq!(read_back["git_auto_push"], true);
+    let off = env.cli_json(&["settings", "set-git-auto-push", "false"]);
+    assert_eq!(off["git_auto_push"], false);
 }
 
 #[test]

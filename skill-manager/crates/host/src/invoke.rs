@@ -51,11 +51,6 @@ pub fn invoke(
     source: InvokeSource,
     session_id: Option<&str>,
 ) -> Result<Value, InvokeError> {
-    if command == "settings_set_git_auto_push" && source != InvokeSource::Gui {
-        return Err(InvokeError::Failed(
-            "自动上传授权只能在图形界面中修改；请到设置中开启".to_string(),
-        ));
-    }
     if command == "plans_confirm" && source == InvokeSource::Agent {
         return Err(InvokeError::Failed(
             "内置管理 Agent 不能确认图形界面的操作计划。".to_string(),

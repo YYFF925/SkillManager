@@ -1820,7 +1820,7 @@ fn selected_ref_from_snapshot(snapshot: &Value) -> Option<&str> {
 
 fn host_tool_instructions(snapshot: &Value, user_text: &str) -> String {
     let mut out = String::from(
-        "必须用 Host 经 session/new.mcpServers 声明的管理工具（skill_get / skill_read / skill_set / skill_check / skill_update / deploy 等，覆盖界面可做的管理动作）。禁止 bash、Get-ChildItem、PowerShell、edit、直写库文件。删除/覆盖直接执行；未开启 git_auto_push 时不要上传。",
+        "必须用 Host 经 session/new.mcpServers 声明的管理工具（skill_get / skill_read / skill_set / skill_check / skill_update / deploy 等，覆盖界面可做的管理动作）。禁止 bash、Get-ChildItem、PowerShell、edit、直写库文件。删除/覆盖直接执行；用户要求上传就 sync_push。",
     );
     if let Some(reference) = selected_ref_from_snapshot(snapshot) {
         out.push_str(&format!(

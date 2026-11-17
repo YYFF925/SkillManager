@@ -1,35 +1,32 @@
-//! Agent 不得写 git_auto_push；GUI 可以。
+//! GUI, Agent, and CLI may write git_auto_push.
 
 use serde_json::json;
 use skill_manager_core::AppContext;
 use skill_manager_host::invoke::{self, InvokeSource};
 use skill_manager_host::HostRuntime;
 
-#[test]
-fn agent_cannot_set_git_auto_push() {
+fn runtime() -> HostRuntime {
     let dir = tempfile::tempdir().unwrap();
     let ctx = AppContext::open(Some(dir.path().to_path_buf())).unwrap();
-    let runtime = HostRuntime::from_context(ctx);
-    let err = invoke::invoke(
+    HostRuntime::from_context(ctx)
+}
+
+#[test]
+fn agent_can_set_git_auto_push() {
+    let runtime = runtime();
+    invoke::invoke(
         &runtime,
         "settings_set_git_auto_push",
         json!({ "enabled": true }),
         InvokeSource::Agent,
         None,
     )
-    .unwrap_err();
-    let message = err.to_string();
-    assert!(
-        message.contains("图形界面") || message.contains("自动上传"),
-        "{message}"
-    );
+    .expect("Agent may write git_auto_push");
 }
 
 #[test]
 fn gui_can_set_git_auto_push() {
-    let dir = tempfile::tempdir().unwrap();
-    let ctx = AppContext::open(Some(dir.path().to_path_buf())).unwrap();
-    let runtime = HostRuntime::from_context(ctx);
+    let runtime = runtime();
     invoke::invoke(
         &runtime,
         "settings_set_git_auto_push",
@@ -38,4 +35,17 @@ fn gui_can_set_git_auto_push() {
         None,
     )
     .expect("GUI may write git_auto_push");
+}
+
+#[test]
+fn cli_can_set_git_auto_push() {
+    let runtime = runtime();
+    invoke::invoke(
+        &runtime,
+        "settings_set_git_auto_push",
+        json!({ "enabled": true }),
+        InvokeSource::Cli,
+        None,
+    )
+    .expect("CLI may write git_auto_push");
 }

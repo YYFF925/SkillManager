@@ -248,6 +248,10 @@ pub fn to_invoke(command: &Command) -> Option<(String, Value)> {
                 "settings_set_auto_check".into(),
                 json!({ "minutes": args.minutes }),
             )),
+            SettingsAction::SetGitAutoPush(args) => Some((
+                "settings_set_git_auto_push".into(),
+                json!({ "enabled": args.enabled }),
+            )),
             _ => None,
         },
         Command::Preset(cmd) => match &cmd.action {
@@ -465,7 +469,7 @@ pub fn is_write(command: &Command) -> bool {
         Command::Host(_) | Command::Station(_) => false,
         Command::Vault(_) => true,
         Command::Sync(cmd) => matches!(cmd.action, SyncAction::Pull | SyncAction::Push(_)),
-        Command::Settings(cmd) => matches!(cmd.action, SettingsAction::SetAutoCheck(_)),
+        Command::Settings(cmd) => matches!(cmd.action, SettingsAction::SetAutoCheck(_) | SettingsAction::SetGitAutoPush(_)),
         Command::Deploy(cmd) => !matches!(cmd.action, DeployAction::Status(_)),
         Command::Skill(cmd) => !matches!(
             cmd.action,

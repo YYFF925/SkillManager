@@ -3,7 +3,7 @@
 **Date**: 2026-11-11（2026-11-15 更新对话工具开放面，见 T100）| 对照 [spec.md](spec.md) FR-015、[contracts/agent-bridge.md](contracts/agent-bridge.md)。  
 原则：GUI 当时能回答的管理事实，对话里不必再由用户复述。举例不是穷尽清单；本表按 **当前** core JSON CLI、Host invoke 与 GUI 页面核对。
 
-本表**不宣称齐全**。只读事实均指向快照字段或 Agent 工具；写入类命令同样对内置 Agent 开放（FR-015「界面能做的管理动作 Agent 也能做」）。刻意不开放仅四类：`plans_confirm`（不能代替用户确认破坏性操作）、`settings_set_git_auto_push`（授权仅 GUI）、`vault_open`（切换整个库，路径来自界面选择器）、`agent_post_message` 等 Agent 运行时命令（对话基础设施自身）。
+本表**不宣称齐全**。只读事实均指向快照字段或 Agent 工具；写入类命令同样对内置 Agent 开放（FR-015「界面能做的管理动作 Agent 也能做」）。刻意不开放仅三类：`plans_confirm`（不能代替用户确认破坏性操作）、`vault_open`（切换整个库，路径来自界面选择器）、`agent_post_message` 等 Agent 运行时命令（对话基础设施自身）。
 
 快照由 `assemble_snapshot` 在发消息时从 **当前 Host 的 core** 组装：`global` 为摘要 + 计数 + 引用，`view` 按当前页补齐该页 GUI 已知对象。不含 `SKILL.md` / 指南 / 译文全文（正文走 `skill_read` / `hermes_read` / `agent_read_local`）。
 
@@ -32,7 +32,7 @@
 | `sync pull/push/status/conflicts` | 顶栏同步、设置页 | `global.pullConflicts`（路径 + `git status` 原文）；设置页 `view.pageObjects.sync` | `sync_pull`、`sync_status`、`sync_conflicts`、`sync_push`（须已开自动上传） |
 | `agent list/detect/local-skills/read-local` | Agent 页 | `global.agents`；`view.pageObjects`（agents-*）；打开目标 `view.opened` | `agent_list`、`agent_detect`、`agent_enable/disable/reorder/set_dir/reset_dir`、`agent_local_skills`、`agent_read_local`、`agent_delete_local` |
 | `instruction get/set` | 设置里的指令编辑 | 无全文 | `instruction_get`、`instruction_set` |
-| `settings get` / `diagnostics` / `capacity` | 设置页 | `view.pageObjects`（settings）；`global.lastCommandFailures`（错误原文） | `settings_get`、`settings_set_theme/font_scale/auto_check`（git_auto_push 不开放）、`environment_check/os/diagnostics/diagnostics_export/capacity` |
+| `settings get` / `diagnostics` / `capacity` | 设置页 | `view.pageObjects`（settings）；`global.lastCommandFailures`（错误原文） | `settings_get`、`settings_set_theme/font_scale/auto_check`（git_auto_push 已开放）、`environment_check/os/diagnostics/diagnostics_export/capacity` |
 | `vault current` / `host status` | 壳层库路径、Host 状态 | settings 的 `vault` | `vault_current`、`host_status` |
 | `environment_schedule_current` | 设置检查结果、技能库「新增」 | `global.newCandidates`、`global.failedChecks[].error` | `environment_schedule_current` |
 

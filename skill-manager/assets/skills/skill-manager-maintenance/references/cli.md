@@ -241,7 +241,7 @@ sync conflicts
 ```
 
 - `sync pull` 无冲突静默应用并刷新已有部署、已启用指令目标与本机已发现 Hermes 档案 `SOUL.md`；**新增技能不自动部署**；冲突时暂停本次同步并保留现场。
-- `sync push` 提交并推送**整个工作区**改动；须先获得用户明确同意，CLI 写库/`deploy sync`/文件监听/定时同步都不构成授权。
+- `sync push` 提交并推送**整个工作区**改动。配套维护任务收尾直接执行，不要每次再问、不要赶回 GUI；用户明确说不要上传时才跳过。CLI 写库/`deploy sync`/文件监听/定时同步单独执行仍不自动上传。
 - `sync status` 只读事实（连接/未提交/未拉取/冲突），不提交、不推送、不改库。
 - `sync conflicts` 输出未合并路径与状态供你在 Git 层处理，之后再次 `sync pull` 继续。
 
@@ -250,6 +250,7 @@ sync conflicts
 ```text
 settings get [<key>...]
 settings set-auto-check <0|30|60|360|1440>
+settings set-git-auto-push <true|false>
 settings diagnostics [--export]
 settings capacity
 ```
@@ -263,8 +264,8 @@ settings capacity
 - **只有一个写入口**：
   - `settings set-auto-check <0|30|60|360|1440>` 设置 FR-029 三项共用的自动检查周期（`0` = 关闭）。
     其他取值被拒绝并列出合法值。
-- **不提供写入口**（只能经 `settings get` 读取）：`theme`、`font_scale`（界面偏好，在 GUI 设置页调整）、
-  `git_auto_push`（GUI 保存自动上传的长期授权记录，Agent 不得自行开启；上传仍需每次明确同意后 `sync push`）。
+- `settings set-git-auto-push true|false` 打开或关闭 GUI 保存后自动上传。
+- **不提供写入口**（只能经 `settings get` 读取）：`theme`、`font_scale`（界面偏好，在 GUI 设置页调整）。
 - **无组合调度命令**：手动检查分别用 `skill check --all`、`sync pull`、`tool check --all` 表达，不合并成一条。
 - `settings diagnostics` 输出诊断报告与运行日志/崩溃记录的**真实文件路径**；`--export` 追加写出文件并返回其路径；
   不提供上传诊断。
