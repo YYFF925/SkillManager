@@ -317,9 +317,11 @@ skill-manager tool set-install <slug> --version <实际版本> [--method <text>]
 ```
 
 `<target>` = Agent key、`shared`（共享目录）或 `hermes:default`。
-**`deploy sync`/`undo` 的目标串要逐字照抄 `deploy status` / `skill get` 里的部署记录**（常见形如 `agent:hermes`）：
-传一个格式合法但无匹配记录的目标会返回 `success` 且 `items[]` 为空，暂停状态原地不动——空操作极易误判成已修复，
-同步后必须复查 `deploy status --paused` 确实变少。
+**`deploy sync`/`undo` 的目标串要逐字照抄 `deploy status` / `skill get` 里的部署记录**（常见形如 `agent:hermes`）。
+`--ref` 技能不存在、或带了 `--target` 却没有任何匹配记录时命令失败，不再返回空的 `success`。仅 `--ref` 且技能存在但还没有部署记录时仍可空成功。
+同步后仍须复查 `deploy status --paused` 确实变少。
+`HERMES_HOME` 必须指向 Hermes **根**（里面有 `skills/` 和 `profiles/`），不要设成某个 `profiles/<档案>`；
+指错时 `hermes list/enable` 会报档案不存在并提示应改成根目录，不会自动去上一级。
 `--agents all` 删除限制键、`none` 写显式空集合；`--tags` 是**替换**集合，空字符串清空。
 `--also-target` 表示本次同时处理的其他目标（可重复）；未给则只处理一个目标。
 
@@ -442,25 +444,26 @@ python scripts/merge-drift.py --vault-root <SkillManagerVault> \
 它按 §10.2 的规则做 opcode 级联合并、自动剥 `<注释>｜`、可选补入部署独有文件，并在落盘前把两侧拷到
 scratch 备份；`--keep-vault` 用来指定「部署侧陈旧、整文件取库内」的那几个文件。
 
-### 10.3 档案（profile）目录的部署冲突：实体目录挡掉管理器链接
+### 10.3 档案（profile）目录的部署冲突：未受管实体目录挡掉启用
 
-桌面应用的「档案」就是 Hermes profile（`~/.hermes/profiles/<id>/`）。它可以向档案目录部署技能，
-方式是**符号链接**（`skills/<name> -> ~/.hermes/skills/<name>`）。若那里已经是一个**实体目录**
-（手工 copy、或让其他 bot copy 进去的），部署会被跳过并提示：
+桌面应用的「档案」就是 Hermes profile（`~/.hermes/profiles/<id>/`）。为具名档案启用技能时，
+管理器把 default 池（`~/.hermes/skills/<name>`）**复制**成该档案下的独立实体目录
+（`profiles/<id>/skills/<name>`），**不再使用符号链接**——这样 `hermes curator lock` 才能锁住该档案会话里的技能。
+若那里已经有一个**未由本管理器登记的实体目录**（手工 copy、或其他 bot 放进去的），启用会被跳过并提示：
 
 ```text
-已启用 0 项；1 项未完成: <skill>（档案目录已有同名技能（非管理器链接），未改动：
+已启用 0 项；1 项未完成: <skill>（档案目录已有同名技能（非本管理器安装的副本），未改动：
 /Users/<user>/.hermes/profiles/<id>/skills/<skill>）
 ```
 
 此时该技能在 GUI 里显示「未启用」，勾选也装不上。要接管，按此顺序做（**先取证再删**）：
 
 1. 打包备份：`tar czf ~/backups/<id>-local-skills-<ts>.tar.gz -C <profile>/skills <实体目录…>`；
-2. 删掉这些实体目录，**保留真正的符号链接**，否则会把已受管的部署一起删；
-3. 让用户刷新 GUI 后正常勾选部署，成功后目录里出现链接。
+2. 删掉这些**未启用登记**的实体目录；已启用的独立拷贝不要当冲突删；
+3. 让用户刷新 GUI 后正常勾选启用，成功后目录里出现实体拷贝（可用 `test -L` 确认不是链接）。
 
 ```bash
-# 区分实体目录与链接（不要用 test -d，它两者都真）
+# 区分实体目录与遗留链接（不要用 test -d，它两者都真）
 find ~/.hermes/profiles/<id>/skills -maxdepth 1 -mindepth 1 \
   -exec sh -c 'printf "%-32s %s\n" "$(basename "$1")" "$(test -L "$1" && echo "链接→$(readlink "$1")" || echo 实体目录)"' _ {} \;
 ```
@@ -469,11 +472,10 @@ find ~/.hermes/profiles/<id>/skills -maxdepth 1 -mindepth 1 \
 
 - **`hermes-agent` 无法被接管**：它在 `ESSENTIAL_SKILLS` 里，删掉下次会话又被播种回实体目录。
   永远会剩这一个实体目录，不要反复删。
-- **档案目标只在 GUI 里存在**：CLI 的 `agent local-skills` 只认 `agent:<key>`、`shared`、`hermes:default`，
+- **档案目标只在 GUI / `hermes enable` 里存在**：CLI 的 `agent local-skills` 只认 `agent:<key>`、`shared`、`hermes:default`，
   传 `hermes:<profile>` 报「目标无法解析」、传裸 profile 名报「不在内置 Agent 名单中」。
-  不要拿 CLI 去验证或修改档案部署——只能看目录里的链接形态，或让用户看 GUI。
-- 「所有技能统一由 Skill Manager 接管」= 档案目录里**不保留实体技能目录**；清完再让用户自己部署，
-  而清空后的档案在部署前没有任何技能可用，要先说明。
+  档案启用用 `hermes enable <profile> <name>`，禁用只删该档案拷贝，不改 `~/.hermes/skills`。
+- 遗留符号链接在再次启用或 `deploy sync` 时会改写成实体拷贝。
 
 ### 10.4 退役技能一律软删除
 
@@ -526,6 +528,16 @@ Hermes 有两条**独立的**自动写入通道，都会改到技能内容，必
 配套限制（实测演进）：v0.1.12 及以前 `--overwrite-local` 与 `skill delete` 这类破坏性动作 CLI 拒绝执行（报「破坏性操作需要有效的界面会话」）；v0.1.13 起 Agent/CLI 的删除与覆盖不再强制界面确认，可直接执行。
 
 因此规划「自动改进按规则走」时：先决定部署形态（拷贝 or 符号链接），再决定自动写入范围；不要只关开关而留着拷贝式部署，否则漂移会再次累积。
+
+### 12.2 具名档案启用必须是实体拷贝，否则 lock 看不见
+
+`hermes curator lock` 用 `Path.rglob`（不跟随符号链接）找技能；加载器 `os.walk(followlinks=True)` 却能顺着链接写穿到 `~/.hermes/skills`。
+因此具名档案启用改为独立拷贝：锁写在该档案自己的 `skills/.usage.json` / 技能目录里，锁 default 保护不了其他档案的会话。
+
+- 从库更新 default 后跑 `deploy sync`：未改动的档案拷贝跟着刷新；档案内已改（含自动改进）的拷贝默认跳过。
+- 同步时保留技能目录里的 `.usage.json`，避免把 lock 冲掉。
+- 禁用 `hermes disable <profile> <name>` 只删该档案拷贝，不动 default 池。
+- 不要把 `HERMES_HOME` 设成某个 `profiles/<档案>`：那会把该档案当成 Hermes 根，查找其他档案会报不存在。
 
 ## 十三、技能与知识的分流治理（技能管家的日常执行）
 

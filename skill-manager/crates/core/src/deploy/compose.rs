@@ -107,9 +107,7 @@ pub fn compose_skill(
                 Injection::Unchanged => {}
                 Injection::Skipped(note) => comment_note = Some(note),
             },
-            None => {
-                comment_note = Some("产物中没有 SKILL.md/skill.md，未注入中文注释".to_string())
-            }
+            None => comment_note = Some("产物中没有 SKILL.md/skill.md，未注入中文注释".to_string()),
         }
     }
 
@@ -161,8 +159,7 @@ fn collect_dir_files(root: &Path, skip_manager: bool) -> Result<Vec<(String, Vec
         if rel.is_empty() {
             continue;
         }
-        let bytes =
-            std::fs::read(entry.path()).map_err(|err| CoreError::io(entry.path(), err))?;
+        let bytes = std::fs::read(entry.path()).map_err(|err| CoreError::io(entry.path(), err))?;
         out.push((rel, bytes));
     }
     out.sort_by(|a, b| a.0.cmp(&b.0));
@@ -184,7 +181,11 @@ fn effective_overlays(
 ) -> Result<Vec<OverlayApplication>> {
     let mut by_rel: BTreeMap<String, OverlayApplication> = BTreeMap::new();
     for entry in manager::list_overlays(skill_dir)? {
-        if entry.rel.split('/').any(|part| part.is_empty() || part == "..") {
+        if entry
+            .rel
+            .split('/')
+            .any(|part| part.is_empty() || part == "..")
+        {
             continue;
         }
         if let Some(declared) = &entry.agent {
@@ -203,9 +204,7 @@ fn effective_overlays(
             entry.os.as_deref(),
             &entry.rel,
         )?
-        .ok_or_else(|| {
-            CoreError::other(format!("覆盖层文件不可读：{}", entry.rel))
-        })?;
+        .ok_or_else(|| CoreError::other(format!("覆盖层文件不可读：{}", entry.rel)))?;
         // 具体维度数量多者优先；同数量时 Agent 维度优先于 OS 维度（D11）。
         let rank = u8::from(entry.agent.is_some()) * 2 + u8::from(entry.os.is_some());
         by_rel.insert(
@@ -358,9 +357,8 @@ fn rewrite_description_line(block: &str, prefix: &str, new_value: &str) -> Optio
     let index = locate_description_line(&lines)?;
     let edited: Vec<String> = match index {
         Some(index) => {
-            let rest = lines[index]
-                .trim_end_matches(['\r', '\n'])["description:".len()..]
-                .trim_start();
+            let rest =
+                lines[index].trim_end_matches(['\r', '\n'])["description:".len()..].trim_start();
             if rest.starts_with('|') || rest.starts_with('>') {
                 edit_description_block(&lines, index, prefix)?
             } else {
@@ -416,7 +414,9 @@ fn edit_description_entry(line: &str, prefix: &str, new_value: &str) -> Option<S
             '\'' => prefix.replace('\'', "''"),
             _ => prefix.replace('\\', "\\\\").replace('"', "\\\""),
         };
-        return Some(format!("description: {quote}{escaped_prefix}{inner}{ending}"));
+        return Some(format!(
+            "description: {quote}{escaped_prefix}{inner}{ending}"
+        ));
     }
     let (value_part, comment_part) = if rest.is_empty() || rest.starts_with('#') {
         ("", rest)
@@ -483,7 +483,11 @@ fn edit_description_block(lines: &[&str], index: usize, prefix: &str) -> Option<
         prefix,
         &body[indent_len..]
     ));
-    edited.extend(lines[index + 2 + offset..].iter().map(|line| line.to_string()));
+    edited.extend(
+        lines[index + 2 + offset..]
+            .iter()
+            .map(|line| line.to_string()),
+    );
     Some(edited)
 }
 
@@ -549,9 +553,21 @@ fn input_hash(
     }
     hasher.update(b"overlay\0");
     for overlay in overlays {
-        hasher.update(overlay.agent.as_deref().unwrap_or(GENERIC_DIMENSION).as_bytes());
+        hasher.update(
+            overlay
+                .agent
+                .as_deref()
+                .unwrap_or(GENERIC_DIMENSION)
+                .as_bytes(),
+        );
         hasher.update(b"/");
-        hasher.update(overlay.os.as_deref().unwrap_or(GENERIC_DIMENSION).as_bytes());
+        hasher.update(
+            overlay
+                .os
+                .as_deref()
+                .unwrap_or(GENERIC_DIMENSION)
+                .as_bytes(),
+        );
         hasher.update([0]);
         hasher.update(overlay.rel.as_bytes());
         hasher.update([0]);
@@ -561,6 +577,13 @@ fn input_hash(
     hasher.update(b"comment\0");
     hasher.update(comment.unwrap_or("").as_bytes());
     format!("{:x}", hasher.finalize())
+}
+
+/// Hermes 在技能目录写入的旁路文件：同步档案副本时保留，不参与内容指纹。
+pub const HERMES_SKILL_SIDECAR: &str = ".usage.json";
+
+fn is_hermes_sidecar_rel(rel: &str) -> bool {
+    rel == HERMES_SKILL_SIDECAR || rel.ends_with(&format!("/{HERMES_SKILL_SIDECAR}"))
 }
 
 /// 目标目录当前内容指纹；不存在返回 `None`。
@@ -584,11 +607,62 @@ pub fn hash_dir(path: &Path) -> Result<Option<String>> {
     Ok(Some(hash_files(&files)))
 }
 
+/// 技能内容指纹，忽略 Hermes 旁路文件（如 `.usage.json` / curator lock）。
+pub fn hash_dir_excluding_sidecars(path: &Path) -> Result<Option<String>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let files: Vec<ComposedFile> = collect_dir_files(path, false)?
+        .into_iter()
+        .filter(|(rel, _)| !is_hermes_sidecar_rel(rel))
+        .map(|(rel, bytes)| ComposedFile { rel, bytes })
+        .collect();
+    Ok(Some(hash_files(&files)))
+}
+
+/// 用源目录内容整体替换目标：先写临时目录再替换。
+///
+/// 目标若是实体目录，保留其 `.usage.json`（Hermes curator lock 等）；
+/// 目标若是符号链接则先替换为实体副本，不从链接目标带走旁路文件。
+pub fn replace_dir_from(source: &Path, dest: &Path) -> Result<()> {
+    if !source.is_dir() {
+        return Err(CoreError::other(format!(
+            "源目录不存在：{}",
+            source.display()
+        )));
+    }
+    let preserve_usage = match std::fs::symlink_metadata(dest) {
+        Ok(meta) if meta.file_type().is_symlink() => None,
+        Ok(_) => {
+            let usage = dest.join(HERMES_SKILL_SIDECAR);
+            match std::fs::read(&usage) {
+                Ok(bytes) => Some(ComposedFile {
+                    rel: HERMES_SKILL_SIDECAR.to_string(),
+                    bytes,
+                }),
+                Err(_) => None,
+            }
+        }
+        Err(_) => None,
+    };
+    let mut files: Vec<ComposedFile> = collect_dir_files(source, false)?
+        .into_iter()
+        .filter(|(rel, _)| !is_hermes_sidecar_rel(rel))
+        .map(|(rel, bytes)| ComposedFile { rel, bytes })
+        .collect();
+    if let Some(usage) = preserve_usage {
+        files.retain(|file| file.rel != HERMES_SKILL_SIDECAR);
+        files.push(usage);
+        files.sort_by(|a, b| a.rel.cmp(&b.rel));
+    }
+    write_artifact(dest, &files)
+}
+
 /// 把产物写入目标目录：先写同父目录临时目录，再整体替换。
 pub fn write_artifact(target_dir: &Path, files: &[ComposedFile]) -> Result<()> {
-    let parent = target_dir.parent().ok_or_else(|| {
-        CoreError::other(format!("部署目标没有父目录：{}", target_dir.display()))
-    })?;
+    let parent = target_dir
+        .parent()
+        .ok_or_else(|| CoreError::other(format!("部署目标没有父目录：{}", target_dir.display())))?;
     std::fs::create_dir_all(parent).map_err(|err| CoreError::io(parent.to_path_buf(), err))?;
 
     let name = target_dir
@@ -711,7 +785,9 @@ on: \"on\"\n\
         let text = "---\ndescription: \"原描述\"\n---\n正文\n";
         let (out, _) = inject_comment_text(text, "注释").unwrap();
         assert!(
-            out.as_deref().unwrap().contains("description: \"注释｜原描述\"\n"),
+            out.as_deref()
+                .unwrap()
+                .contains("description: \"注释｜原描述\"\n"),
             "{out:?}"
         );
 
@@ -719,7 +795,9 @@ on: \"on\"\n\
         let text = "---\ndescription: 'it''s here'\n---\n正文\n";
         let (out, _) = inject_comment_text(text, "注'释").unwrap();
         assert!(
-            out.as_deref().unwrap().contains("description: '注''释｜it''s here'\n"),
+            out.as_deref()
+                .unwrap()
+                .contains("description: '注''释｜it''s here'\n"),
             "{out:?}"
         );
     }
@@ -729,7 +807,9 @@ on: \"on\"\n\
         let text = "---\ndescription: foo # note\n---\n正文\n";
         let (out, _) = inject_comment_text(text, "注释").unwrap();
         assert!(
-            out.as_deref().unwrap().contains("description: 注释｜foo # note\n"),
+            out.as_deref()
+                .unwrap()
+                .contains("description: 注释｜foo # note\n"),
             "{out:?}"
         );
     }
@@ -754,11 +834,17 @@ on: \"on\"\n\
     #[test]
     fn no_frontmatter_gets_minimal_block() {
         let (out, _) = inject_comment_text("正文\n", "注释").unwrap();
-        assert_eq!(out.as_deref().unwrap(), "---\ndescription: 注释\n---\n正文\n");
+        assert_eq!(
+            out.as_deref().unwrap(),
+            "---\ndescription: 注释\n---\n正文\n"
+        );
 
         // 危险形状的注释值在最小块里也保持字符串。
         let (out, _) = inject_comment_text("正文\n", "12:30").unwrap();
-        assert_eq!(out.as_deref().unwrap(), "---\ndescription: '12:30'\n---\n正文\n");
+        assert_eq!(
+            out.as_deref().unwrap(),
+            "---\ndescription: '12:30'\n---\n正文\n"
+        );
     }
 
     #[test]
@@ -775,7 +861,9 @@ on: \"on\"\n\
         let (out, note) = inject_comment_text(text, "注释").unwrap();
         assert!(note.is_none(), "{note:?}");
         assert!(
-            out.as_deref().unwrap().contains("description: 注释｜foo\r\n"),
+            out.as_deref()
+                .unwrap()
+                .contains("description: 注释｜foo\r\n"),
             "{out:?}"
         );
     }

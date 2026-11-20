@@ -204,7 +204,7 @@ hermes-identity/
 default 档案即 `<Hermes 根>/skills` 目录。表示「已安装进 Hermes」的部署记录有两种等价写法：`hermes:default`
 与 Agent 目标 `agent:hermes`（`Target::HermesDefault` 在 Agent 维度就是 `hermes`，两者解析到同一目录，见
 `crates/core/src/deploy/targets.rs`）。各档案共用一份候选池：龙虾库中以上述任一写法记录的技能，按技能名去重；
-default 是否已安装以该目录下实际存在技能目录为准，不要求特定记录名（FR-026）。
+default 是否已安装以该目录下实际存在技能目录为准，不要求特定记录名。具名档案启用在该档案 `skills/<名>` 写入独立实体拷贝（不是符号链接），并登记本行；禁用删除该拷贝与本行，不改 default 目录。库内容经 `deploy sync` 更新 default 后，刷新未相对库内容改动的档案拷贝（保留 `.usage.json`），已改动的拷贝默认跳过（FR-026）。
 
 ### 2.3 `agents` — 本机 Agent 配置
 

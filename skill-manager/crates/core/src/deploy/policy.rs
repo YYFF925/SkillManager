@@ -10,6 +10,15 @@ use crate::vault::index::SkillEntry;
 /// Hermes default 档案对应的 Agent key（用于覆盖层维度与支持声明）。
 pub const HERMES_AGENT_KEY: &str = "hermes";
 
+/// 部署记录是否表示「已安装进 Hermes default 池」（`hermes:default` 与 `agent:hermes` 等价）。
+pub fn is_hermes_pool_target(target: &str) -> bool {
+    match target.parse::<Target>() {
+        Ok(Target::HermesDefault) => true,
+        Ok(Target::Agent { key }) => key == HERMES_AGENT_KEY,
+        _ => false,
+    }
+}
+
 /// 该目标在覆盖层与支持声明中使用的 Agent 维度；`None` 表示通用（共享目录）。
 pub fn agent_dimension(target: &Target) -> Option<&str> {
     match target {
@@ -130,8 +139,14 @@ mod tests {
     #[test]
     fn undeclared_support_is_all_within_domain() {
         let e = entry(None, None);
-        assert_eq!(support_admission(&e, &agent("codex"), "macos"), Admission::Allowed);
-        assert_eq!(support_admission(&e, &Target::Shared, "macos"), Admission::Allowed);
+        assert_eq!(
+            support_admission(&e, &agent("codex"), "macos"),
+            Admission::Allowed
+        );
+        assert_eq!(
+            support_admission(&e, &Target::Shared, "macos"),
+            Admission::Allowed
+        );
     }
 
     #[test]
@@ -146,7 +161,10 @@ mod tests {
     #[test]
     fn narrowed_agent_list_filters_targets() {
         let e = entry(Some(vec!["zcode".to_string()]), None);
-        assert_eq!(support_admission(&e, &agent("zcode"), "macos"), Admission::Allowed);
+        assert_eq!(
+            support_admission(&e, &agent("zcode"), "macos"),
+            Admission::Allowed
+        );
         assert!(matches!(
             support_admission(&e, &agent("codex"), "macos"),
             Admission::Unsupported(_)
@@ -160,7 +178,10 @@ mod tests {
     #[test]
     fn os_declaration_filters_current_system() {
         let e = entry(None, Some(vec!["macos".to_string()]));
-        assert_eq!(support_admission(&e, &agent("codex"), "macos"), Admission::Allowed);
+        assert_eq!(
+            support_admission(&e, &agent("codex"), "macos"),
+            Admission::Allowed
+        );
         assert!(matches!(
             support_admission(&e, &agent("codex"), "windows"),
             Admission::Unsupported(_)

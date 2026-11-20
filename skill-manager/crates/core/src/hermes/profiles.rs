@@ -200,10 +200,11 @@ pub fn resolve_profile(root: &Path, name: &str) -> Result<ProfileInfo> {
     }
     let home = named_profile_home(root, name);
     if !home.is_dir() {
-        return Err(CoreError::other(format!(
-            "档案不存在：{name}（{}）",
-            home.display()
-        )));
+        let mut message = format!("档案不存在：{name}（{}）", home.display());
+        if let Some(hint) = nested_profile_home_hint(root, name) {
+            message.push_str(&hint);
+        }
+        return Err(CoreError::other(message));
     }
     if !has_identity(&home) {
         return Err(CoreError::other(format!(
@@ -224,6 +225,31 @@ pub fn resolve_profile(root: &Path, name: &str) -> Result<ProfileInfo> {
         skills_dir: home.join("skills"),
         home,
     })
+}
+
+/// `HERMES_HOME` 被设成某个 `profiles/<档案>` 时，查找其他档案会落到错误路径。
+/// 不自动回退到父级根，只给出可定位提示。
+fn nested_profile_home_hint(root: &Path, missing_name: &str) -> Option<String> {
+    let parent = root.parent()?;
+    if parent.file_name()?.to_str()? != PROFILES_DIR {
+        return None;
+    }
+    let hermes_root = parent.parent()?;
+    let candidate = hermes_root.join(PROFILES_DIR).join(missing_name);
+    if candidate.is_dir() {
+        Some(format!(
+            "；当前 HERMES_HOME 像是某个档案目录（{}）。请把它设成 Hermes 根（{}），该档案在 {}",
+            root.display(),
+            hermes_root.display(),
+            candidate.display()
+        ))
+    } else {
+        Some(format!(
+            "；当前 HERMES_HOME 像是某个档案目录（{}）。具名档案应位于 Hermes 根下的 profiles/<名>，请把 HERMES_HOME 设为 {}（不要设成某个 profiles/<档案>）",
+            root.display(),
+            hermes_root.display()
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -291,5 +317,15 @@ mod tests {
         assert!(resolve_profile(dir.path(), "sideeffect").is_err());
         assert!(resolve_profile(dir.path(), "gone").is_err());
         assert!(resolve_profile(dir.path(), "Bad").is_err());
+    }
+
+    #[test]
+    fn missing_profile_hints_when_hermes_home_is_a_named_profile() {
+        let dir = root();
+        let nested = dir.path().join("profiles/blank");
+        let err = resolve_profile(&nested, "drawing").unwrap_err().to_string();
+        assert!(err.contains("档案不存在：drawing"), "{err}");
+        assert!(err.contains("HERMES_HOME 像是某个档案目录"), "{err}");
+        assert!(err.contains(&dir.path().display().to_string()), "{err}");
     }
 }

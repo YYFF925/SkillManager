@@ -18,9 +18,9 @@ pub struct HermesEnable {
 impl StateStore {
     /// 某档案的启用技能引用，按名称排序。
     pub fn hermes_enables(&self, profile: &str) -> Result<Vec<(Domain, String)>> {
-        let mut stmt = self
-            .connection()
-            .prepare("SELECT domain, name FROM hermes_enables WHERE profile = ?1 ORDER BY domain, name")?;
+        let mut stmt = self.connection().prepare(
+            "SELECT domain, name FROM hermes_enables WHERE profile = ?1 ORDER BY domain, name",
+        )?;
         let rows = stmt.query_map([profile], |row| {
             let domain_raw: String = row.get(0)?;
             let name: String = row.get(1)?;
@@ -30,9 +30,31 @@ impl StateStore {
         for row in rows {
             let (domain_raw, name) = row?;
             let domain = domain_raw.parse::<Domain>().map_err(|err| {
-                CoreError::State(format!("hermes_enables 中存在未知管理域 {domain_raw}：{err}"))
+                CoreError::State(format!(
+                    "hermes_enables 中存在未知管理域 {domain_raw}：{err}"
+                ))
             })?;
             out.push((domain, name));
+        }
+        Ok(out)
+    }
+
+    /// 已为该技能启用具名档案的档案 id 列表。
+    pub fn hermes_profiles_enabling(&self, domain: Domain, name: &str) -> Result<Vec<String>> {
+        let mut stmt = self.connection().prepare(
+            "SELECT profile, name FROM hermes_enables WHERE domain = ?1 ORDER BY profile",
+        )?;
+        let rows = stmt.query_map([domain.as_str()], |row| {
+            let profile: String = row.get(0)?;
+            let stored: String = row.get(1)?;
+            Ok((profile, stored))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (profile, stored) = row?;
+            if names_equal(&stored, name) {
+                out.push(profile);
+            }
         }
         Ok(out)
     }
@@ -61,12 +83,7 @@ impl StateStore {
     }
 
     /// 删除一条启用记录；返回是否实际删除。
-    pub fn remove_hermes_enable(
-        &self,
-        profile: &str,
-        domain: Domain,
-        name: &str,
-    ) -> Result<bool> {
+    pub fn remove_hermes_enable(&self, profile: &str, domain: Domain, name: &str) -> Result<bool> {
         let affected = self.connection().execute(
             "DELETE FROM hermes_enables WHERE profile = ?1 AND domain = ?2 AND name = ?3",
             rusqlite::params![profile, domain.as_str(), name],
@@ -95,14 +112,28 @@ mod tests {
             .unwrap();
 
         assert_eq!(store.hermes_enables("blank").unwrap().len(), 1);
-        assert!(store.hermes_enabled("blank", Domain::Lobster, "ALPHA").unwrap());
+        assert!(
+            store
+                .hermes_enabled("blank", Domain::Lobster, "ALPHA")
+                .unwrap()
+        );
         assert_eq!(store.hermes_enable_count("drawing").unwrap(), 1);
+        assert_eq!(
+            store
+                .hermes_profiles_enabling(Domain::Lobster, "alpha")
+                .unwrap(),
+            vec!["blank".to_string()]
+        );
 
         assert!(
             store
                 .remove_hermes_enable("blank", Domain::Lobster, "alpha")
                 .unwrap()
         );
-        assert!(!store.hermes_enabled("blank", Domain::Lobster, "alpha").unwrap());
+        assert!(
+            !store
+                .hermes_enabled("blank", Domain::Lobster, "alpha")
+                .unwrap()
+        );
     }
 }

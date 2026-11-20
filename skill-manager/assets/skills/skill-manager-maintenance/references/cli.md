@@ -152,6 +152,8 @@ deploy status [--target <target>] [--paused]
 - 遇受管副本外改：普通部署/同步暂停该项（`paused_local_change`），其余继续。
   用户裁决后按库覆盖用 `sync --ref <ref> --target <target> --overwrite-local`；
   确认丢弃待清理副本用 `undo ... --discard-local-changes`。
+- `deploy sync --ref` 在技能不存在时失败；带 `--target` 却没有匹配记录时失败，不会空成功。仅 `--ref` 且技能存在但尚无部署记录时仍可空成功。
+- `skill delete --json` 的 `data` 含 `deleted`、`cleanup`、`paused`。
 - `deploy preset` 按当前成员**叠加**部署；`undo-preset` 按成员逐个撤销（缺失成员报告后其余继续），
   都不追踪来源预设或引用计数。
 
@@ -208,6 +210,8 @@ hermes identity distribute
 ```
 
 `default` 档案即部署记录（`hermes:default`）；其他档案的启用是本机状态，内容更新不重置。
+具名档案 `enable` 写入独立实体拷贝（不是符号链接）；`disable` 只删该档案拷贝，不改 default 池。
+`HERMES_HOME` 必须指向 Hermes 根（含 `skills/` 与 `profiles/`），不要设成某个 `profiles/<档案>`。
 `read` 读取档案内实际正文或文件，未入库技能也可先查看；阅读不收编，不改变库、部署或启用名单。
 `identity get` 返回源内容与按「专属在前、全局在后」拼接的合成预览；`set` 写入库内 `hermes-identity/` 后立即按同一顺序无条件覆盖本机全部已发现档案的 `SOUL.md`；空合成写成空文件。`distribute` 不改源，只按当前源刷新。不创建档案、不改启用名单。
 
@@ -271,3 +275,4 @@ settings capacity
   不提供上传诊断。
 - `settings capacity` 输出库总占用与较大技能排行；空库返回 0 与空排行。与 GUI 设置页共用同一 core。
 - Hermes 根不在这里设置：按 `HERMES_HOME` 环境变量与平台默认解析（`hermes profiles` 报出实际根）。
+  `HERMES_HOME` 指向某个 `profiles/<档案>` 时不会自动改用上一级根，查找其他档案会失败并提示把变量改成 Hermes 根。

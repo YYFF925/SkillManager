@@ -6,14 +6,15 @@
 use std::path::PathBuf;
 
 use crate::deploy::compose::remove_path;
+use crate::deploy::policy::is_hermes_pool_target;
 use crate::domain::SkillRef;
 use crate::error::{CoreError, Result};
 use crate::output::ItemError;
 use crate::state::deployments::DeploymentStatus;
 
 use super::apply::{
-    dedup_targets, DeployItemView, DeployReport, DeploymentService, SkillArchiveDeleteOutcome,
-    SkillArchiveOutcome, SkillDeleteOutcome, SkillRestoreOutcome,
+    DeployItemView, DeployReport, DeploymentService, SkillArchiveDeleteOutcome,
+    SkillArchiveOutcome, SkillDeleteOutcome, SkillRestoreOutcome, dedup_targets,
 };
 
 impl DeploymentService<'_> {
@@ -47,6 +48,9 @@ impl DeploymentService<'_> {
                         return Err(CoreError::other(
                             "受管副本已被外部修改，撤销暂停；确认丢弃请加 --discard-local-changes",
                         ));
+                    }
+                    if is_hermes_pool_target(&record.target) {
+                        self.remove_hermes_profile_copies(&reference.name)?;
                     }
                     remove_path(&path)?;
                     self.state
@@ -90,6 +94,9 @@ impl DeploymentService<'_> {
                     return Err(CoreError::other(
                         "库已删除、该副本清理暂停（副本已被外部修改）；请检查后继续清理",
                     ));
+                }
+                if is_hermes_pool_target(&record.target) {
+                    self.remove_hermes_profile_copies(&record.name)?;
                 }
                 remove_path(&path)?;
                 self.state

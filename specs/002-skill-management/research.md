@@ -296,9 +296,9 @@ spec.md FR-041/FR-042、US8 场景 1～3；data-model §2.1/§2.3。
 - **证据**：`agent/skill_utils.py:357-384` `get_external_skills_dirs()`：`skills.external_dirs` 挂载**整个目录**（只读，本地优先）；`hermes-integration.md` 亦记录该点。
 - **证据（多种配置形态）**：`hermes_cli/skills_config.py:313-333` `parse_config_string_list` / `_normalize_string_set`：`disabled` 可能是 YAML 列表、JSON/Python 风格列表字符串或单个标量字符串，`null` 视为空。
 - **结论（本项目协议）**：
-  - 具名档案的“明确启用”= 在该档案 `skills/` 下建立指向 **default 共享副本** 的**符号链接** `<profile>/skills/<名>` → `<root>/skills/<名>`；同时确认该名字**不在**该档案的 `disabled` 名单内。禁用 = 移除该链接（内容从该档案消失，Hermes 不再加载）。
+  - 具名档案的“明确启用”= 把 **default 共享副本** 复制为该档案下的**独立实体目录** `<profile>/skills/<名>`（不是符号链接）；同时确认该名字**不在**该档案的 `disabled` 名单内。禁用 = 移除该拷贝（内容从该档案消失，Hermes 不再加载），不改 default 池。
   - **不采用** `external_dirs` 整目录挂载：它会让以后新增到 default 的技能对该档案**自动可见**，与“新增不自动启用其他档案”（FR-026/US6-1）冲突。
-  - 符号链接使“所有档案共用库内一份技能内容”（US6、FR-026）成立；`followlinks=True` 保证 Hermes 能发现链接技能；内容更新发生在共享副本上，档案启用选择不重置（US6-2）。
+  - 独立拷贝使 Hermes `curator lock`（`Path.rglob` 不跟随符号链接）能锁住该档案会话内的技能；库内容更新经 `deploy sync` 刷新未改动的拷贝，档案启用选择不重置（US6-2）。遗留符号链接在再次启用或同步时改写成实体拷贝。
   - **不写用户 `config.yaml`**：启用/禁用不依赖写 `disabled`（可见性由链接表达）；而本机 `config.yaml` 为 12 万字节级、含大量注释，`hermes_cli/config.py:2509-2550` `save_config()` 用 ruamel 保注释 + 原子替换 + **读失败即拒绝写**（`require_readable_config_before_write`/`_refuse_failed_read`）。用不支持注释保留的 YAML 库整份重写会破坏用户其他设置与注释，后果不可接受（宪章 VI）。故本项目**只读** `disabled` 名单用于状态判定与诚实报告；若该名字在档案 `disabled` 中被 Hermes 显式禁用，启用会**如实报告并阻止**（不伪造成功），不擅自改写用户配置。
   - **读失败与不存在区分**：`config.yaml` 不存在 = 无名单（合法空）；存在但读不了 = 报错并在结果中标注“档案配置读取失败，启用状态不作有效结论”，不折叠成“全未禁用”。
 
@@ -344,7 +344,7 @@ spec.md FR-041/FR-042、US8 场景 1～3；data-model §2.1/§2.3。
 - **识别谓词**（与库内扫描一致）：`is_dir() && 存在精确文件名 SKILL.md 或 skill.md`；
   `SKILL.md` 在前、命中即**不向下递归**；`README.md`/`CLAUDE.md` 不作标记。
 - **扫描范围**：跳过 `.git`、`node_modules`、`__pycache__`；不跟随符号链接；深度上限 8（防链接环/异常深树）。
-- **主动排除路径（FR-058）**：相对仓库根为 `.agents/skills` 或其子路径的目录**不是可入库候选**，也不再向下扫描。
+- **主动排除路径（FR-058）**：任意深度路径分量连续为 `.agents` 再 `skills` 的目录**不是可入库候选**，也不再向下扫描（含仓库根 `.agents/skills/` 与嵌套 `vendor/.agents/skills/`；不含单数 `.agent/skills`）。
   首次引入与后来新增共用同一发现结果。这不是用户声明的排除清单，也不写入 `rejected_subpaths`。
 - **候选**：`{ subpath（`/` 分隔，仓库根自身即技能时为 `.`）, name = 目录名（目录身份，**不采用 frontmatter 的
   `name` 替代**）, description（仅展示） }`；**单个候选也列出**；用户指定子路径不存在时错误，**不回退仓库根**。

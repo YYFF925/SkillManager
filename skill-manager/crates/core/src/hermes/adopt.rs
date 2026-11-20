@@ -3,20 +3,21 @@
 //! 把档案目录中未受管的独有技能收编到龙虾库并部署到 default 档案，**原档案启用状态保持不变**。
 //! 复用 US1 的扫描/资料读写、`vault::manage::ensure_unique_name`（同域同名阻止）与
 //! US3 的 `DeploymentService::deploy_to`（副本接管/部署）。不依赖 US2 的上游获取，
-//! 不创建第二套库内技能内容。收编完成后档案目录成为指向 default 共享副本的链接，
-//! 使“所有档案共用库内一份技能内容”成立；内容已先复制进库与 default，不会丢失。
+//! 不创建第二套库内技能内容。收编完成后档案目录保留为独立实体拷贝（与明确启用相同），
+//! 并登记启用名单；内容已先复制进库与 default，不会丢失。
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
 use crate::deploy::DeploymentService;
-use crate::domain::{names_equal, validate_skill_name, Domain, SkillRef, Target};
+use crate::deploy::compose::replace_dir_from;
+use crate::domain::{Domain, SkillRef, Target, names_equal, validate_skill_name};
 use crate::error::{CoreError, Result};
 use crate::vault::manage::ensure_unique_name;
 
 use super::disabled::read_disabled;
-use super::enables::{create_dir_symlink, link_state, scan_skill_dirs, HermesService, LinkState};
+use super::enables::{HermesService, LinkState, link_state, scan_skill_dirs};
 use super::profiles::resolve_profile;
 
 /// 收编的逐项结果。
@@ -126,10 +127,10 @@ impl<'a> HermesService<'a> {
             )));
         }
 
-        // 档案目录改为指向 default 共享副本的链接；内容已进库与 default，不会丢失。
+        // 档案目录改为独立实体拷贝（与明确启用相同）；内容已进库与 default，不会丢失。
         let copy = self.default_skills_dir().join(name);
         std::fs::remove_dir_all(&source).map_err(|err| CoreError::io(source.clone(), err))?;
-        create_dir_symlink(&copy, &source).map_err(|err| CoreError::io(source.clone(), err))?;
+        replace_dir_from(&copy, &source)?;
 
         // 启用状态保持不变：该档案未把此技能列入 Hermes 禁用名单时登记本机启用名单。
         let disabled = read_disabled(&resolve_profile(self.root(), profile)?.home);

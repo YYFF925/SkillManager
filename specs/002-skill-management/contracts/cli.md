@@ -70,7 +70,7 @@ skill rejected [--repo <url>] [--domain <domain>]
 skill skip <ref> [--version <commit-oid>] | skill unskip <ref> | skill skipped
 ```
 
-- 来源候选按上游子路径选择，保留其技能原名；`preview` / `import` / 上游新增列出的候选均已跳过相对仓库根 `.agents/skills/`（FR-058），该路径下的技能不出现在输出中。多技能仓库默认分类按**跳过之后**的候选数量决定，CLI 由 Agent 与用户确认分类后传入；只剩一个候选时默认不分类。`--uncategorized` 可显式选择不分类。指定 `--skills` 若落在该排除路径下，按不是技能报错，不回退仓库根。
+- 来源候选按上游子路径选择，保留其技能原名；`preview` / `import` / 上游新增列出的候选均已跳过任意深度 `.agents/skills/`（FR-058），该路径下的技能不出现在输出中。多技能仓库默认分类按**跳过之后**的候选数量决定，CLI 由 Agent 与用户确认分类后传入；只剩一个候选时默认不分类。`--uncategorized` 可显式选择不分类。指定 `--skills` 若落在该排除路径下，按不是技能报错，不回退仓库根。
 - `preview/import` 显示真实 Git 进度，Ctrl-C 取消本次获取；`--json` 的最终结果在标准输出，进度在标准错误，Tauri 使用同一核心的进度事件。
 - `adopt` 的 `<target>` 接受内置 Agent key 或 `shared`；管理域由目标所属域决定，共享目标进入编码库并接管原共享部署。批量不同资料使用 `--metadata-file`，按技能名给各自管理资料，公共参数只能表示用户明确要求的共用值。收编不强制来源，不新增其他目标的首次部署。
 - 来源/采用版本记录随唯一 SkillManagerVault 跨机共享。另一机 `sync pull` 不重新执行 import；`skill check/update` 依据技能来源检查和获取上游 B。
@@ -91,7 +91,9 @@ deploy status [--target <target>] [--paused]
 
 - `--also-target` 指定本次其他目标，支持一次多技能至多目标，以及预设至多目标；每个技能/目标组合复用同一准入、暂停和结果表达，不增加批次实体或整批回滚。未传则只处理一个目标。
 - 普通部署/同步/撤销遇受管副本外改均暂停该项。Agent 整理并获得用户裁决后，可对明确的单项 `--ref` 与 `--target` 使用 `sync --overwrite-local` 按库覆盖；确认丢弃待清理副本时可显式 `undo --discard-local-changes`。这是执行裁决的参数，不是自动合并或冲突分析功能；GUI 给出暂停信息和外部维护任务，不提供内置合并界面。
+- `deploy sync --ref` 在技能不存在时必须失败。带 `--target` 却没有任何匹配的本机部署记录必须失败，不得返回空的 `success`。仅 `--ref` 且技能存在、但该技能尚无部署记录时仍可为空成功（例如刚入库尚未部署）。未带过滤条件且本机没有任何部署记录时仍可为空成功。
 - 撤销保留库技能。库技能已删除而副本暂停时，仍可按本机记录定位并继续清理；记录在副本成功移除后才删除。
+- `skill delete --json` 的 `data` 含 `deleted`、`cleanup` 与 `paused`（清理因外改暂停的项）；`paused` 同时出现在 `errors[]`。
 
 ### preset — 预设
 
@@ -118,7 +120,8 @@ hermes identity set global|<profile> (--file <path> | --stdin)
 hermes identity distribute
 ```
 
-只管理现有单根下的档案技能；default 部署与其他档案明确启用分开。启用沿用龙虾域/支持声明，新内容不重置已有选择。
+只管理现有单根下的档案技能；default 部署与其他档案明确启用分开。具名档案启用写入独立实体拷贝（不是符号链接）；禁用只删该档案拷贝，不改 default 池。启用沿用龙虾域/支持声明，新内容不重置已有选择。
+`HERMES_HOME` 必须指向 Hermes 根（含 `skills/` 与 `profiles/`），不要设成某个 `profiles/<档案>`；指错时查找其他档案报「档案不存在」并提示应改成根目录，不自动回退。
 `read` 只读该档案的实际技能正文或目录内文件；不要求先收编，不改变库、部署或启用名单。
 `identity get` 返回该作用域的源内容（`hermes-identity/global.md` 或 `hermes-identity/<profile>.md`；文件不存在按空内容）以及按拼接规则得到的合成预览；`identity set` 写入源后立即按「专属在前、全局在后」无条件覆盖本机**全部已发现档案**的 `<home>/SOUL.md`，空合成写成空文件。单档案写入失败不中断其余，逐项如实报告。`distribute` 不改源，只按当前源刷新。不创建档案、不改启用名单、不改显示名读取链。
 

@@ -4,9 +4,7 @@
 
 use clap::{Args, Subcommand};
 use serde_json::{Value, json};
-use skill_manager_core::deploy::{
-    DeployReport, DeploymentService, TargetResolver,
-};
+use skill_manager_core::deploy::{DeployReport, DeploymentService, TargetResolver};
 use skill_manager_core::domain::{Domain, SkillRef, Target};
 use skill_manager_core::output::BatchOutcome;
 use skill_manager_core::{AppContext, CliResult, CoreError, GlobalOptions, ItemError};
@@ -292,6 +290,7 @@ pub fn delete_skills(ctx: &AppContext, references: &[SkillRef]) -> Result<(CliRe
     let data = json!({
         "deleted": outcome.deleted,
         "cleanup": outcome.removed,
+        "paused": outcome.paused,
     });
 
     let mut human = format!(

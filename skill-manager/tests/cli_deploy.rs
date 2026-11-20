@@ -10,18 +10,43 @@ fn batch_deployment_continues_after_target_write_error() {
     let blocked = env.root.path().join("blocked");
     std::fs::write(&blocked, "不是目录").unwrap();
     let good = env.root.path().join("good");
-    env.cli_json(&["agent", "set-dir", "codex", "--skills", blocked.to_str().unwrap()]);
-    env.cli_json(&["agent", "set-dir", "zcode", "--skills", good.to_str().unwrap()]);
-    let (code, result) = env.cli_json_raw(&["deploy", "to", "codex", "code/alpha", "--also-target", "zcode"]);
+    env.cli_json(&[
+        "agent",
+        "set-dir",
+        "codex",
+        "--skills",
+        blocked.to_str().unwrap(),
+    ]);
+    env.cli_json(&[
+        "agent",
+        "set-dir",
+        "zcode",
+        "--skills",
+        good.to_str().unwrap(),
+    ]);
+    let (code, result) = env.cli_json_raw(&[
+        "deploy",
+        "to",
+        "codex",
+        "code/alpha",
+        "--also-target",
+        "zcode",
+    ]);
     assert_eq!(code, 2, "{result}");
     assert_eq!(result["data"]["items"][0]["target"], "agent:zcode");
     assert_eq!(result["errors"][0]["target"], "agent:codex");
     assert!(good.join("alpha/SKILL.md").exists());
     let diagnostics = env.cli_json(&["settings", "diagnostics"]);
     let logs = diagnostics["recent_logs"].as_array().unwrap();
-    let failure = logs.iter().find(|entry| entry["action"] == "deploy").unwrap();
+    let failure = logs
+        .iter()
+        .find(|entry| entry["action"] == "deploy")
+        .unwrap();
     let message = failure["message"].as_str().unwrap();
-    assert!(message.contains("blocked") && message.contains("agent:codex"), "{failure}");
+    assert!(
+        message.contains("blocked") && message.contains("agent:codex"),
+        "{failure}"
+    );
     assert!(!failure["at"].as_str().unwrap().is_empty());
 }
 
@@ -35,8 +60,20 @@ fn seed(env: &TestEnv) {
         "alpha",
         "---\nname: alpha\ndescription: 解析依赖\n---\n原库内正文\n",
     );
-    env.write_manager("code", Some("工具"), "alpha", "meta.yaml", "comment: 检查依赖\n");
-    env.write_manager("code", Some("工具"), "alpha", "overlay/_/_/notes.txt", "通用补充\n");
+    env.write_manager(
+        "code",
+        Some("工具"),
+        "alpha",
+        "meta.yaml",
+        "comment: 检查依赖\n",
+    );
+    env.write_manager(
+        "code",
+        Some("工具"),
+        "alpha",
+        "overlay/_/_/notes.txt",
+        "通用补充\n",
+    );
 
     env.write_skill("code", None, "beta", "beta 正文\n");
     env.write_skill("lobster", None, "omega", "龙虾技能\n");
@@ -70,9 +107,15 @@ flag: \"no\" # 上游注释\n\
         "flag: \"no\" # 上游注释\n",
         "---\n正文\n",
     ] {
-        assert!(first.contains(kept), "部署副本应原样保留 {kept:?}：\n{first}");
+        assert!(
+            first.contains(kept),
+            "部署副本应原样保留 {kept:?}：\n{first}"
+        );
     }
-    assert!(first.contains("description: 检查｜Probe skill\n"), "{first}");
+    assert!(
+        first.contains("description: 检查｜Probe skill\n"),
+        "{first}"
+    );
 
     // 再次部署（sync 全量）后产物字节一致。
     let (code, _) = env.cli_json_raw(&["deploy", "sync"]);
@@ -156,7 +199,8 @@ fn sync_updates_existing_deployments_without_adding_targets() {
     );
     let (code, result) = env.cli_json_raw(&["deploy", "sync"]);
     assert_eq!(code, 0, "{result}");
-    let entry = std::fs::read_to_string(deployed(&env, ".codex/skills", "alpha").join("SKILL.md")).unwrap();
+    let entry =
+        std::fs::read_to_string(deployed(&env, ".codex/skills", "alpha").join("SKILL.md")).unwrap();
     assert!(entry.contains("新库内正文"), "{entry}");
 
     // beta 无记录：同步不得产生首次部署。
@@ -169,9 +213,7 @@ fn sync_updates_existing_deployments_without_adding_targets() {
 fn local_change_pauses_that_item_and_the_rest_continue() {
     let env = TestEnv::new();
     seed(&env);
-    let (code, _) = env.cli_json_raw(&[
-        "deploy", "to", "codex", "code/alpha", "code/beta",
-    ]);
+    let (code, _) = env.cli_json_raw(&["deploy", "to", "codex", "code/alpha", "code/beta"]);
     assert_eq!(code, 0, "批量部署应成功");
 
     // 外部修改 alpha 的受管副本。
@@ -182,7 +224,9 @@ fn local_change_pauses_that_item_and_the_rest_continue() {
     assert_eq!(code, 2, "存在暂停项时应为部分完成：{result}");
     let messages = failures(&result);
     assert!(
-        messages.iter().any(|m| m.contains("外部修改") && m.contains("alpha")),
+        messages
+            .iter()
+            .any(|m| m.contains("外部修改") && m.contains("alpha")),
         "{messages:?}"
     );
     // 手改副本未被覆盖。
@@ -204,7 +248,13 @@ fn local_change_pauses_that_item_and_the_rest_continue() {
 
     // 用户裁决后显式按库覆盖。
     let (code, result) = env.cli_json_raw(&[
-        "deploy", "sync", "--ref", "code/alpha", "--target", "codex", "--overwrite-local",
+        "deploy",
+        "sync",
+        "--ref",
+        "code/alpha",
+        "--target",
+        "codex",
+        "--overwrite-local",
     ]);
     assert_eq!(code, 0, "{result}");
     assert!(
@@ -226,7 +276,10 @@ fn undo_removes_copy_and_keeps_library_skill() {
     let (code, result) = env.cli_json_raw(&["deploy", "undo", "codex", "code/alpha"]);
     assert_eq!(code, 0, "{result}");
     assert!(!deployed(&env, ".codex/skills", "alpha").exists());
-    assert!(env.path("code/工具/alpha/SKILL.md").exists(), "库内技能必须保留");
+    assert!(
+        env.path("code/工具/alpha/SKILL.md").exists(),
+        "库内技能必须保留"
+    );
     let status = env.cli_json(&["deploy", "status"]);
     assert!(status["deployments"].as_array().unwrap().is_empty());
 }
@@ -236,7 +289,12 @@ fn skill_delete_cleans_copies_and_library_entry() {
     let env = TestEnv::new();
     seed(&env);
     let (code, _) = env.cli_json_raw(&[
-        "deploy", "to", "codex", "code/alpha", "--also-target", "zcode",
+        "deploy",
+        "to",
+        "codex",
+        "code/alpha",
+        "--also-target",
+        "zcode",
     ]);
     assert_eq!(code, 0, "多目标部署应成功");
 
@@ -260,9 +318,21 @@ fn skill_delete_keeps_externally_changed_copy_and_reports_pause() {
 
     let (code, result) = env.cli_json_raw(&["skill", "delete", "code/alpha"]);
     assert_eq!(code, 2, "清理暂停应如实报告为部分完成：{result}");
+    let paused = result["data"]["paused"]
+        .as_array()
+        .expect("skill delete JSON 应带 paused");
+    assert_eq!(paused.len(), 1, "{result}");
+    assert!(
+        paused[0]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("库已删除") && m.contains("暂停")),
+        "{result}"
+    );
     let messages = failures(&result);
     assert!(
-        messages.iter().any(|m| m.contains("库已删除") && m.contains("暂停")),
+        messages
+            .iter()
+            .any(|m| m.contains("库已删除") && m.contains("暂停")),
         "{messages:?}"
     );
     assert!(!env.path("code/工具/alpha").exists(), "库内条目仍应删除");
@@ -275,7 +345,11 @@ fn skill_delete_keeps_externally_changed_copy_and_reports_pause() {
 
     // 用户裁决后显式丢弃待清理副本。
     let (code, result) = env.cli_json_raw(&[
-        "deploy", "undo", "codex", "code/alpha", "--discard-local-changes",
+        "deploy",
+        "undo",
+        "codex",
+        "code/alpha",
+        "--discard-local-changes",
     ]);
     assert_eq!(code, 0, "{result}");
     assert!(!copy.exists());
@@ -287,17 +361,41 @@ fn skill_delete_keeps_externally_changed_copy_and_reports_pause() {
 fn multi_skill_multi_target_filters_each_pair_and_continues() {
     let env = TestEnv::new();
     seed(&env);
-    env.write_manager("code", Some("工具"), "alpha", "meta.yaml", "comment: 检查依赖\nagents: [zcode]\n");
+    env.write_manager(
+        "code",
+        Some("工具"),
+        "alpha",
+        "meta.yaml",
+        "comment: 检查依赖\nagents: [zcode]\n",
+    );
 
     let (code, result) = env.cli_json_raw(&[
-        "deploy", "to", "codex", "code/alpha", "code/beta", "--also-target", "zcode",
+        "deploy",
+        "to",
+        "codex",
+        "code/alpha",
+        "code/beta",
+        "--also-target",
+        "zcode",
     ]);
     assert_eq!(code, 2, "逐项过滤应整体报告部分完成：{result}");
     let items = item_skills(&result["data"]["items"]);
-    assert!(items.contains(&"code/beta/agent:codex".to_string()), "{items:?}");
-    assert!(items.contains(&"code/beta/agent:zcode".to_string()), "{items:?}");
-    assert!(items.contains(&"code/alpha/agent:zcode".to_string()), "{items:?}");
-    assert!(!items.contains(&"code/alpha/agent:codex".to_string()), "{items:?}");
+    assert!(
+        items.contains(&"code/beta/agent:codex".to_string()),
+        "{items:?}"
+    );
+    assert!(
+        items.contains(&"code/beta/agent:zcode".to_string()),
+        "{items:?}"
+    );
+    assert!(
+        items.contains(&"code/alpha/agent:zcode".to_string()),
+        "{items:?}"
+    );
+    assert!(
+        !items.contains(&"code/alpha/agent:codex".to_string()),
+        "{items:?}"
+    );
     let messages = failures(&result);
     assert!(
         messages.iter().any(|m| m.contains("禁止新增部署")),
@@ -312,10 +410,45 @@ fn multi_skill_multi_target_filters_each_pair_and_continues() {
 fn removed_preview_flag_is_rejected() {
     let env = TestEnv::new();
     seed(&env);
-    for args in [vec!["deploy", "to", "codex", "code/alpha", "--dry-run"], vec!["deploy", "undo", "codex", "code/alpha", "--dry-run"]] {
+    for args in [
+        vec!["deploy", "to", "codex", "code/alpha", "--dry-run"],
+        vec!["deploy", "undo", "codex", "code/alpha", "--dry-run"],
+    ] {
         let output = env.cli(&args);
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("--dry-run"));
     }
-    assert!(env.cli_json(&["deploy", "status"])["deployments"].as_array().unwrap().is_empty());
+    assert!(
+        env.cli_json(&["deploy", "status"])["deployments"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn deploy_sync_fails_when_ref_missing_or_target_unmatched() {
+    let env = TestEnv::new();
+    seed(&env);
+
+    let (code, result) = env.cli_json_raw(&["deploy", "sync", "--ref", "code/alpha"]);
+    assert_eq!(code, 0, "技能存在但尚无部署记录应空成功：{result}");
+
+    env.cli_json(&["deploy", "to", "codex", "code/alpha"]);
+
+    let (code, result) = env.cli_json_raw(&["deploy", "sync", "--ref", "code/does-not-exist"]);
+    assert_ne!(code, 0, "不存在的技能不应空成功：{result}");
+    let messages = failures(&result);
+    assert!(
+        messages.iter().any(|m| m.contains("技能不存在")),
+        "{messages:?}"
+    );
+
+    let (code, result) = env.cli_json_raw(&["deploy", "sync", "--target", "zcode"]);
+    assert_ne!(code, 0, "无匹配记录的目标不应空成功：{result}");
+    let messages = failures(&result);
+    assert!(
+        messages.iter().any(|m| m.contains("没有匹配的部署记录")),
+        "{messages:?}"
+    );
 }

@@ -3,25 +3,28 @@
 //! 列表与安装分开：
 //! - 各档案的技能列表共用一份候选池——已从龙虾库安装进 Hermes 的技能。
 //! - 安装（部署）把副本放进 default；列表不按部署记录标识过滤。
-//! - 具名档案“明确启用”才把该技能装进该档案（指向 default 共享副本的符号链接）。
-//! - 禁用 = 移除该链接并删除本机启用名单条目；不改用户 `config.yaml`，只读其 `skills.disabled`。
+//! - 具名档案“明确启用”才把该技能装进该档案（从 default 共享副本做成独立实体拷贝，以便
+//!   Hermes `curator lock` 能锁住该档案内的技能；库更新经 `deploy sync` 刷新未改动的拷贝）。
+//! - 禁用 = 移除该档案内的启用拷贝并删除本机启用名单条目；不改 default 池，不改用户 `config.yaml`，只读其 `skills.disabled`。
 //! - 域与支持声明沿用 US3 的 `deploy::policy`（龙虾域；`hermes` Agent 维度）。
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::deploy::policy::{self, Admission, HERMES_AGENT_KEY};
-use crate::deploy::{current_os, TargetResolver};
-use crate::domain::{names_equal, validate_skill_name, Domain, SkillRef, Target};
+use crate::deploy::compose::hash_dir_excluding_sidecars;
+use crate::deploy::compose::replace_dir_from;
+use crate::deploy::policy::{self, Admission, HERMES_AGENT_KEY, is_hermes_pool_target};
+use crate::deploy::{TargetResolver, current_os};
+use crate::domain::{Domain, SkillRef, Target, names_equal, validate_skill_name};
 use crate::error::{CoreError, Result};
 use crate::state::StateStore;
 use crate::vault::index::{CategoryFilter, SearchQuery, SkillEntry, SkillIndex};
 use crate::vault::scan;
 
-use super::disabled::{read_disabled, DisabledState};
+use super::disabled::{DisabledState, read_disabled};
 use super::hermes_home;
-use super::profiles::{discover_profiles, resolve_profile, ProfileInfo};
+use super::profiles::{ProfileInfo, discover_profiles, resolve_profile};
 
 /// 档案目录中外来副本来历：本管理器创建的链接。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,12 +66,12 @@ pub(crate) fn same_path(a: &Path, b: &Path) -> bool {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(test, unix))]
 pub(crate) fn create_dir_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(target, link)
 }
 
-#[cfg(windows)]
+#[cfg(all(test, windows))]
 pub(crate) fn create_dir_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
     // Windows 上可能因缺少权限失败；失败时如实报错，不静默降级为复制。
     std::os::windows::fs::symlink_dir(target, link)
@@ -172,11 +175,19 @@ pub struct HermesService<'a> {
 }
 
 impl<'a> HermesService<'a> {
-    pub fn read(&self, profile: &str, name: &str, file: Option<&str>) -> Result<crate::deploy::local_skills::LocalSkillRead> {
+    pub fn read(
+        &self,
+        profile: &str,
+        name: &str,
+        file: Option<&str>,
+    ) -> Result<crate::deploy::local_skills::LocalSkillRead> {
         validate_skill_name(name)?;
         let info = resolve_profile(self.root(), profile)?;
-        let path = scan_skill_dirs(&info.skills_dir).into_iter().find(|(found, _)| names_equal(found, name))
-            .map(|(_, path)| path).ok_or_else(|| CoreError::other(format!("档案中没有该技能：{profile}/{name}")))?;
+        let path = scan_skill_dirs(&info.skills_dir)
+            .into_iter()
+            .find(|(found, _)| names_equal(found, name))
+            .map(|(_, path)| path)
+            .ok_or_else(|| CoreError::other(format!("档案中没有该技能：{profile}/{name}")))?;
         crate::deploy::local_skills::read_skill_dir(&path, file)
     }
 
@@ -239,10 +250,7 @@ impl<'a> HermesService<'a> {
     }
 
     fn library(&self) -> Result<Option<SkillIndex>> {
-        self.vault_root
-            .as_ref()
-            .map(SkillIndex::build)
-            .transpose()
+        self.vault_root.as_ref().map(SkillIndex::build).transpose()
     }
 
     // -----------------------------------------------------------------------
@@ -342,11 +350,18 @@ impl<'a> HermesService<'a> {
             } else {
                 is_enabled(reference.domain, &name)
             };
+            let default_path = default_dir.join(&name);
+            let profile_path = info.skills_dir.join(&name);
+            let display_path = if !info.is_default() && enabled && profile_path.exists() {
+                profile_path.display().to_string()
+            } else {
+                default_path.display().to_string()
+            };
             let mut view = base_view(
                 name.clone(),
                 reference.domain,
                 entry,
-                Some(default_dir.join(&name).display().to_string()),
+                Some(display_path),
                 true,
                 enabled,
                 false,
@@ -488,26 +503,27 @@ impl<'a> HermesService<'a> {
                 )));
             }
             match link_state(&link) {
+                LinkState::Real if existing => {
+                    // 已是本管理器登记的实体拷贝：再次启用不覆盖档案内改动。
+                }
                 LinkState::Real => {
                     return Err(CoreError::other(format!(
-                        "档案目录已有同名技能（非管理器链接），未改动：{}",
+                        "档案目录已有同名技能（非本管理器安装的副本），未改动：{}",
                         link.display()
                     )));
                 }
-                LinkState::Symlink(target) if !same_path(&target, &copy) => {
+                LinkState::Symlink(target) if !existing && !same_path(&target, &copy) => {
                     return Err(CoreError::other(format!(
                         "档案内已有同名链接指向其他位置，未改动：{}",
                         link.display()
                     )));
                 }
                 LinkState::Missing | LinkState::Symlink(_) => {
-                    if matches!(link_state(&link), LinkState::Missing) {
-                        create_dir_symlink(&copy, &link).map_err(|err| {
-                            CoreError::io(link.clone(), err)
-                        })?;
-                    } else if !copy.is_dir() {
-                        return Err(CoreError::other("共享副本不可用"));
+                    if matches!(link_state(&link), LinkState::Symlink(_)) {
+                        std::fs::remove_file(&link)
+                            .map_err(|err| CoreError::io(link.clone(), err))?;
                     }
+                    replace_dir_from(&copy, &link)?;
                 }
             }
             self.state
@@ -520,24 +536,7 @@ impl<'a> HermesService<'a> {
             });
         }
 
-        match link_state(&link) {
-            LinkState::Symlink(target) if same_path(&target, &copy) => {
-                std::fs::remove_file(&link).map_err(|err| CoreError::io(link.clone(), err))?;
-            }
-            LinkState::Symlink(_) => {
-                return Err(CoreError::other(format!(
-                    "档案内链接指向其他位置，未改动：{}",
-                    link.display()
-                )));
-            }
-            LinkState::Real => {
-                return Err(CoreError::other(format!(
-                    "档案自有技能目录（非管理器链接），禁用不删除其内容：{}",
-                    link.display()
-                )));
-            }
-            LinkState::Missing => {}
-        }
+        uninstall_profile_skill(&link, &copy, existing)?;
         self.state
             .remove_hermes_enable(&info.name, Domain::Lobster, name)?;
         Ok(HermesItem {
@@ -662,38 +661,8 @@ impl<'a> HermesService<'a> {
                         },
                     }
                 } else {
-                    match state {
-                        LinkState::Real => HermesItem {
-                            name: name.clone(),
-                            ok: false,
-                            enabled: true,
-                            message: Some(format!(
-                                "档案自有技能目录（非管理器链接），禁用不删除其内容：{}",
-                                link.display()
-                            )),
-                        },
-                        LinkState::Symlink(_) => {
-                            if let Err(err) = std::fs::remove_file(&link) {
-                                HermesItem {
-                                    name: name.clone(),
-                                    ok: false,
-                                    enabled: true,
-                                    message: Some(
-                                        CoreError::io(link.clone(), err).to_string(),
-                                    ),
-                                }
-                            } else {
-                                self.state
-                                    .remove_hermes_enable(&info.name, Domain::Lobster, name)?;
-                                HermesItem {
-                                    name: name.clone(),
-                                    ok: true,
-                                    enabled: false,
-                                    message: None,
-                                }
-                            }
-                        }
-                        LinkState::Missing => {
+                    match uninstall_profile_skill(&link, &default_dir.join(name), in_state) {
+                        Ok(()) => {
                             self.state
                                 .remove_hermes_enable(&info.name, Domain::Lobster, name)?;
                             HermesItem {
@@ -703,6 +672,12 @@ impl<'a> HermesService<'a> {
                                 message: None,
                             }
                         }
+                        Err(err) => HermesItem {
+                            name: name.clone(),
+                            ok: false,
+                            enabled: true,
+                            message: Some(err.to_string()),
+                        },
                     }
                 };
                 items.push(item);
@@ -733,11 +708,103 @@ fn count_default_enabled(root: &Path, disabled: &DisabledState) -> usize {
 /// 部署目标是否表示「已安装进 Hermes」。
 /// Agent `hermes` 与 `hermes:default` 是同一次安装的记录名，不是两套列表。
 fn is_hermes_install(target: &str) -> bool {
-    match target.parse::<Target>() {
-        Ok(Target::HermesDefault) => true,
-        Ok(Target::Agent { key }) => key == HERMES_AGENT_KEY,
-        _ => false,
+    is_hermes_pool_target(target)
+}
+
+/// 移除本管理器为具名档案安装的启用拷贝（实体目录或遗留符号链接）。
+///
+/// 启用记录存在则实体目录视为我们的拷贝；无记录的实体目录不删除。
+fn uninstall_profile_skill(link: &Path, copy: &Path, in_state: bool) -> Result<()> {
+    match link_state(link) {
+        LinkState::Missing => Ok(()),
+        LinkState::Symlink(_) if in_state || is_our_link(link, copy) => {
+            std::fs::remove_file(link).map_err(|err| CoreError::io(link, err))
+        }
+        LinkState::Symlink(_) => Err(CoreError::other(format!(
+            "档案内链接指向其他位置，未改动：{}",
+            link.display()
+        ))),
+        LinkState::Real if in_state => {
+            std::fs::remove_dir_all(link).map_err(|err| CoreError::io(link, err))
+        }
+        LinkState::Real => Err(CoreError::other(format!(
+            "档案自有技能目录（非本管理器安装的副本），禁用不删除其内容：{}",
+            link.display()
+        ))),
     }
+}
+
+/// 库内容写入 Hermes default 之后，刷新各具名档案中未漂移的启用拷贝。
+///
+/// 档案内相对库内容已改动的拷贝默认跳过（保留 curator / 会话改写），`--overwrite-local` 才覆盖。
+/// `.usage.json` 不参与漂移判定，覆盖时保留，以便 `hermes curator lock` 继续有效。
+pub fn refresh_named_profile_copies(
+    state: &StateStore,
+    hermes_root: &Path,
+    name: &str,
+    source: &Path,
+    previous_content_hash: Option<&str>,
+    overwrite: bool,
+) -> Result<Vec<String>> {
+    let mut notes = Vec::new();
+    if !source.is_dir() {
+        return Ok(notes);
+    }
+    for profile in state.hermes_profiles_enabling(Domain::Lobster, name)? {
+        let Ok(info) = resolve_profile(hermes_root, &profile) else {
+            continue;
+        };
+        if info.is_default() {
+            continue;
+        }
+        let dest = info.skills_dir.join(name);
+        match link_state(&dest) {
+            LinkState::Symlink(_) | LinkState::Missing => {
+                replace_dir_from(source, &dest)?;
+                continue;
+            }
+            LinkState::Real => {}
+        }
+        let dest_hash = hash_dir_excluding_sidecars(&dest)?;
+        let source_hash = hash_dir_excluding_sidecars(source)?;
+        if dest_hash.as_deref() == source_hash.as_deref() {
+            continue;
+        }
+        let in_sync_with_old = match (dest_hash.as_deref(), previous_content_hash) {
+            (Some(current), Some(old)) => current == old,
+            _ => false,
+        };
+        if overwrite || in_sync_with_old {
+            replace_dir_from(source, &dest)?;
+        } else {
+            notes.push(format!(
+                "档案 {profile} 的 {name} 副本已相对库内容改动，未覆盖（确认按库覆盖请用 deploy sync --overwrite-local）"
+            ));
+        }
+    }
+    Ok(notes)
+}
+
+/// 从 Hermes default 卸载某技能时，同时去掉各具名档案中本管理器安装的启用拷贝与名单。
+pub fn remove_named_profile_copies(
+    state: &StateStore,
+    hermes_root: &Path,
+    name: &str,
+) -> Result<()> {
+    let copy = hermes_root.join("skills").join(name);
+    for profile in state.hermes_profiles_enabling(Domain::Lobster, name)? {
+        let Ok(info) = resolve_profile(hermes_root, &profile) else {
+            let _ = state.remove_hermes_enable(&profile, Domain::Lobster, name)?;
+            continue;
+        };
+        if info.is_default() {
+            continue;
+        }
+        let dest = info.skills_dir.join(name);
+        uninstall_profile_skill(&dest, &copy, true)?;
+        state.remove_hermes_enable(&profile, Domain::Lobster, name)?;
+    }
+    Ok(())
 }
 
 /// 各档案共用的候选池：已从龙虾库安装进 Hermes 的技能。
@@ -752,7 +819,10 @@ fn installed_hermes_skills(state: &StateStore) -> Vec<SkillRef> {
             continue;
         }
         let reference = record.reference();
-        if seen.iter().any(|existing| names_equal(existing, &reference.name)) {
+        if seen
+            .iter()
+            .any(|existing| names_equal(existing, &reference.name))
+        {
             continue;
         }
         seen.push(reference.name.clone());
@@ -831,7 +901,8 @@ fn apply_admission(
     let Some(entry) = entry else {
         return;
     };
-    if let Admission::Unsupported(reason) = policy::support_admission(entry, &Target::HermesDefault, os)
+    if let Admission::Unsupported(reason) =
+        policy::support_admission(entry, &Target::HermesDefault, os)
     {
         if enabled {
             view.warning = Some(format!("支持范围已收窄，已有启用保留并警告：{reason}"));
@@ -1082,10 +1153,17 @@ mod tests {
         let resolver = TargetResolver::new(home.path(), catalog);
         let service = HermesService::new(root, None, &resolver, &state);
 
-        let default_err = service.set_preset_enabled("default", "ops", true).unwrap_err();
+        let default_err = service
+            .set_preset_enabled("default", "ops", true)
+            .unwrap_err();
         assert!(default_err.to_string().contains("default"), "{default_err}");
 
-        let vault_err = service.set_preset_enabled("blank", "ops", true).unwrap_err();
-        assert!(vault_err.to_string().contains("SkillManagerVault"), "{vault_err}");
+        let vault_err = service
+            .set_preset_enabled("blank", "ops", true)
+            .unwrap_err();
+        assert!(
+            vault_err.to_string().contains("SkillManagerVault"),
+            "{vault_err}"
+        );
     }
 }

@@ -5,8 +5,10 @@
 
 use std::path::PathBuf;
 
-use crate::deploy::compose::{compose_skill, hash_dir, write_artifact};
-use crate::deploy::policy::{self, Admission};
+use crate::deploy::compose::{
+    compose_skill, hash_dir, hash_dir_excluding_sidecars, write_artifact,
+};
+use crate::deploy::policy::{self, Admission, is_hermes_pool_target};
 use crate::domain::{SkillRef, Target};
 use crate::error::Result;
 use crate::output::ItemError;
@@ -15,8 +17,8 @@ use crate::state::deployments::DeploymentStatus;
 use crate::vault::index::SkillIndex;
 
 use super::apply::{
-    paused_record, record_ok, record_selected, DeployItemView, DeployReport, DeploymentService,
-    PairOutcome,
+    DeployItemView, DeployReport, DeploymentService, PairOutcome, paused_record, record_ok,
+    record_selected,
 };
 
 impl DeploymentService<'_> {
@@ -29,7 +31,16 @@ impl DeploymentService<'_> {
     ) -> Result<DeployReport> {
         let index = self.index()?;
         let mut report = DeployReport::default();
+        if let Some(reference) = reference {
+            if index.get(reference).is_none() {
+                report.push_failure(
+                    ItemError::new("技能不存在，无法同步").skill(reference.to_string()),
+                );
+                return Ok(report);
+            }
+        }
         let references: Vec<SkillRef> = reference.cloned().into_iter().collect();
+        let mut matched = 0usize;
         for record in self.state.deployments()? {
             if reference.is_some() && !record_selected(&record, &references) {
                 continue;
@@ -39,10 +50,27 @@ impl DeploymentService<'_> {
                     continue;
                 }
             }
+            matched += 1;
             match self.sync_record(&index, &record, overwrite_local) {
                 Ok(PairOutcome::Done(item)) => report.push_item(item),
                 Ok(PairOutcome::Failed(error)) => report.push_failure(error),
-                Err(err) => report.push_failure(ItemError::from_error(&err).skill(record.reference().to_string()).target(record.target.clone()).path(record.target_path.clone())),
+                Err(err) => report.push_failure(
+                    ItemError::from_error(&err)
+                        .skill(record.reference().to_string())
+                        .target(record.target.clone())
+                        .path(record.target_path.clone()),
+                ),
+            }
+        }
+        // 仅 `--ref` 且技能存在、但本机还没有部署记录：空成功（上游更新后刷新已有副本时合法）。
+        // 带 `--target` 却一条都匹配不到：失败，避免 Agent 把空操作当成已同步。
+        if matched == 0 {
+            if let Some(target) = target {
+                let mut error = ItemError::new("没有匹配的部署记录").target(target.as_str());
+                if let Some(reference) = reference {
+                    error = error.skill(reference.to_string());
+                }
+                report.push_failure(error);
             }
         }
         Ok(report)
@@ -111,6 +139,7 @@ impl DeploymentService<'_> {
         } else {
             "deployed"
         };
+        let previous_hash = hash_dir_excluding_sidecars(&copy_path)?;
         if !already_current {
             write_artifact(&copy_path, &composed.files)?;
         }
@@ -130,6 +159,21 @@ impl DeploymentService<'_> {
             &composed,
             super::apply::now_iso(),
         ))?;
+        if is_hermes_pool_target(&record.target) {
+            let notes = self.refresh_hermes_profile_copies(
+                &entry.name,
+                &copy_path,
+                previous_hash.as_deref(),
+                overwrite_local,
+            )?;
+            if !notes.is_empty() {
+                let extra = notes.join("\n");
+                message = Some(match message {
+                    Some(existing) => format!("{existing}\n{extra}"),
+                    None => extra,
+                });
+            }
+        }
 
         Ok(PairOutcome::Done(DeployItemView {
             skill: reference.to_string(),

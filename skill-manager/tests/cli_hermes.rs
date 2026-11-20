@@ -121,13 +121,16 @@ fn enable_is_explicit_and_does_not_spread() {
     let result = env.cli_json(&["hermes", "enable", "blank", "alpha"]);
     assert_eq!(result["items"][0]["ok"], true, "{result}");
 
-    let link = env.hermes_root().join("profiles/blank/skills/alpha");
-    assert!(TestEnv::is_symlink(&link), "应建立指向 default 副本的链接");
-    assert_eq!(
-        std::fs::canonicalize(&link).unwrap(),
-        std::fs::canonicalize(env.hermes_root().join("skills/alpha")).unwrap(),
-        "链接应指向 default 档案共享副本"
+    let copy = env.hermes_root().join("profiles/blank/skills/alpha");
+    assert!(
+        copy.is_dir() && !TestEnv::is_symlink(&copy),
+        "具名档案启用应为独立实体拷贝：{copy:?}"
     );
+    assert!(copy.join("SKILL.md").is_file(), "拷贝应含技能入口");
+    let default_text =
+        std::fs::read_to_string(env.hermes_root().join("skills/alpha/SKILL.md")).unwrap();
+    let profile_text = std::fs::read_to_string(copy.join("SKILL.md")).unwrap();
+    assert_eq!(profile_text, default_text, "启用时应从 default 复制内容");
 
     // beta 已部署到 default，但未对 blank 启用：不自动扩散。
     assert!(
@@ -169,9 +172,11 @@ fn hermes_agent_deploy_is_default_pool_for_other_profiles() {
 
     let result = env.cli_json(&["hermes", "enable", "blank", "painter"]);
     assert_eq!(result["items"][0]["ok"], true, "{result}");
-    assert!(TestEnv::is_symlink(
-        &env.hermes_root().join("profiles/blank/skills/painter")
-    ));
+    let copy = env.hermes_root().join("profiles/blank/skills/painter");
+    assert!(
+        copy.is_dir() && !TestEnv::is_symlink(&copy),
+        "具名档案启用应为独立实体拷贝：{copy:?}"
+    );
 }
 
 #[test]
@@ -182,7 +187,7 @@ fn content_update_keeps_selection() {
     env.cli_json(&["deploy", "to", "hermes:default", "lobster/alpha"]);
     env.cli_json(&["hermes", "enable", "blank", "alpha"]);
 
-    // 库内内容更新并同步（档案共用同一份内容）。
+    // 库内内容更新并同步：未改动的档案拷贝应跟着刷新，启用选择保持。
     env.write_skill("lobster", None, "alpha", "# alpha v2\n");
     env.commit_all("更新龙虾技能");
     env.cli_json(&["deploy", "sync"]);
@@ -198,8 +203,16 @@ fn content_update_keeps_selection() {
             .is_some_and(|text| text.contains("v2")),
         "default 副本应更新到同一份新内容"
     );
-    let link = env.hermes_root().join("profiles/blank/skills/alpha");
-    assert!(TestEnv::is_symlink(&link), "启用链接应保持");
+    let copy = env.hermes_root().join("profiles/blank/skills/alpha");
+    assert!(
+        copy.is_dir() && !TestEnv::is_symlink(&copy),
+        "启用拷贝应保持为实体目录：{copy:?}"
+    );
+    let profile_text = std::fs::read_to_string(copy.join("SKILL.md")).unwrap();
+    assert!(
+        profile_text.contains("v2"),
+        "未改动的档案拷贝应同步到新内容：{profile_text}"
+    );
 }
 
 #[test]
@@ -229,17 +242,18 @@ fn support_narrowing_keeps_existing_enable_and_blocks_new() {
     assert_ne!(code, 0, "不支持的目标不得新增启用：{result}");
     assert_eq!(result["result"], "failed", "{result}");
     assert!(
-        result["errors"].as_array().is_some_and(|errors| errors
-            .iter()
-            .any(|error| error["message"]
+        result["errors"]
+            .as_array()
+            .is_some_and(|errors| errors.iter().any(|error| error["message"]
                 .as_str()
                 .is_some_and(|text| text.contains("禁止新增启用")))),
         "应报告禁止新增启用：{result}"
     );
-    assert!(!env
-        .hermes_root()
-        .join("profiles/drawing/skills/gamma")
-        .exists());
+    assert!(
+        !env.hermes_root()
+            .join("profiles/drawing/skills/gamma")
+            .exists()
+    );
 }
 
 #[test]
@@ -305,7 +319,7 @@ fn batch_enable_disable() {
     assert_eq!(profile_item(&list["skills"], "b")["enabled"], false);
     assert!(
         !env.hermes_root().join("profiles/blank/skills/a").exists(),
-        "禁用应移除档案内的启用链接"
+        "禁用应移除档案内的启用拷贝"
     );
 }
 
@@ -400,4 +414,65 @@ fn preset_enable_auto_installs_missing_to_default_and_disable_only_affects_profi
     assert!(env.hermes_root().join("skills/b/SKILL.md").is_file());
     let drawing_after = env.cli_json(&["hermes", "list", "drawing"]);
     assert_eq!(profile_item(&drawing_after["skills"], "a")["enabled"], true);
+}
+
+#[test]
+fn named_profile_copy_is_independent_and_preserves_lock_sidecar() {
+    let env = hermes_env();
+    env.write_skill("lobster", None, "alpha", "# alpha v1\n");
+    env.commit_all("加入龙虾技能");
+    env.cli_json(&["deploy", "to", "hermes:default", "lobster/alpha"]);
+    env.cli_json(&["hermes", "enable", "blank", "alpha"]);
+
+    let profile = env.hermes_root().join("profiles/blank/skills/alpha");
+    let default = env.hermes_root().join("skills/alpha");
+    std::fs::write(profile.join(".usage.json"), "{\"locked\":true}\n").unwrap();
+    std::fs::write(profile.join("SKILL.md"), "# alpha profile-edit\n").unwrap();
+
+    env.write_skill("lobster", None, "alpha", "# alpha v2\n");
+    env.commit_all("更新龙虾技能");
+    let synced = env.cli_json(&["deploy", "sync"]);
+    let message = synced["items"][0]["message"].as_str().unwrap_or("");
+    assert!(
+        message.contains("blank") && message.contains("未覆盖"),
+        "档案内已改动的拷贝应跳过覆盖：{synced}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(profile.join("SKILL.md")).unwrap(),
+        "# alpha profile-edit\n"
+    );
+    assert!(
+        env.hermes_read("skills/alpha/SKILL.md")
+            .is_some_and(|text| text.contains("v2")),
+        "default 池应已更新"
+    );
+    assert!(
+        !std::fs::read_to_string(default.join("SKILL.md"))
+            .unwrap()
+            .contains("profile-edit")
+    );
+
+    env.cli_json(&[
+        "deploy",
+        "sync",
+        "--ref",
+        "lobster/alpha",
+        "--target",
+        "hermes:default",
+        "--overwrite-local",
+    ]);
+    let after = std::fs::read_to_string(profile.join("SKILL.md")).unwrap();
+    assert!(
+        after.contains("v2"),
+        "overwrite-local 应覆盖档案拷贝：{after}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(profile.join(".usage.json")).unwrap(),
+        "{\"locked\":true}\n",
+        "覆盖内容时应保留 curator lock 旁路文件"
+    );
+
+    env.cli_json(&["hermes", "disable", "blank", "alpha"]);
+    assert!(!profile.exists(), "禁用只删档案拷贝");
+    assert!(default.join("SKILL.md").is_file(), "禁用不得动 default 池");
 }

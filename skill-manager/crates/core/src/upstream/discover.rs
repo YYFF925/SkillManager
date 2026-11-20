@@ -5,7 +5,8 @@
 //! - 技能名按**目录身份**保留（不采用 frontmatter 的 `name` 替代）；
 //! - 候选携带仓库内相对子路径，跨平台统一用 `/`；
 //! - 排除 `.git`、`node_modules` 等无关范围，限制递归深度，避免链接环扫描不结束；
-//! - 相对仓库根 `.agents/skills/` 及其子路径不是可入库候选，也不再向下扫描（FR-058）；
+//! - 任意深度的 `.agents/skills/`（路径分量连续为 `.agents` 再 `skills`）不是可入库候选，也不再向下扫描（FR-058）；
+//!   不排除单数 `.agent/skills`；
 //! - 单个候选也列出；默认分类依据**来源仓库技能总数**，由调用者据此决定。
 
 use std::path::{Path, PathBuf};
@@ -17,7 +18,7 @@ use crate::vault::scan;
 
 /// 递归扫描时跳过的目录名。
 pub const SKIP_DIRS: [&str; 3] = [".git", "node_modules", "__pycache__"];
-/// 来源发现主动排除的仓库内路径（FR-058）。相对仓库根，`/` 分隔。
+/// 来源发现主动排除的路径分量（FR-058）：任意深度的 `.agents/skills/`。
 pub const EXCLUDED_PREFIX: &str = ".agents/skills";
 /// 递归深度上限（防止意外深层/链接环导致的长时间扫描）。
 pub const MAX_DEPTH: usize = 8;
@@ -101,7 +102,10 @@ fn excluded_from_discovery(root: &Path, path: &Path) -> bool {
         return false;
     };
     let rel = rel.to_string_lossy().replace('\\', "/");
-    rel == EXCLUDED_PREFIX || rel.starts_with(&format!("{EXCLUDED_PREFIX}/"))
+    rel.split('/')
+        .collect::<Vec<_>>()
+        .windows(2)
+        .any(|pair| pair[0] == ".agents" && pair[1] == "skills")
 }
 
 fn make(dir: &Path, subpath: &str) -> Result<Candidate> {
@@ -151,7 +155,10 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let root = dir.path();
         write(&root.join("tools/alpha/SKILL.md"), "a");
-        write(&root.join("tools/alpha/references/inner/SKILL.md"), "不应作为独立技能");
+        write(
+            &root.join("tools/alpha/references/inner/SKILL.md"),
+            "不应作为独立技能",
+        );
         write(&root.join("beta/skill.md"), "b");
         write(&root.join("README.md"), "x");
         write(&root.join(".git/config"), "x");
@@ -193,10 +200,25 @@ mod tests {
             "也不应入库",
         );
         write(&root.join(".agents/other/keep/SKILL.md"), "仍应出现");
+        write(
+            &root.join("vendor/.agents/skills/nested-speckit/SKILL.md"),
+            "嵌套也不应入库",
+        );
+        write(
+            &root.join(".agent/skills/keep-singular/SKILL.md"),
+            "单数应保留",
+        );
 
         let candidates = scan_repo(root).unwrap();
         let paths: Vec<&str> = candidates.iter().map(|c| c.subpath.as_str()).collect();
-        assert_eq!(paths, vec![".agents/other/keep", "tools/alpha"]);
+        assert_eq!(
+            paths,
+            vec![
+                ".agent/skills/keep-singular",
+                ".agents/other/keep",
+                "tools/alpha"
+            ]
+        );
     }
 
     #[test]

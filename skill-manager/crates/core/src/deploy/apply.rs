@@ -7,14 +7,16 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::deploy::compose::{compose_skill, hash_dir, write_artifact, ComposedArtifact};
-use crate::deploy::policy::{self, Admission};
+use crate::deploy::compose::{
+    ComposedArtifact, compose_skill, hash_dir, hash_dir_excluding_sidecars, write_artifact,
+};
+use crate::deploy::policy::{self, Admission, is_hermes_pool_target};
 use crate::deploy::targets::{TargetResolution, TargetResolver};
-use crate::domain::{names_equal, Domain, SkillRef, Target};
+use crate::domain::{Domain, SkillRef, Target, names_equal};
 use crate::error::Result;
 use crate::output::ItemError;
-use crate::state::deployments::{DeploymentRecord, DeploymentStatus};
 use crate::state::StateStore;
+use crate::state::deployments::{DeploymentRecord, DeploymentStatus};
 use crate::vault::index::SkillIndex;
 
 use super::current_os;
@@ -319,6 +321,7 @@ impl<'a> DeploymentService<'a> {
             "deployed"
         };
 
+        let previous_hash = hash_dir_excluding_sidecars(&copy_path)?;
         write_artifact(&copy_path, &composed.files)?;
         let record = record_ok(
             entry.domain,
@@ -329,6 +332,21 @@ impl<'a> DeploymentService<'a> {
             now_iso(),
         );
         self.state.upsert_deployment(&record)?;
+        if is_hermes_pool_target(&target.as_str()) {
+            let notes = self.refresh_hermes_profile_copies(
+                &entry.name,
+                &copy_path,
+                previous_hash.as_deref(),
+                false,
+            )?;
+            if !notes.is_empty() {
+                let extra = notes.join("\n");
+                message = Some(match message {
+                    Some(existing) => format!("{existing}\n{extra}"),
+                    None => extra,
+                });
+            }
+        }
 
         Ok(PairOutcome::Done(DeployItemView {
             skill: reference.to_string(),
@@ -339,6 +357,31 @@ impl<'a> DeploymentService<'a> {
             applied_overlays: composed.applied_overlays,
             message,
         }))
+    }
+
+    pub(crate) fn refresh_hermes_profile_copies(
+        &self,
+        name: &str,
+        source: &Path,
+        previous_hash: Option<&str>,
+        overwrite: bool,
+    ) -> Result<Vec<String>> {
+        crate::hermes::enables::refresh_named_profile_copies(
+            self.state,
+            &crate::hermes::hermes_home(self.resolver.home()),
+            name,
+            source,
+            previous_hash,
+            overwrite,
+        )
+    }
+
+    pub(crate) fn remove_hermes_profile_copies(&self, name: &str) -> Result<()> {
+        crate::hermes::enables::remove_named_profile_copies(
+            self.state,
+            &crate::hermes::hermes_home(self.resolver.home()),
+            name,
+        )
     }
 
     /// 目标副本是否被外部修改（与最近成功部署的产物基线不一致）。

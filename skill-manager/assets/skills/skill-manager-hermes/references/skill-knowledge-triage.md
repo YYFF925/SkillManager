@@ -55,7 +55,7 @@ PY
 
 - 知识可检索：`chunk_count > 0`、`is_processing=false`，且用一句真实问句 `search chunks` 能命中该文档；
 - 技能已记录：`skill get <domain>/<name>` 有库内条目与 `deployments[].target_path`；
-- 目标 bot 真能用：目标侧 `skill_view('<name>')` 可加载（档案目录应是符号链接，不是实体副本）。
+- 目标 bot 真能用：目标侧 `skill_view('<name>')` 可加载（具名档案启用后应是实体拷贝，不是符号链接；可用 `test -L` 确认不是链接）。
 
 ### 6. 汇报
 
